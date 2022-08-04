@@ -1,5 +1,5 @@
+import argparse
 import os
-import sys
 
 import aoh
 
@@ -9,7 +9,11 @@ ESACCI_PREFIX = 'S:\\aoh_trial\\esacci_aoh_basemaps'
 JUNG_PREFIX = 'S:\\aoh_trial\\jung_aoh_basemaps'
 PREFIX = '../../../aoh_trial'
 
-tax = aoh.lib.taxon.TaxonFactoryRedListAPI(int(sys.argv[1]), os.environ['IUCN_API_KEY'])
+parser = argparse.ArgumentParser(description="Area of habitat calculator.")
+parser.add_argument('--taxid', type=int, help="animal taxonomy id", required=True, dest="species")
+args = vars(parser.parse_args())
+
+tax = aoh.lib.taxon.TaxonFactoryRedListAPI(args['species'], os.environ['IUCN_API_KEY'])
 
 vt = persistence.JungModel(
     'no_nan/brasil_coverage_2020crop_NA.tif',
