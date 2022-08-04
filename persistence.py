@@ -16,6 +16,21 @@ class LandModel:
     area_map_filename: Optional[str]
     translator: Any
 
+    def new_habitat_layer(self) -> Layer:
+        return Layer.layer_from_file(self.habitat_map_filename)
+
+    def new_elevation_layer(self) -> Layer:
+        return Layer.layer_from_file(self.elevation_map_filename)
+
+    def new_area_layer(self) -> Layer:
+        if self.area_map_filename is None:
+            return NullLayer()
+        try:
+            return UniformAreaLayer.layer_from_file(self.area_map_filename)
+        except ValueError:
+            print("WARNING: Area map isn't one pixel wide, treating as full layer")
+            return Layer.layer_from_file(self.area_map_filename)
+
 class JungModel(LandModel):
     def __init__(self, habitat_map_filename: str, elevation_map_filename: str, area_map_filename: Optional[str] = None):
         super().__init__(habitat_map_filename, elevation_map_filename, area_map_filename, iucn_modlib.translator.toJung)
@@ -47,16 +62,10 @@ def modeller(
         majorImportance = ('Yes', 'No'),
     )
 
-    habitat_layer = Layer.layer_from_file(land_model.habitat_map_filename)
-    elevation_layer = Layer.layer_from_file(land_model.elevation_map_filename)
-    if land_model.area_map_filename is not None:
-        try:
-            area_layer = UniformAreaLayer.layer_from_file(land_model.area_map_filename)
-        except ValueError:
-            print("WARNING: Area map isn't one pixel wide, treating as full layer")
-            area_layer = Layer.layer_from_file(land_model.area_map_filename)
-    else:
-        area_layer = NullLayer()
+    # These three map layers don't change across seasons
+    habitat_layer = land_model.new_habitat_layer()
+    elevation_layer = land_model.new_elevation_layer()
+    area_layer = land_model.new_area_layer()
 
     results = []
     for season in seasons:
@@ -64,7 +73,7 @@ def modeller(
             habitat_params.season = ('Resident', 'Seasonal Occurrence Unknown')
         elif season == 'breeding':
             habitat_params.season = ('Resident', 'Breeding Season', 'Seasonal Occurrence Unknown')
-        elif season == 'nonbreedng':
+        elif season == 'nonbreeding':
             habitat_params.seasons = ('Resident', 'Non-Breeding Season', 'Seasonal Occurrence Unknown'),
         else:
             raise ValueError(f'Unexpected season {season}')

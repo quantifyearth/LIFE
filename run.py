@@ -2,7 +2,6 @@ import os
 import sys
 
 import aoh
-import iucn_modlib.translator
 
 import persistence
 
@@ -24,7 +23,7 @@ ali = persistence.ESACCIModel(
     os.path.join(ESACCI_PREFIX, 'small_area.tif'),
 )
 
-land = vt
+land = ali
 
 range_path = os.path.join(PREFIX, "mammals_terrestrial_filtered_collected_fix.gpkg")
 
