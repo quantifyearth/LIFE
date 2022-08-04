@@ -24,7 +24,7 @@ ali = persistence.ESACCIModel(
     os.path.join(ESACCI_PREFIX, 'small_area.tif'),
 )
 
-land = ali
+land = vt
 
 range_path = os.path.join(PREFIX, "mammals_terrestrial_filtered_collected_fix.gpkg")
 

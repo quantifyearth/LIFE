@@ -11,18 +11,18 @@ from layers import Layer, VectorRangeLayer, NullLayer, UniformAreaLayer
 
 @dataclass
 class LandModel:
-    landc: str
-    dem: str
-    area: Optional[str]
+    habitat_map_filename: str
+    elevation_map_filename: str
+    area_map_filename: Optional[str]
     translator: Any
 
 class JungModel(LandModel):
-    def __init__(self, landc: str, dem: str, area: Optional[str] = None):
-        super().__init__(landc, dem, area, iucn_modlib.translator.toJung)
+    def __init__(self, habitat_map_filename: str, elevation_map_filename: str, area_map_filename: Optional[str] = None):
+        super().__init__(habitat_map_filename, elevation_map_filename, area_map_filename, iucn_modlib.translator.toJung)
 
 class ESACCIModel(LandModel):
-    def __init__(self, landc: str, dem: str, area: Optional[str] = None):
-        super().__init__(landc, dem, area, iucn_modlib.translator.toESACCI)
+    def __init__(self, habitat_map_filename: str, elevation_map_filename: str, area_map_filename: Optional[str] = None):
+        super().__init__(habitat_map_filename, elevation_map_filename, area_map_filename, iucn_modlib.translator.toESACCI)
 
 
 def modeller(
@@ -47,10 +47,19 @@ def modeller(
         majorImportance = ('Yes', 'No'),
     )
 
+    habitat_layer = Layer.layer_from_file(land_model.habitat_map_filename)
+    elevation_layer = Layer.layer_from_file(land_model.elevation_map_filename)
+    if land_model.area_map_filename is not None:
+        try:
+            area_layer = UniformAreaLayer.layer_from_file(land_model.area_map_filename)
+        except ValueError:
+            print("WARNING: Area map isn't one pixel wide, treating as full layer")
+            area_layer = Layer.layer_from_file(land_model.area_map_filename)
+    else:
+        area_layer = NullLayer()
+
     results = []
     for season in seasons:
-        where_filter =  f"id_no = {species.taxonid} and season in ('{season}', 'resident')"
-
         if season == 'resident':
             habitat_params.season = ('Resident', 'Seasonal Occurrence Unknown')
         elif season == 'breeding':
@@ -59,43 +68,32 @@ def modeller(
             habitat_params.seasons = ('Resident', 'Non-Breeding Season', 'Seasonal Occurrence Unknown'),
         else:
             raise ValueError(f'Unexpected season {season}')
-
         habitat_list = species.habitatCodes(habitat_params)
 
-        result = calculate(
-            range_path,
-            where_filter,
-            land_model.landc,
+        # range layer is only one that is seasonal, so recalculate
+        where_filter =  f"id_no = {species.taxonid} and season in ('{season}', 'resident')"
+        range_layer = VectorRangeLayer(range_path, where_filter, habitat_layer.pixel_scale, habitat_layer.projection)
+
+        result = _calculate(
+            range_layer,
+            habitat_layer,
             habitat_list,
-            land_model.dem,
+            elevation_layer,
             elevation_range,
-            land_model.area
+            area_layer
         )
         results.append([season, result])
     return results
 
-def calculate(
-    vector_range_filename: str,
-    range_filter: str,
-    habitat_map_filename: str,
+
+def _calculate(
+    range_layer: Layer,
+    habitat_layer: Layer,
     habitat_list: List,
-    elevation_map_filename: str,
+    elevation_layer: Layer,
     elevation_range: List,
-    area_map_filename: Optional[str],
+    area_layer: Layer
 ) -> None:
-
-    habitat_layer = Layer.layer_from_file(habitat_map_filename)
-    elevation_layer = Layer.layer_from_file(elevation_map_filename)
-    if area_map_filename is not None:
-        try:
-            area_layer = UniformAreaLayer.layer_from_file(area_map_filename)
-        except ValueError:
-            print("WARNING: Area map isn't one pixel wide, treating as full layer")
-            area_layer = Layer.layer_from_file(area_map_filename)
-    else:
-        area_layer = NullLayer()
-
-    range_layer = VectorRangeLayer(vector_range_filename, range_filter, habitat_layer.pixel_scale, habitat_layer.projection)
 
     # Work out the intersection of all the maps
     layers = [habitat_layer, elevation_layer, area_layer, range_layer]
