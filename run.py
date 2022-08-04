@@ -28,45 +28,8 @@ land = ali
 
 range_path = os.path.join(PREFIX, "mammals_terrestrial_filtered_collected_fix.gpkg")
 
-habitatSeasons = aoh.lib.seasonality.habitatSeasonality(tax)
-rangeSeasons = aoh.lib.seasonality.rangeSeasonality(range_path, tax.taxonid)
-seasons = list(set(habitatSeasons + rangeSeasons))
-if len(seasons) == 3:
-    seasons = ('breeding', 'nonbreeding')
-elif len(seasons) == 2 and 'resident' in seasons:
-    seasons = ('breeding', 'nonbreeding')
+results = persistence.modeller(tax, range_path, land)
 
-elevation_range = (tax.elevation_lower, tax.elevation_upper)
-habitat_params = iucn_modlib.ModelParameters(
-    habMap = None,
-    translator = land.translator,
-    season = ('Resident', 'Seasonal Occurrence Unknown'),
-    suitability = ('Suitable', 'Unknown'),
-    majorImportance = ('Yes', 'No'),
-)
-
-for season in seasons:
-    where_filter =  f"id_no = {tax.taxonid} and season in ('{season}', 'resident')"
-
-    if season == 'resident':
-        habitat_params.season = ('Resident', 'Seasonal Occurrence Unknown')
-    elif season == 'breeding':
-        habitat_params.season = ('Resident', 'Breeding Season', 'Seasonal Occurrence Unknown')
-    elif season == 'nonbreedng':
-        habitat_params.seasons = ('Resident', 'Non-Breeding Season', 'Seasonal Occurrence Unknown'),
-    else:
-        raise ValueError(f'Unexpected season {season}')
-
-    habitat_list = tax.habitatCodes(habitat_params)
-
-    result = persistence.modeller(
-        range_path,
-        where_filter,
-        land.landc,
-        habitat_list,
-        land.dem,
-        elevation_range,
-        land.area
-    )
-    print(tax.taxonid, season, result)
-
+# output as CSV
+for result in results:
+    print(', '.join([str(x) for x in result]))

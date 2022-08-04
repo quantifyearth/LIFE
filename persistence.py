@@ -1,8 +1,10 @@
 from dataclasses import dataclass
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Tuple
 
 import numpy
 
+from aoh.lib import seasonality
+from iucn_modlib.classes.Taxon import Taxon
 import iucn_modlib.translator
 
 from layers import Layer, VectorRangeLayer, NullLayer, UniformAreaLayer
@@ -24,6 +26,55 @@ class ESACCIModel(LandModel):
 
 
 def modeller(
+    species: Taxon,
+    range_path: str,
+    land_model: LandModel
+) -> List[Tuple]:
+    habitatSeasons = seasonality.habitatSeasonality(species)
+    rangeSeasons = seasonality.rangeSeasonality(range_path, species.taxonid)
+    seasons = list(set(habitatSeasons + rangeSeasons))
+    if len(seasons) == 3:
+        seasons = ('breeding', 'nonbreeding')
+    elif len(seasons) == 2 and 'resident' in seasons:
+        seasons = ('breeding', 'nonbreeding')
+
+    elevation_range = (species.elevation_lower, species.elevation_upper)
+    habitat_params = iucn_modlib.ModelParameters(
+        habMap = None,
+        translator = land_model.translator,
+        season = ('Resident', 'Seasonal Occurrence Unknown'),
+        suitability = ('Suitable', 'Unknown'),
+        majorImportance = ('Yes', 'No'),
+    )
+
+    results = []
+    for season in seasons:
+        where_filter =  f"id_no = {species.taxonid} and season in ('{season}', 'resident')"
+
+        if season == 'resident':
+            habitat_params.season = ('Resident', 'Seasonal Occurrence Unknown')
+        elif season == 'breeding':
+            habitat_params.season = ('Resident', 'Breeding Season', 'Seasonal Occurrence Unknown')
+        elif season == 'nonbreedng':
+            habitat_params.seasons = ('Resident', 'Non-Breeding Season', 'Seasonal Occurrence Unknown'),
+        else:
+            raise ValueError(f'Unexpected season {season}')
+
+        habitat_list = species.habitatCodes(habitat_params)
+
+        result = calculate(
+            range_path,
+            where_filter,
+            land_model.landc,
+            habitat_list,
+            land_model.dem,
+            elevation_range,
+            land_model.area
+        )
+        results.append([season, result])
+    return results
+
+def calculate(
     vector_range_filename: str,
     range_filter: str,
     habitat_map_filename: str,
