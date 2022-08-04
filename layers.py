@@ -97,26 +97,26 @@ class Layer:
         )
 
 
-class VectorMaskLayer(Layer):
-    def __init__(self, maskVectors: str, maskWhere: str, scale: PixelScale, projection: str):
-        vectors = ogr.Open(maskVectors)
+class VectorRangeLayer(Layer):
+    def __init__(self, range_vectors: str, where_filter: str, scale: PixelScale, projection: str):
+        vectors = ogr.Open(range_vectors)
         if vectors is None:
-            raise FileNotFoundError(maskVectors)
-        mask_layer = vectors.GetLayer()
-        mask_layer.SetAttributeFilter(maskWhere)
+            raise FileNotFoundError(range_vectors)
+        range_layer = vectors.GetLayer()
+        range_layer.SetAttributeFilter(where_filter)
 
         # work out region for mask
         envelopes = []
-        mask_layer.ResetReading()
-        feature = mask_layer.GetNextFeature()
+        range_layer.ResetReading()
+        feature = range_layer.GetNextFeature()
         while feature:
             envelopes.append(feature.GetGeometryRef().GetEnvelope())
-            feature = mask_layer.GetNextFeature()
+            feature = range_layer.GetNextFeature()
         if len(envelopes) == 0:
-            raise ValueError(f'No geometry found for {maskWhere}')
+            raise ValueError(f'No geometry found for {where_filter}')
 
         # Get the area, but scale it to the pixel resolution that we're using. Note that
-        # the pixel scale GDAL uses can have -ve values, but those will mess up the 
+        # the pixel scale GDAL uses can have -ve values, but those will mess up the
         # ceil/floor math, so we use absolute versions when trying to round.
         abs_xstep, abs_ystep = abs(scale.xstep), abs(scale.ystep)
         area = Area(
@@ -132,7 +132,7 @@ class VectorMaskLayer(Layer):
             int((area.right - area.left) / abs_xstep),
             int((area.top - area.bottom) / abs_ystep),
             1,
-            gdal.GDT_Byte, 
+            gdal.GDT_Byte,
             []
         )
         if not dataset:
@@ -140,7 +140,7 @@ class VectorMaskLayer(Layer):
 
         dataset.SetProjection(projection)
         dataset.SetGeoTransform([area.left, scale.xstep, 0.0, area.top, 0.0, scale.ystep])
-        gdal.RasterizeLayer(dataset, [1], mask_layer, burn_values=[1], options=["ALL_TOUCHED=TRUE"])
+        gdal.RasterizeLayer(dataset, [1], range_layer, burn_values=[1], options=["ALL_TOUCHED=TRUE"])
 
         super().__init__(dataset)
 
@@ -157,7 +157,7 @@ class UniformAreaLayer(Layer):
         source_band = source.GetRasterBand(1)
         target = gdal.GetDriverByName('GTiff').Create(
             target_filename,
-            1, 
+            1,
             source.RasterYSize,
             1,
             source_band.DataType,
@@ -201,7 +201,6 @@ class UniformAreaLayer(Layer):
         offset = self.window.yoff + y
         subset = self.databand[offset:offset + ysize][0]
         return subset
-
 
 
 class NullLayer:

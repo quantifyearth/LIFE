@@ -5,7 +5,7 @@ import numpy
 
 import iucn_modlib.translator
 
-from layers import Layer, VectorMaskLayer, NullLayer, UniformAreaLayer
+from layers import Layer, VectorRangeLayer, NullLayer, UniformAreaLayer
 
 @dataclass
 class LandModel:
@@ -24,8 +24,8 @@ class ESACCIModel(LandModel):
 
 
 def modeller(
-    vector_mask_filename: str,
-    mask_filter: str,
+    vector_range_filename: str,
+    range_filter: str,
     habitat_map_filename: str,
     habitat_list: List,
     elevation_map_filename: str,
@@ -44,10 +44,10 @@ def modeller(
     else:
         area_layer = NullLayer()
 
-    mask_layer = VectorMaskLayer(vector_mask_filename, mask_filter, habitat_layer.pixel_scale, habitat_layer.projection)  
+    range_layer = VectorRangeLayer(vector_range_filename, range_filter, habitat_layer.pixel_scale, habitat_layer.projection)
 
     # Work out the intersection of all the maps
-    layers = [habitat_layer, elevation_layer, area_layer, mask_layer]
+    layers = [habitat_layer, elevation_layer, area_layer, range_layer]
     scale = layers[0].pixel_scale
     for layer in layers[1:]:
         if not layer.check_pixel_scale(scale):
@@ -75,13 +75,13 @@ def modeller(
         elevation = elevation_layer.ReadAsArray(0, yoffset, pixel_width, this_step)
         filtered_elevation = numpy.logical_and(elevation >= min(elevation_range), elevation <= max(elevation_range))
 
-        mask = mask_layer.ReadAsArray(0, yoffset, pixel_width, this_step)
+        species_range = range_layer.ReadAsArray(0, yoffset, pixel_width, this_step)
         pixel_areas = area_layer.ReadAsArray(0, yoffset, pixel_width, this_step)
 
         # TODO: this isn't free - so if there's no nan's we'd like to avoid this stage
         pixel_areas = numpy.nan_to_num(pixel_areas, copy=False, nan=0.0)
 
-        data = filtered_habitat * filtered_elevation * pixel_areas * mask 
+        data = filtered_habitat * filtered_elevation * pixel_areas * species_range
         area_total += numpy.sum(data)
 
     return area_total

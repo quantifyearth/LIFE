@@ -26,10 +26,10 @@ ali = persistence.ESACCIModel(
 
 land = ali
 
-mask_path = os.path.join(PREFIX, "mammals_terrestrial_filtered_collected_fix.gpkg")
+range_path = os.path.join(PREFIX, "mammals_terrestrial_filtered_collected_fix.gpkg")
 
 habitatSeasons = aoh.lib.seasonality.habitatSeasonality(tax)
-rangeSeasons = aoh.lib.seasonality.rangeSeasonality(mask_path, tax.taxonid)
+rangeSeasons = aoh.lib.seasonality.rangeSeasonality(range_path, tax.taxonid)
 seasons = list(set(habitatSeasons + rangeSeasons))
 if len(seasons) == 3:
     seasons = ('breeding', 'nonbreeding')
@@ -46,8 +46,8 @@ habitat_params = iucn_modlib.ModelParameters(
 )
 
 for season in seasons:
-    mask_filter =  f"id_no = {tax.taxonid} and season in ('{season}', 'resident')"
-    
+    where_filter =  f"id_no = {tax.taxonid} and season in ('{season}', 'resident')"
+
     if season == 'resident':
         habitat_params.season = ('Resident', 'Seasonal Occurrence Unknown')
     elif season == 'breeding':
@@ -60,8 +60,8 @@ for season in seasons:
     habitat_list = tax.habitatCodes(habitat_params)
 
     result = persistence.modeller(
-        mask_path,
-        mask_filter,
+        range_path,
+        where_filter,
         land.landc,
         habitat_list,
         land.dem,
