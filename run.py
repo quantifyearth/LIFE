@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import sys
 
 import aoh
@@ -28,6 +29,14 @@ parser.add_argument(
     required=False,
     dest="config_path",
     default="config.json"
+)
+parser.add_argument(
+    '--geotiffs',
+    type=str,
+    help='directory where area geotiffs should be stored',
+    required=False,
+    dest='results_path',
+    default=None,
 )
 args = vars(parser.parse_args())
 
@@ -90,8 +99,12 @@ try:
 except KeyError:
     print(f'Experiment "{args["experiment"]}" was missing range key.')
 
+if args['results_path']:
+    if not os.path.isdir(args['results_path']):
+        print(f'Provided results path {args["results_path"]} is not a directory')
+        sys.exit(-1)
 
-results = persistence.modeller(species, range_path, land)
+results = persistence.modeller(species, range_path, land, args['results_path'])
 # output as CSV
 for result in results:
     print(', '.join([str(x) for x in result]))
