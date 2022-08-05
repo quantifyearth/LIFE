@@ -123,14 +123,14 @@ def _calculate(
         if yoffset + this_step > pixel_height:
             this_step = pixel_height - yoffset
 
-        habitat = habitat_layer.ReadAsArray(0, yoffset, pixel_width, this_step)
+        habitat = habitat_layer.read_array(0, yoffset, pixel_width, this_step)
         filtered_habitat = numpy.isin(habitat, habitat_list)
 
-        elevation = elevation_layer.ReadAsArray(0, yoffset, pixel_width, this_step)
+        elevation = elevation_layer.read_array(0, yoffset, pixel_width, this_step)
         filtered_elevation = numpy.logical_and(elevation >= min(elevation_range), elevation <= max(elevation_range))
 
-        species_range = range_layer.ReadAsArray(0, yoffset, pixel_width, this_step)
-        pixel_areas = area_layer.ReadAsArray(0, yoffset, pixel_width, this_step)
+        species_range = range_layer.read_array(0, yoffset, pixel_width, this_step)
+        pixel_areas = area_layer.read_array(0, yoffset, pixel_width, this_step)
 
         # TODO: this isn't free - so if there's no nan's we'd like to avoid this stage
         pixel_areas = numpy.nan_to_num(pixel_areas, copy=False, nan=0.0)
