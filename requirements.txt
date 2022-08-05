@@ -1,5 +1,7 @@
+requests
 numpy
 gdal
+pandas
 
 pytest
 pylint
