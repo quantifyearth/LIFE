@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Optional, Any, Tuple
+from typing import List, Optional, Any, Tuple, Set
 
 import numpy
 
@@ -45,8 +45,8 @@ def modeller(
     species: Taxon,
     range_path: str,
     land_model: LandModel
-) -> List[Tuple]:
-    seasons = set(
+) -> List[Tuple[str, float]]:
+    seasons: Set[str] = set(
         seasonality.habitatSeasonality(species) +
         seasonality.rangeSeasonality(range_path, species.taxonid)
     )
@@ -82,7 +82,9 @@ def modeller(
 
         # range layer is only one that is seasonal, so recalculate
         where_filter =  f"id_no = {species.taxonid} and season in ('{season}', 'resident')"
-        range_layer = VectorRangeLayer(range_path, where_filter, habitat_layer.pixel_scale, habitat_layer.projection)
+        pixel_scale = habitat_layer.pixel_scale
+        assert pixel_scale
+        range_layer = VectorRangeLayer(range_path, where_filter, pixel_scale, habitat_layer.projection)
 
         result = _calculate(
             range_layer,
@@ -92,7 +94,7 @@ def modeller(
             (species.elevation_lower, species.elevation_upper),
             area_layer
         )
-        results.append([season, result])
+        results.append((season, result))
     return results
 
 
@@ -101,9 +103,9 @@ def _calculate(
     habitat_layer: Layer,
     habitat_list: List,
     elevation_layer: Layer,
-    elevation_range: List,
+    elevation_range: Tuple[float, float],
     area_layer: Layer
-) -> None:
+) -> float:
 
     # Work out the intersection of all the maps
     layers = [habitat_layer, elevation_layer, area_layer, range_layer]

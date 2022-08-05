@@ -65,11 +65,11 @@ def test_set_intersection_subset() -> None:
 	layer = Layer(make_dataset_of_region(Area(-10, 10, 10, -10), 0.02))
 	intersection = Area(-1.0, 1.0, 1.0, -1.0)
 	assert layer.window == Window(0, 0, 1000, 1000)
-	origin_before_pixel = layer.ReadAsArray(0, 0, 1, 1)
+	origin_before_pixel = layer.read_array(0, 0, 1, 1)
 
 	layer.set_window_for_intersection(intersection)
 	assert layer.window == Window(450, 450, 100, 100)
-	origin_after_pixel = layer.ReadAsArray(0, 0, 1, 1)
+	origin_after_pixel = layer.read_array(0, 0, 1, 1)
 
 	# The default data is populated as a mod of row value, so given
 	# were not a multiple of 256 off, these pixels should not have the same

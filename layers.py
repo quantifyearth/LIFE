@@ -51,7 +51,7 @@ class Layer:
         self._transform = dataset.GetGeoTransform()
         self._raster_xsize = dataset.RasterXSize
         self._raster_ysize = dataset.RasterYSize
-        self._intersection = None
+        self._intersection: Optional[Area] = None
 
         # Global position of the layer
         self.area = Area(
@@ -70,7 +70,7 @@ class Layer:
         )
 
     @property
-    def geo_transform(self) -> Tuple[float]:
+    def geo_transform(self) -> Tuple[float, float, float, float, float, float]:
         if self._intersection:
             return (
                 self._intersection.left, self._transform[1],
@@ -79,7 +79,7 @@ class Layer:
         return self._transform
 
     @property
-    def pixel_scale(self) -> PixelScale:
+    def pixel_scale(self) -> Optional[PixelScale]:
         return PixelScale(self._transform[1], self._transform[5])
 
     @property
@@ -226,8 +226,8 @@ class UniformAreaLayer(Layer):
         return subset
 
 
-class NullLayer:
-    def __init__(self):
+class NullLayer(Layer):
+    def __init__(self): # pylint: disable=W0231
         self.area = Area(
             left = -180.0,
             top = 90.0,
@@ -235,6 +235,7 @@ class NullLayer:
             bottom = -90.0
         )
 
+    @property
     def pixel_scale(self) -> Optional[PixelScale]:
         return None
 
