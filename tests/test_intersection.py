@@ -1,7 +1,7 @@
 import pytest
 
 from helpers import make_dataset_of_region
-from layers import Layer, Area
+from layers import Area, Layer, NullLayer
 
 
 def test_find_intersection_empty_list() -> None:
@@ -41,6 +41,22 @@ def test_find_intersection_distinct() -> None:
 	layers = [
 		Layer(make_dataset_of_region(Area(-110, 10, -100, -10), 0.02)),
 		Layer(make_dataset_of_region(Area(100, 10, 110, -10), 0.02))
+	]
+	with pytest.raises(ValueError):
+		_ = Layer.find_intersection(layers)
+
+def test_find_intersection_with_null() -> None:
+	layers = [
+		Layer(make_dataset_of_region(Area(-10, 10, 10, -10), 0.02)),
+		NullLayer()
+	]
+	intersection = Layer.find_intersection(layers)
+	assert intersection == layers[0].area
+
+def test_find_intersection_different_pixel_pitch() -> None:
+	layers = [
+		Layer(make_dataset_of_region(Area(-10, 10, 10, -10), 0.02)),
+		Layer(make_dataset_of_region(Area(-15, 15, -5, -5), 0.01))
 	]
 	with pytest.raises(ValueError):
 		_ = Layer.find_intersection(layers)

@@ -106,11 +106,6 @@ def _calculate(
 
     # Work out the intersection of all the maps
     layers = [habitat_layer, elevation_layer, area_layer, range_layer]
-    scale = layers[0].pixel_scale
-    for layer in layers[1:]:
-        if not layer.check_pixel_scale(scale):
-            raise ValueError("Not all layers are at the same pixel scale")
-
     intersection = Layer.find_intersection(layers)
     for layer in layers:
         layer.set_window_for_intersection(intersection)

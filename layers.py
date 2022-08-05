@@ -15,6 +15,14 @@ class Layer:
     def find_intersection(layers: List) -> Area:
         if not layers:
             raise ValueError("Expected list of layers")
+
+        # This only makes sense (currently) if all layers
+        # have the same pixel pitch
+        scale = layers[0].pixel_scale
+        for layer in layers[1:]:
+            if not layer.check_pixel_scale(scale):
+                raise ValueError("Not all layers are at the same pixel scale")
+
         intersection = Area(
             left=max(x.area.left for x in layers),
             top=min(x.area.top for x in layers),
@@ -217,7 +225,7 @@ class NullLayer:
     def pixel_scale(self) -> PixelScale:
         return None
 
-    def check_scale(self, scale: PixelScale) -> bool:
+    def check_pixel_scale(self, scale: PixelScale) -> bool:
         return True
 
     def set_window_for_intersection(self, intersection: Area) -> None:
