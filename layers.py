@@ -41,7 +41,8 @@ class Layer:
         return cls(dataset)
 
     def __init__(self, dataset: gdal.Dataset):
-        # Cache some useful info
+        if not dataset:
+            raise ValueError("None is not a valid dataset")
         self._dataset = dataset
         self._transform = dataset.GetGeoTransform()
         self._rasterXSize = dataset.RasterXSize
