@@ -1,6 +1,6 @@
 from collections import namedtuple
 from math import ceil, floor
-from typing import List, Any, Tuple
+from typing import Any, List, Optional, Tuple
 
 import numpy
 from osgeo import gdal, ogr
@@ -11,6 +11,10 @@ Area = namedtuple('Area', ['left', 'top', 'right', 'bottom'])
 PixelScale = namedtuple('PixelScale', ['xstep', 'ystep'])
 
 class Layer:
+    """Layer provides a wrapper around a gdal dataset/band that also records offset state so that
+    we can work with maps over different geographic regions but work withing a particular frame
+    of reference."""
+
     @staticmethod
     def find_intersection(layers: List) -> Area:
         if not layers:
@@ -45,16 +49,16 @@ class Layer:
             raise ValueError("None is not a valid dataset")
         self._dataset = dataset
         self._transform = dataset.GetGeoTransform()
-        self._rasterXSize = dataset.RasterXSize
-        self._rasterYSize = dataset.RasterYSize
+        self._raster_xsize = dataset.RasterXSize
+        self._raster_ysize = dataset.RasterYSize
         self._intersection = None
 
         # Global position of the layer
         self.area = Area(
             left=self._transform[0],
             top=self._transform[3],
-            right=self._transform[0] + (self._rasterXSize * self._transform[1]),
-            bottom=self._transform[3] + (self._rasterYSize * self._transform[5]),
+            right=self._transform[0] + (self._raster_xsize * self._transform[1]),
+            bottom=self._transform[3] + (self._raster_ysize * self._transform[5]),
         )
 
         # default window to full layer
@@ -72,8 +76,7 @@ class Layer:
                 self._intersection.left, self._transform[1],
                 0.0, self._intersection.top, 0.0, self._transform[5]
             )
-        else:
-            return self._transform
+        return self._transform
 
     @property
     def pixel_scale(self) -> PixelScale:
@@ -95,15 +98,16 @@ class Layer:
         )
         if (new_window.xoff < 0) or (new_window.yoff < 0):
             raise ValueError('Window has negative offset')
-        if ((new_window.xoff + new_window.xsize) > self._rasterXSize) or ((new_window.yoff + new_window.ysize) > self._rasterYSize):
+        if ((new_window.xoff + new_window.xsize) > self._raster_xsize) or \
+            ((new_window.yoff + new_window.ysize) > self._raster_ysize):
             raise ValueError('Window is bigger than dataset')
         self.window = new_window
         self._intersection = intersection
 
-    def ReadAsArray(self, x, y, xsize, ysize) -> Any:
+    def read_array(self, xoffset, yoffset, xsize, ysize) -> Any:
         return self._dataset.GetRasterBand(1).ReadAsArray(
-            self.window.xoff + x,
-            self.window.yoff + y,
+            self.window.xoff + xoffset,
+            self.window.yoff + yoffset,
             xsize, ysize
         )
 
@@ -147,7 +151,7 @@ class VectorRangeLayer(Layer):
             []
         )
         if not dataset:
-            raise Exception(f'Failed to create memory mask')
+            raise MemoryError('Failed to create memory mask')
 
         dataset.SetProjection(projection)
         dataset.SetGeoTransform([area.left, scale.xstep, 0.0, area.top, 0.0, scale.ystep])
@@ -157,14 +161,22 @@ class VectorRangeLayer(Layer):
 
 
 class UniformAreaLayer(Layer):
+    """If you have a pixel area map where all the row entries are identical, then you
+    can speed up the AoH calculations by simplifying that to a 1 pixel wide map and then
+    synthesizing the rest of the data at calc time, as decompressing the large compressed
+    TIFF files is quite slow. This class is used to load such a dataset.
+
+    If you have a file that is large that you'd like to shrink you can call the static methid
+    generate_narrow_area_projection which will shrink the file and correct the geo info.
+    """
 
     @staticmethod
-    def generateNarrowAreaProjection(source_filename: str, target_filename: str) -> None:
+    def generate_narrow_area_projection(source_filename: str, target_filename: str) -> None:
         source = gdal.Open(source_filename, gdal.GA_ReadOnly)
         if source is None:
             raise FileNotFoundError(source_filename)
-        # if not UniformAreaLayer.isUniformAreaProjection(source):
-        #     raise ValueError("Data in area pixel map is not uniform across rows")
+        if not UniformAreaLayer.is_uniform_area_projection(source):
+            raise ValueError("Data in area pixel map is not uniform across rows")
         source_band = source.GetRasterBand(1)
         target = gdal.GetDriverByName('GTiff').Create(
             target_filename,
@@ -180,13 +192,12 @@ class UniformAreaLayer(Layer):
         target_band = target.GetRasterBand(1)
         target_band.WriteArray(data, 0, 0)
 
-
     @staticmethod
-    def isUniformAreaProjection(dataset) -> bool:
+    def is_uniform_area_projection(dataset) -> bool:
         "Check that the dataset conforms to the assumption that all rows contain the same value. Likely to be slow."
         band = dataset.GetRasterBand(1)
-        for y in range(dataset.RasterYSize):
-            row = band.ReadAsArray(0, y, dataset.RasterXSize, 1)
+        for yoffset in range(dataset.RasterYSize):
+            row = band.ReadAsArray(0, yoffset, dataset.RasterXSize, 1)
             if not numpy.all(numpy.isclose(row, row[0])):
                 return False
         return True
@@ -205,11 +216,12 @@ class UniformAreaLayer(Layer):
             xsize=360 / transform[1],
             ysize=dataset.RasterYSize,
         )
-        self._rasterXSize = self.window.xsize
+        self._raster_xsize = self.window.xsize
         self.area = Area(-180, self.area.top, 180, self.area.bottom)
 
-    def ReadAsArray(self, x, y, xsize, ysize) -> Any:
-        offset = self.window.yoff + y
+    def read_array(self, xoffset, yoffset, _xsize, ysize) -> Any:
+        # TODO: make work with 2D requests
+        offset = self.window.yoff + yoffset
         subset = self.databand[offset:offset + ysize][0]
         return subset
 
@@ -223,14 +235,15 @@ class NullLayer:
             bottom = -90.0
         )
 
-    def pixel_scale(self) -> PixelScale:
+    def pixel_scale(self) -> Optional[PixelScale]:
         return None
 
-    def check_pixel_scale(self, scale: PixelScale) -> bool:
+    def check_pixel_scale(self, _scale: PixelScale) -> bool:
         return True
 
-    def set_window_for_intersection(self, intersection: Area) -> None:
+    def set_window_for_intersection(self, _intersection: Area) -> None:
         pass
 
-    def ReadAsArray(self, x, y, xsize, ysize) -> Any:
+    def read_array(self, _x: int, _y: int, _xsize: int, _ysize: int) -> Any:
+        # This seems to be as close to a noop as I can see in numpy
         return 1.0

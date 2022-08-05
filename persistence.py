@@ -37,7 +37,8 @@ class JungModel(LandModel):
 
 class ESACCIModel(LandModel):
     def __init__(self, habitat_map_filename: str, elevation_map_filename: str, area_map_filename: Optional[str] = None):
-        super().__init__(habitat_map_filename, elevation_map_filename, area_map_filename, iucn_modlib.translator.toESACCI)
+        super().__init__(habitat_map_filename, elevation_map_filename, area_map_filename,
+            iucn_modlib.translator.toESACCI)
 
 
 def modeller(
@@ -45,15 +46,15 @@ def modeller(
     range_path: str,
     land_model: LandModel
 ) -> List[Tuple]:
-    habitatSeasons = seasonality.habitatSeasonality(species)
-    rangeSeasons = seasonality.rangeSeasonality(range_path, species.taxonid)
-    seasons = list(set(habitatSeasons + rangeSeasons))
+    seasons = set(
+        seasonality.habitatSeasonality(species) +
+        seasonality.rangeSeasonality(range_path, species.taxonid)
+    )
     if len(seasons) == 3:
-        seasons = ('breeding', 'nonbreeding')
+        seasons = {'breeding', 'nonbreeding'}
     elif len(seasons) == 2 and 'resident' in seasons:
-        seasons = ('breeding', 'nonbreeding')
+        seasons = {'breeding', 'nonbreeding'}
 
-    elevation_range = (species.elevation_lower, species.elevation_upper)
     habitat_params = iucn_modlib.ModelParameters(
         habMap = None,
         translator = land_model.translator,
@@ -88,7 +89,7 @@ def modeller(
             habitat_layer,
             habitat_list,
             elevation_layer,
-            elevation_range,
+            (species.elevation_lower, species.elevation_upper),
             area_layer
         )
         results.append([season, result])
@@ -110,16 +111,16 @@ def _calculate(
     for layer in layers:
         layer.set_window_for_intersection(intersection)
 
-    STEP = 1
+    ystep = 1
 
     # all layers now have the same window width/height, so just take the habitat one
     pixel_width = habitat_layer.window.xsize
     pixel_height = habitat_layer.window.ysize
 
     area_total = 0.0
-    for yoffset in range(0, pixel_height, STEP):
-        this_step = STEP
-        if yoffset + STEP > pixel_height:
+    for yoffset in range(0, pixel_height, ystep):
+        this_step = ystep
+        if yoffset + this_step > pixel_height:
             this_step = pixel_height - yoffset
 
         habitat = habitat_layer.ReadAsArray(0, yoffset, pixel_width, this_step)
