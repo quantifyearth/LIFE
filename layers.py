@@ -13,11 +13,13 @@ PixelScale = namedtuple('PixelScale', ['xstep', 'ystep'])
 class Layer:
     @staticmethod
     def find_intersection(layers: List) -> Area:
+        if not layers:
+            raise ValueError("Expected list of layers")
         intersection = Area(
-            left=max([x.area.left for x in layers]),
-            top=min([x.area.top for x in layers]),
-            right=min([x.area.right for x in layers]),
-            bottom=max([x.area.bottom for x in layers])
+            left=max(x.area.left for x in layers),
+            top=min(x.area.top for x in layers),
+            right=min(x.area.right for x in layers),
+            bottom=max(x.area.bottom for x in layers)
         )
         if (intersection.left >= intersection.right) or (intersection.bottom >= intersection.top):
             raise ValueError('No intersection possible')
@@ -120,10 +122,10 @@ class VectorRangeLayer(Layer):
         # ceil/floor math, so we use absolute versions when trying to round.
         abs_xstep, abs_ystep = abs(scale.xstep), abs(scale.ystep)
         area = Area(
-            left=floor(min([x[0] for x in envelopes]) / abs_xstep) * abs_xstep,
-            top=ceil(max([x[3] for x in envelopes]) / abs_ystep) * abs_ystep,
-            right=ceil(max([x[1] for x in envelopes]) / abs_xstep) * abs_xstep,
-            bottom=floor(min([x[2] for x in envelopes]) / abs_ystep) * abs_ystep,
+            left=floor(min(x[0] for x in envelopes) / abs_xstep) * abs_xstep,
+            top=ceil(max(x[3] for x in envelopes) / abs_ystep) * abs_ystep,
+            right=ceil(max(x[1] for x in envelopes) / abs_xstep) * abs_xstep,
+            bottom=floor(min(x[2] for x in envelopes) / abs_ystep) * abs_ystep,
         )
 
         # create new dataset for just that area

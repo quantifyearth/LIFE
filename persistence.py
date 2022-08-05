@@ -74,7 +74,7 @@ def modeller(
         elif season == 'breeding':
             habitat_params.season = ('Resident', 'Breeding Season', 'Seasonal Occurrence Unknown')
         elif season == 'nonbreeding':
-            habitat_params.seasons = ('Resident', 'Non-Breeding Season', 'Seasonal Occurrence Unknown'),
+            habitat_params.seasons = ('Resident', 'Non-Breeding Season', 'Seasonal Occurrence Unknown')
         else:
             raise ValueError(f'Unexpected season {season}')
         habitat_list = species.habitatCodes(habitat_params)

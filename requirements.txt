@@ -1,0 +1,6 @@
+numpy
+gdal
+
+pytest
+pylint
+mypy
