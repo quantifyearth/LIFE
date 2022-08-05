@@ -1,6 +1,6 @@
 from collections import namedtuple
 from math import ceil, floor
-from typing import List, Any
+from typing import List, Any, Tuple
 
 import numpy
 from osgeo import gdal, ogr
@@ -65,12 +65,12 @@ class Layer:
         )
 
     @property
-    def geo_transform(self) -> List[float]:
+    def geo_transform(self) -> Tuple[float]:
         if self._intersection:
-            return [
+            return (
                 self._intersection.left, self._transform[1],
                 0.0, self._intersection.top, 0.0, self._transform[5]
-            ]
+            )
         else:
             return self._transform
 
