@@ -1,7 +1,11 @@
+import os
+import shutil
+import tempfile
 from dataclasses import dataclass
 from typing import List, Optional, Any, Tuple, Set
 
 import numpy
+from osgeo import gdal
 
 from aoh.lib import seasonality
 from iucn_modlib.classes.Taxon import Taxon
@@ -44,8 +48,9 @@ class ESACCIModel(LandModel):
 def modeller(
     species: Taxon,
     range_path: str,
-    land_model: LandModel
-) -> List[Tuple[str, float]]:
+    land_model: LandModel,
+    results_path: Optional[str]
+) -> List[Tuple[str, float, str]]:
     seasons: Set[str] = set(
         seasonality.habitatSeasonality(species) +
         seasonality.rangeSeasonality(range_path, species.taxonid)
@@ -69,32 +74,60 @@ def modeller(
     area_layer = land_model.new_area_layer()
 
     results = []
-    for season in seasons:
-        if season == 'resident':
-            habitat_params.season = ('Resident', 'Seasonal Occurrence Unknown')
-        elif season == 'breeding':
-            habitat_params.season = ('Resident', 'Breeding Season', 'Seasonal Occurrence Unknown')
-        elif season == 'nonbreeding':
-            habitat_params.seasons = ('Resident', 'Non-Breeding Season', 'Seasonal Occurrence Unknown')
-        else:
-            raise ValueError(f'Unexpected season {season}')
-        habitat_list = species.habitatCodes(habitat_params)
+    with tempfile.TemporaryDirectory() as tempdir:
+        for season in seasons:
+            if season == 'resident':
+                habitat_params.season = ('Resident', 'Seasonal Occurrence Unknown')
+            elif season == 'breeding':
+                habitat_params.season = ('Resident', 'Breeding Season', 'Seasonal Occurrence Unknown')
+            elif season == 'nonbreeding':
+                habitat_params.seasons = ('Resident', 'Non-Breeding Season', 'Seasonal Occurrence Unknown')
+            else:
+                raise ValueError(f'Unexpected season {season}')
+            habitat_list = species.habitatCodes(habitat_params)
 
-        # range layer is only one that is seasonal, so recalculate
-        where_filter =  f"id_no = {species.taxonid} and season in ('{season}', 'resident')"
-        pixel_scale = habitat_layer.pixel_scale
-        assert pixel_scale
-        range_layer = VectorRangeLayer(range_path, where_filter, pixel_scale, habitat_layer.projection)
+            # range layer is only one that is seasonal, so recalculate
+            where_filter =  f"id_no = {species.taxonid} and season in ('{season}', 'resident')"
+            pixel_scale = habitat_layer.pixel_scale
+            assert pixel_scale
+            range_layer = VectorRangeLayer(range_path, where_filter, pixel_scale, habitat_layer.projection)
 
-        result = _calculate(
-            range_layer,
-            habitat_layer,
-            habitat_list,
-            elevation_layer,
-            (species.elevation_lower, species.elevation_upper),
-            area_layer
-        )
-        results.append((season, result))
+            # Work out the intersection of all the maps
+            layers = [habitat_layer, elevation_layer, area_layer, range_layer]
+            intersection = Layer.find_intersection(layers)
+            for layer in layers:
+                layer.set_window_for_intersection(intersection)
+
+            results_dataset = None
+            results_dataset_filename = ''
+            if results_path:
+                results_dataset_filename = f'{season}-{species.taxonid}.tif'
+                results_dataset = gdal.GetDriverByName('GTiff').Create(
+                    os.path.join(tempdir, results_dataset_filename),
+                    habitat_layer.window.xsize,
+                    habitat_layer.window.ysize,
+                    1,
+                    gdal.GDT_Float32, # TODO: This needs to vary based on area optionality
+                    ['COMPRESS=LZW']
+                )
+                results_dataset.SetProjection(habitat_layer.projection)
+                results_dataset.SetGeoTransform(habitat_layer.geo_transform)
+
+            result = _calculate(
+                range_layer,
+                habitat_layer,
+                habitat_list,
+                elevation_layer,
+                (species.elevation_lower, species.elevation_upper),
+                area_layer,
+                results_dataset.GetRasterBand(1)
+            )
+            # if we got here, then consider the experiment a success
+            if results_dataset:
+                del results_dataset # aka close for gdal
+                shutil.move(os.path.join(tempdir, results_dataset_filename),
+                    os.path.join(results_path, results_dataset_filename))
+            results.append((season, result, results_dataset_filename))
     return results
 
 
@@ -104,14 +137,9 @@ def _calculate(
     habitat_list: List,
     elevation_layer: Layer,
     elevation_range: Tuple[float, float],
-    area_layer: Layer
+    area_layer: Layer,
+    results_dataset: Optional[gdal.Band]
 ) -> float:
-
-    # Work out the intersection of all the maps
-    layers = [habitat_layer, elevation_layer, area_layer, range_layer]
-    intersection = Layer.find_intersection(layers)
-    for layer in layers:
-        layer.set_window_for_intersection(intersection)
 
     ystep = 1
 
@@ -138,6 +166,8 @@ def _calculate(
         pixel_areas = numpy.nan_to_num(pixel_areas, copy=False, nan=0.0)
 
         data = filtered_habitat * filtered_elevation * pixel_areas * species_range
+        if results_dataset:
+            results_dataset.WriteArray(data, 0, yoffset)
         area_total += numpy.sum(data)
 
     return area_total
