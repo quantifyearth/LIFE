@@ -94,7 +94,15 @@ def modeller(
 
             # Work out the intersection of all the maps
             layers = [habitat_layer, elevation_layer, area_layer, range_layer]
-            intersection = Layer.find_intersection(layers)
+            try:
+                intersection = Layer.find_intersection(layers)
+            except ValueError:
+                # If we get here then there's likely something wrong with the layers, so display something useful:
+                print(f'Habitat:   scale: {habitat_layer.pixel_scale}')
+                print(f'Elevation: scale: {elevation_layer.pixel_scale}')
+                print(f'Habitat:   scale: {area_layer.pixel_scale}')
+                print(f'Habitat:   scale: {range_layer.pixel_scale}')
+                raise
             for layer in layers:
                 layer.set_window_for_intersection(intersection)
 
