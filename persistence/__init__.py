@@ -32,7 +32,6 @@ class LandModel:
         try:
             return UniformAreaLayer.layer_from_file(self.area_map_filename)
         except ValueError:
-            print("WARNING: Area map isn't one pixel wide, treating as full layer")
             return Layer.layer_from_file(self.area_map_filename)
 
 class JungModel(LandModel):
