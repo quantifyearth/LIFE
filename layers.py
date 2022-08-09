@@ -188,9 +188,16 @@ class UniformAreaLayer(Layer):
         )
         target.SetProjection(source.GetProjection())
         target.SetGeoTransform(source.GetGeoTransform())
-        data = source_band.ReadAsArray(0, 0, 1, source.RasterYSize)
+        # Although the output is 1 pixel wide, the input can be very wide, so we do this in stages
+        # otherwise gdal eats all the memory
+        step = 1000
         target_band = target.GetRasterBand(1)
-        target_band.WriteArray(data, 0, 0)
+        for yoffset in range(0, source.RasterYSize, step):
+            this_step = step
+            if (yoffset + this_step) > source.RasterYSize:
+                this_step = source.RasterYSize - yoffset
+            data = source_band.ReadAsArray(0, yoffset, 1, this_step)
+            target_band.WriteArray(data, 0, yoffset)
 
     @staticmethod
     def is_uniform_area_projection(dataset) -> bool:
