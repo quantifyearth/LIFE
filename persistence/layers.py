@@ -1,3 +1,4 @@
+import sys
 from collections import namedtuple
 from math import ceil, floor
 from typing import Any, List, Optional, Tuple
@@ -9,6 +10,9 @@ from osgeo import gdal, ogr
 Window = namedtuple('Window', ['xoff', 'yoff', 'xsize', 'ysize'])
 Area = namedtuple('Area', ['left', 'top', 'right', 'bottom'])
 PixelScale = namedtuple('PixelScale', ['xstep', 'ystep'])
+
+def _almost_equal(a: float, b: float) -> bool:
+    return abs(a - b) < sys.float_info.epsilon
 
 class Layer:
     """Layer provides a wrapper around a gdal dataset/band that also records offset state so that
@@ -87,7 +91,8 @@ class Layer:
         return self._dataset.GetProjection()
 
     def check_pixel_scale(self, scale) -> bool:
-        return self.pixel_scale == scale
+        return _almost_equal(self.pixel_scale[0], scale[0]) and \
+            _almost_equal(self.pixel_scale[1], scale[1])
 
     def set_window_for_intersection(self, intersection: Area) -> None:
         new_window = Window(
