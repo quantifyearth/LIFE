@@ -120,7 +120,7 @@ def modeller(
                 elevation_layer,
                 (species.elevation_lower, species.elevation_upper),
                 area_layer,
-                results_dataset.GetRasterBand(1)
+                results_dataset.GetRasterBand(1) if results_dataset else None
             )
             # if we got here, then consider the experiment a success
             if results_dataset:
