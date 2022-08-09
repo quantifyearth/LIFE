@@ -3,7 +3,7 @@ from typing import Any
 import numpy
 import pytest
 
-from layers import Layer, Window
+from persistence.layers import Layer, Window
 from persistence import _calculate
 
 class SingleValueLayer(Layer):

@@ -3,7 +3,7 @@ from math import ceil
 import numpy
 from osgeo import gdal
 
-from layers import Layer, Area
+from persistence.layers import Layer, Area
 
 def make_dataset_of_region(area: Area, pixel_pitch: float, filename=None) -> gdal.Dataset:
 	if filename:

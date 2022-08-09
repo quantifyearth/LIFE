@@ -1,7 +1,7 @@
 import pytest
 
 from helpers import make_dataset_of_region
-from layers import Area, Layer, NullLayer, Window
+from persistence.layers import Area, Layer, NullLayer, Window
 
 
 def test_find_intersection_empty_list() -> None:

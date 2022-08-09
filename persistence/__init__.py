@@ -11,7 +11,7 @@ from aoh.lib import seasonality
 from iucn_modlib.classes.Taxon import Taxon
 import iucn_modlib.translator
 
-from layers import Layer, VectorRangeLayer, NullLayer, UniformAreaLayer
+from .layers import Layer, VectorRangeLayer, NullLayer, UniformAreaLayer
 
 @dataclass
 class LandModel:
