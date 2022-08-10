@@ -81,6 +81,13 @@ def main() -> None:
 		required=False,
 		dest="output"
 	)
+	parser.add_argument(
+		'--epochs',
+		type=str,
+		help="comma seperated (but no spaces!) list of experiments to run for",
+		required=True,
+		dest="epochs"
+	)
 	args = vars(parser.parse_args())
 
 	try:
@@ -104,6 +111,8 @@ def main() -> None:
 				print(f'\t{experiment}')
 		sys.exit(-1)
 
+	epoch_list = args['epochs'].split(',')
+
 	try:
 		range_path = experiment['range']
 	except KeyError:
@@ -117,7 +126,7 @@ def main() -> None:
 	species_list = projectSpeciesList(args["project"], range_path)
 
 	with file_writer(args["output"]) as output:
-		output.write('--taxid,--seasonality\n')
+		output.write('--taxid,--seasonality,--experiment\n')
 		for species_id, _ in species_list:
 			if batch:
 				try:
@@ -134,8 +143,8 @@ def main() -> None:
 
 			seasonality_list = seasonality_for_species(species, range_path)
 			for season in seasonality_list:
-				output.write(f'{species_id},{season}\n')
-
+				for epoch in epoch_list:
+					output.write(f'{species_id},{season},{epoch}\n')
 
 if __name__ == "__main__":
 	main()
