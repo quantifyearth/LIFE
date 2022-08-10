@@ -2,6 +2,7 @@ requests
 numpy
 gdal
 pandas
+geopandas
 
 pytest
 pylint
