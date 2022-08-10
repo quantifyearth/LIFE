@@ -16,6 +16,13 @@ parser.add_argument(
     dest="species"
 )
 parser.add_argument(
+    '--seasonality',
+    type=str,
+    help="which season to calculate for (breeding, nonbreeding, or resident)",
+    required=True,
+    dest="seasonality"
+)
+parser.add_argument(
     '--experiment',
     type=str,
     help="name of experiment group from configuration json",
@@ -39,6 +46,12 @@ parser.add_argument(
     default=None,
 )
 args = vars(parser.parse_args())
+
+try:
+    seasonality = persistence.Seasonality(args['seasonality'])
+except ValueError:
+    printf(f'Seasonality {args["seasonality"]} is not valid')
+    sys.exit(-1)
 
 try:
     with open(args['config_path'], 'r', encoding='utf-8') as config_file:
@@ -104,7 +117,5 @@ if args['results_path']:
         print(f'Provided results path {args["results_path"]} is not a directory')
         sys.exit(-1)
 
-results = persistence.modeller(species, range_path, land, args['results_path'])
-# output as CSV
-for result in results:
-    print(', '.join([str(x) for x in result]))
+result = persistence.calculator(species, range_path, land, seasonality, args['results_path'])
+print(', '.join([str(x) for x in result]))
