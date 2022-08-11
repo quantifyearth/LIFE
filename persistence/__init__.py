@@ -85,7 +85,10 @@ def calculator(
     where_filter =  f"id_no = {species.taxonid} and season in ('{seasonality.value}', 'resident')"
     pixel_scale = habitat_layer.pixel_scale
     assert pixel_scale
-    range_layer = VectorRangeLayer(range_path, where_filter, pixel_scale, habitat_layer.projection)
+    try:
+        range_layer = VectorRangeLayer(range_path, where_filter, pixel_scale, habitat_layer.projection)
+    except ValueError:
+        return 0.0, None
 
     # Work out the intersection of all the maps
     layers = [habitat_layer, elevation_layer, area_layer, range_layer]
