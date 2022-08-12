@@ -4,7 +4,7 @@ import numpy
 import pytest
 
 from persistence.layers import Layer, Window
-from persistence import _calculate
+from persistence import _calculate_cpu
 
 class SingleValueLayer(Layer):
 	"""Mocked layer to make testing calc function easier"""
@@ -30,7 +30,7 @@ def test_calculate_simple(habitat,elevation,range,area,habitats,elevation_range,
 	elevation_layer = SingleValueLayer(elevation)
 	range_layer = SingleValueLayer(range)
 	area_layer = SingleValueLayer(area)
-	area = _calculate(
+	area = _calculate_cpu(
 		range_layer,
 		habitat_layer,
 		habitats,
