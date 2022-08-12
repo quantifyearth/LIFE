@@ -72,6 +72,8 @@ class Seasonality(Enum):
             return ('Resident', 'Breeding Season', 'Seasonal Occurrence Unknown')
         elif self.value == 'nonbreeding':
             return ('Resident', 'Non-Breeding Season', 'Seasonal Occurrence Unknown')
+        else:
+            raise NotImplementedError(f'Unhandled seasonlity value {self.value}')
 
 
 def calculator(
@@ -119,7 +121,7 @@ def calculator(
         results_dataset = None
         results_dataset_filename = ''
         if results_path:
-            results_dataset_filename = f'{season}-{species.taxonid}.tif'
+            results_dataset_filename = f'{seasonality}-{species.taxonid}.tif'
             results_dataset = gdal.GetDriverByName('GTiff').Create(
                 os.path.join(tempdir, results_dataset_filename),
                 habitat_layer.window.xsize,
@@ -217,9 +219,6 @@ def _calculate_cuda(
     pixel_width = habitat_layer.window.xsize
     pixel_height = habitat_layer.window.ysize
 
-    min_elevation = min(elevation_range)
-    max_elevation = max(elevation_range)
-
     aoh_shader = cupy.ElementwiseKernel(
         'bool habitat, int16 elevation, uint8 species_range, float64 pixel_area',
         'float64 result',
@@ -261,9 +260,9 @@ def _calculate_cuda(
             area_total += aoh_reduction_shader(filtered_habitat, elevation, species_range, pixel_areas)
         else:
             if not data:
-                data = cp.same_as(filtered_habitat)
+                data = cupy.same_as(filtered_habitat)
             aoh_shader(filtered_habitat, elevation, species_range, pixel_areas, data)
-            area.total += cupy.sum(data)
+            area_total += cupy.sum(data)
             results_dataset.WriteArray(data.get(), 0, yoffset)
 
     return area_total

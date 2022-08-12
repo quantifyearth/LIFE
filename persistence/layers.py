@@ -11,8 +11,8 @@ Window = namedtuple('Window', ['xoff', 'yoff', 'xsize', 'ysize'])
 Area = namedtuple('Area', ['left', 'top', 'right', 'bottom'])
 PixelScale = namedtuple('PixelScale', ['xstep', 'ystep'])
 
-def _almost_equal(a: float, b: float) -> bool:
-    return abs(a - b) < sys.float_info.epsilon
+def _almost_equal(aval: float, bval: float) -> bool:
+    return abs(aval - bval) < sys.float_info.epsilon
 
 class Layer:
     """Layer provides a wrapper around a gdal dataset/band that also records offset state so that
@@ -185,9 +185,9 @@ class DynamicVectorRangeLayer(Layer):
         if vectors is None:
             raise FileNotFoundError(range_vectors)
         self.vectors = vectors
+
         range_layer = vectors.GetLayer()
         range_layer.SetAttributeFilter(where_filter)
-
         self.range_layer = range_layer
 
         # work out region for mask
@@ -210,7 +210,6 @@ class DynamicVectorRangeLayer(Layer):
             right=ceil(max(x[1] for x in envelopes) / abs_xstep) * abs_xstep,
             bottom=floor(min(x[2] for x in envelopes) / abs_ystep) * abs_ystep,
         )
-
         self._transform = [self.area.left, scale.xstep, 0.0, self.area.top, 0.0, scale.ystep]
         self._projection = projection
         self._dataset = None

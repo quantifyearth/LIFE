@@ -61,7 +61,7 @@ if args['nogpu'].lower() in ['t', 'true']:
 try:
     seasonality = persistence.Seasonality(args['seasonality'])
 except ValueError:
-    printf(f'Seasonality {args["seasonality"]} is not valid')
+    print(f'Seasonality {args["seasonality"]} is not valid')
     sys.exit(-1)
 
 try:
