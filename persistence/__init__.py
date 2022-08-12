@@ -82,6 +82,8 @@ def calculator(
     results_path: Optional[str]
 ) -> List[Tuple[str, float, str]]:
 
+    gdal.SetCacheMax(1024 * 1024 * 16)
+
     habitat_params = iucn_modlib.ModelParameters(
         habMap = None,
         translator = land_model.translator,
@@ -175,6 +177,8 @@ def _calculate_cpu(
 
         filtered_habitat = numpy.isin(habitat, habitat_list)
         filtered_elevation = numpy.logical_and(elevation >= min(elevation_range), elevation <= max(elevation_range))
+        del habitat
+        del elevation
 
         # TODO: this isn't free - so if there's no nan's we'd like to avoid this stage
         pixel_areas = numpy.nan_to_num(pixel_areas, copy=False, nan=0.0)
@@ -183,6 +187,10 @@ def _calculate_cpu(
         if results_dataset:
             results_dataset.WriteArray(data, 0, yoffset)
         area_total += numpy.sum(data)
+
+        del filtered_habitat
+        del filtered_elevation
+        del species_range
 
     return area_total
 
