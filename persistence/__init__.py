@@ -1,3 +1,12 @@
+# AoH calculator code for the 4C persistence calculator, a more specialised
+# version of the logic from working on Daniele Baisero's AoH library.
+#
+# There's two seperate versions of the actual calculation - one for CPU use
+# one for use with CUDA GPUs. Originally I wanted to have one function with
+# conditional bits of code, but almost all the code ended up being conditional
+# one way or the other, so the logic was hard to read. So instead we now have
+# some duplication, but it is easier to see the logic in each one.
+
 import os
 import shutil
 import tempfile
@@ -7,6 +16,12 @@ from typing import List, Optional, Any, Tuple, Set
 
 import numpy
 from osgeo import gdal
+try:
+    import cupy
+    import cupyx
+    USE_GPU = True
+except ModuleNotFoundError:
+    USE_GPU = False
 
 from iucn_modlib.classes.Taxon import Taxon
 import iucn_modlib.translator
@@ -112,7 +127,9 @@ def calculator(
             results_dataset.SetProjection(habitat_layer.projection)
             results_dataset.SetGeoTransform(habitat_layer.geo_transform)
 
-        result = _calculate(
+        calculate_function = _calculate_cpu if not USE_GPU else _calculate_cuda
+
+        result = calculate_function(
             range_layer,
             habitat_layer,
             habitat_list,
@@ -129,7 +146,7 @@ def calculator(
         return result, results_dataset_filename
 
 
-def _calculate(
+def _calculate_cpu(
     range_layer: Layer,
     habitat_layer: Layer,
     habitat_list: List,
@@ -166,5 +183,75 @@ def _calculate(
         if results_dataset:
             results_dataset.WriteArray(data, 0, yoffset)
         area_total += numpy.sum(data)
+
+    return area_total
+
+
+def _calculate_cuda(
+    range_layer: Layer,
+    habitat_layer: Layer,
+    habitat_list: List,
+    elevation_layer: Layer,
+    elevation_range: Tuple[float, float],
+    area_layer: Layer,
+    results_dataset: Optional[gdal.Band]
+) -> float:
+
+    # For CPU work, GDAL general recommends processing one line at a time, but for
+    # GPU work we generally need to use larger chunks to amortize the data transfer costs
+    ystep = 512
+
+    # all layers now have the same window width/height, so just take the habitat one
+    pixel_width = habitat_layer.window.xsize
+    pixel_height = habitat_layer.window.ysize
+
+    min_elevation = min(elevation_range)
+    max_elevation = max(elevation_range)
+
+    aoh_shader = cupy.ElementwiseKernel(
+        'bool habitat, int16 elevation, uint8 species_range, float64 pixel_area',
+        'float64 result',
+        f'result = (species_range && habitat && ((elevation >= {min(elevation_range)}) && (elevation <= {max(elevation_range)})));` \
+            `result = result * pixel_area',
+        'my_shader'
+    )
+    aoh_reduction_shader = cupy.ReductionKernel(
+        'bool habitat, int16 elevation, uint8 species_range, float64 pixel_area',
+        'float64 result',
+        f'(species_range && habitat && ((elevation >= {min(elevation_range)}) && (elevation <= {max(elevation_range)}))) * pixel_area',
+        'a + b',
+        'result = a',
+        '0.0',
+        'my_reduction_shader'
+    )
+
+    habitat_list = cupy.array(habitat_list)
+
+    area_total = 0.0
+    data = None
+    for yoffset in range(0, pixel_height, ystep):
+        this_step = ystep
+        if yoffset + this_step > pixel_height:
+            this_step = pixel_height - yoffset
+
+        habitat, elevation, species_range, pixel_areas = [
+            cupy.array(x.read_array(0, yoffset, pixel_width, this_step))
+            for x in [habitat_layer, elevation_layer, range_layer, area_layer]
+        ]
+
+        filtered_habitat = cupy.isin(habitat, habitat_list)
+
+        # if we don't need to store out the geotiff then we can do
+        # the summation and sum in a single reduction shader. Otherwise we need to
+        # calc to an area and then reduce, which is slower but is the price of
+        # getting the intermediary data
+        if not results_dataset:
+            area_total += aoh_reduction_shader(filtered_habitat, elevation, species_range, pixel_areas)
+        else:
+            if not data:
+                data = cp.same_as(filtered_habitat)
+            aoh_shader(filtered_habitat, elevation, species_range, pixel_areas, data)
+            area.total += cupy.sum(data)
+            results_dataset.WriteArray(data.get(), 0, yoffset)
 
     return area_total

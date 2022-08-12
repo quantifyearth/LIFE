@@ -45,7 +45,18 @@ parser.add_argument(
     dest='results_path',
     default=None,
 )
+parser.add_argument(
+    '--nogpu',
+    type=str,
+    help='disable CUDA usage',
+    required=False,
+    dest='nogpu',
+    default='False',
+)
 args = vars(parser.parse_args())
+
+if args['nogpu'].lower() in ['t', 'true']:
+    persistence.USE_GPU = False
 
 try:
     seasonality = persistence.Seasonality(args['seasonality'])
