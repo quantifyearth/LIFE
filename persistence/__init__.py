@@ -222,14 +222,16 @@ def _calculate_cuda(
     aoh_shader = cupy.ElementwiseKernel(
         'bool habitat, int16 elevation, uint8 species_range, float64 pixel_area',
         'float64 result',
-        f'result = (species_range && habitat && ((elevation >= {min(elevation_range)}) && (elevation <= {max(elevation_range)})));` \
-            `result = result * pixel_area',
+        'result = (species_range && habitat && ' \
+            f'((elevation >= {min(elevation_range)}) && (elevation <= {max(elevation_range)})));' \
+            'result = result * pixel_area',
         'my_shader'
     )
     aoh_reduction_shader = cupy.ReductionKernel(
         'bool habitat, int16 elevation, uint8 species_range, float64 pixel_area',
         'float64 result',
-        f'(species_range && habitat && ((elevation >= {min(elevation_range)}) && (elevation <= {max(elevation_range)}))) * pixel_area',
+        f'(species_range && habitat && ((elevation >= {min(elevation_range)}) && ' \
+            f'(elevation <= {max(elevation_range)}))) * pixel_area',
         'a + b',
         'result = a',
         '0.0',

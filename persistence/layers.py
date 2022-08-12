@@ -179,7 +179,6 @@ class DynamicVectorRangeLayer(Layer):
     modify this class so that it chunks things internally)."""
 
     def __init__(self, range_vectors: str, where_filter: str, scale: PixelScale, projection: str):
-        self.scale = scale
 
         vectors = ogr.Open(range_vectors)
         if vectors is None:
