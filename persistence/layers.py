@@ -12,6 +12,7 @@ Area = namedtuple('Area', ['left', 'top', 'right', 'bottom'])
 PixelScale = namedtuple('PixelScale', ['xstep', 'ystep'])
 
 def _almost_equal(aval: float, bval: float) -> bool:
+    """Safe floating point equality check."""
     return abs(aval - bval) < sys.float_info.epsilon
 
 class Layer:
@@ -318,6 +319,8 @@ class UniformAreaLayer(Layer):
 
 
 class NullLayer(Layer):
+    """This is a layer that will return the identity value - can be used when an input layer is
+    missing (e.g., area) without having the calculation full of branches."""
     def __init__(self): # pylint: disable=W0231
         self.area = Area(
             left = -180.0,
