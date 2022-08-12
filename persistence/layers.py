@@ -103,9 +103,10 @@ class Layer:
         )
         if (new_window.xoff < 0) or (new_window.yoff < 0):
             raise ValueError('Window has negative offset')
-        if ((new_window.xoff + new_window.xsize) > self._raster_xsize) or \
-            ((new_window.yoff + new_window.ysize) > self._raster_ysize):
-            raise ValueError('Window is bigger than dataset')
+        if self._dataset:
+            if ((new_window.xoff + new_window.xsize) > self._raster_xsize) or \
+                ((new_window.yoff + new_window.ysize) > self._raster_ysize):
+                raise ValueError('Window is bigger than dataset')
         self.window = new_window
         self._intersection = intersection
 
@@ -118,6 +119,10 @@ class Layer:
 
 
 class VectorRangeLayer(Layer):
+    """This layer takes a vector file and rasterises it for the given filter. Rasterization
+    up front like this is very expensive, so not recommended. Instead you should use
+    DynamicVectorRangeLayer."""
+
     def __init__(self, range_vectors: str, where_filter: str, scale: PixelScale, projection: str):
         vectors = ogr.Open(range_vectors)
         if vectors is None:
@@ -160,9 +165,83 @@ class VectorRangeLayer(Layer):
 
         dataset.SetProjection(projection)
         dataset.SetGeoTransform([area.left, scale.xstep, 0.0, area.top, 0.0, scale.ystep])
+        print("ratering...")
         gdal.RasterizeLayer(dataset, [1], range_layer, burn_values=[1], options=["ALL_TOUCHED=TRUE"])
+        print("done")
 
         super().__init__(dataset)
+
+
+class DynamicVectorRangeLayer(Layer):
+    """This layer takes a vector file and rasterises it for the given filter. Rasterization occurs only
+    when the data is fetched, so there is no explosive memeory cost, but fetching small units (e.g., one
+    line at a time) can be quite slow, so recommended that you fetch reasonable chunks each time (or
+    modify this class so that it chunks things internally)."""
+
+    def __init__(self, range_vectors: str, where_filter: str, scale: PixelScale, projection: str):
+        self.scale = scale
+
+        vectors = ogr.Open(range_vectors)
+        if vectors is None:
+            raise FileNotFoundError(range_vectors)
+        self.vectors = vectors
+        range_layer = vectors.GetLayer()
+        range_layer.SetAttributeFilter(where_filter)
+
+        self.range_layer = range_layer
+
+        # work out region for mask
+        envelopes = []
+        range_layer.ResetReading()
+        feature = range_layer.GetNextFeature()
+        while feature:
+            envelopes.append(feature.GetGeometryRef().GetEnvelope())
+            feature = range_layer.GetNextFeature()
+        if len(envelopes) == 0:
+            raise ValueError(f'No geometry found for {where_filter}')
+
+        # Get the area, but scale it to the pixel resolution that we're using. Note that
+        # the pixel scale GDAL uses can have -ve values, but those will mess up the
+        # ceil/floor math, so we use absolute versions when trying to round.
+        abs_xstep, abs_ystep = abs(scale.xstep), abs(scale.ystep)
+        self.area = Area(
+            left=floor(min(x[0] for x in envelopes) / abs_xstep) * abs_xstep,
+            top=ceil(max(x[3] for x in envelopes) / abs_ystep) * abs_ystep,
+            right=ceil(max(x[1] for x in envelopes) / abs_xstep) * abs_xstep,
+            bottom=floor(min(x[2] for x in envelopes) / abs_ystep) * abs_ystep,
+        )
+
+        self._transform = [self.area.left, scale.xstep, 0.0, self.area.top, 0.0, scale.ystep]
+        self._projection = projection
+        self._dataset = None
+        self._intersection = self.area
+
+
+    def read_array(self, xoffset, yoffset, xsize, ysize):
+
+        # I did try recycling this object to save allocation/dealloction, but in practice it
+        # seemed to only make things slower (particularly as you need to zero the memory each time yourself)
+        dataset = gdal.GetDriverByName('mem').Create(
+            'mem',
+            xsize,
+            ysize,
+            1,
+            gdal.GDT_Byte,
+            []
+        )
+        if not dataset:
+            raise MemoryError('Failed to create memory mask')
+
+        dataset.SetProjection(self._projection)
+        dataset.SetGeoTransform([
+            self._intersection.left + (xoffset * self._transform[1]), self._transform[1], 0.0,
+            self._intersection.top + (yoffset * self._transform[5]), 0.0, self._transform[5]
+        ])
+        gdal.RasterizeLayer(dataset, [1], self.range_layer, burn_values=[1], options=["ALL_TOUCHED=TRUE"])
+
+        res = dataset.ReadAsArray(0, 0, xsize, ysize)
+        return res
+
 
 
 class UniformAreaLayer(Layer):

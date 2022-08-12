@@ -26,7 +26,7 @@ except ModuleNotFoundError:
 from iucn_modlib.classes.Taxon import Taxon
 import iucn_modlib.translator
 
-from .layers import Layer, VectorRangeLayer, NullLayer, UniformAreaLayer
+from .layers import Layer, DynamicVectorRangeLayer, NullLayer, UniformAreaLayer
 
 @dataclass
 class LandModel:
@@ -82,6 +82,8 @@ def calculator(
     results_path: Optional[str]
 ) -> List[Tuple[str, float, str]]:
 
+    # We do not re-use data in this, so set a small block cache size for GDAL, otherwise
+    # it pointlessly hogs memory, and then spends a long time tidying it up after.
     gdal.SetCacheMax(1024 * 1024 * 16)
 
     habitat_params = iucn_modlib.ModelParameters(
@@ -103,7 +105,7 @@ def calculator(
     pixel_scale = habitat_layer.pixel_scale
     assert pixel_scale
     try:
-        range_layer = VectorRangeLayer(range_path, where_filter, pixel_scale, habitat_layer.projection)
+        range_layer = DynamicVectorRangeLayer(range_path, where_filter, pixel_scale, habitat_layer.projection)
     except ValueError:
         return 0.0, None
 
@@ -158,7 +160,9 @@ def _calculate_cpu(
     results_dataset: Optional[gdal.Band]
 ) -> float:
 
-    ystep = 1
+    # To make effiecint use of DynamicVectorRangeLayer this has been upped from reading
+    # 1 line at a time to something larger.
+    ystep = 512
 
     # all layers now have the same window width/height, so just take the habitat one
     pixel_width = habitat_layer.window.xsize
