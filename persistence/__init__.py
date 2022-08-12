@@ -82,7 +82,7 @@ def calculator(
     land_model: LandModel,
     seasonality: Seasonality,
     results_path: Optional[str]
-) -> List[Tuple[str, float, str]]:
+) -> Tuple[float, Optional[str]]:
 
     # We do not re-use data in this, so set a small block cache size for GDAL, otherwise
     # it pointlessly hogs memory, and then spends a long time tidying it up after.
@@ -145,7 +145,7 @@ def calculator(
             results_dataset.GetRasterBand(1) if results_dataset else None
         )
         # if we got here, then consider the experiment a success
-        if results_dataset:
+        if results_dataset and results_path:
             del results_dataset # aka close for gdal
             shutil.move(os.path.join(tempdir, results_dataset_filename),
                 os.path.join(results_path, results_dataset_filename))

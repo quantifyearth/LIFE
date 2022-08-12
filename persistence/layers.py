@@ -90,9 +90,11 @@ class Layer:
     def projection(self) -> str:
         return self._dataset.GetProjection()
 
-    def check_pixel_scale(self, scale) -> bool:
-        return _almost_equal(self.pixel_scale[0], scale[0]) and \
-            _almost_equal(self.pixel_scale[1], scale[1])
+    def check_pixel_scale(self, scale: PixelScale) -> bool:
+        our_scale = self.pixel_scale
+        assert our_scale is not None
+        return _almost_equal(our_scale.xstep, scale.xstep) and \
+            _almost_equal(our_scale.ystep, scale.ystep)
 
     def set_window_for_intersection(self, intersection: Area) -> None:
         new_window = Window(
