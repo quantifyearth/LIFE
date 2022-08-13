@@ -28,6 +28,20 @@ import iucn_modlib.translator
 
 from .layers import Layer, DynamicVectorRangeLayer, NullLayer, UniformAreaLayer
 
+# When working with rasters we read larger chunks that just a single line, despite that usually
+# being what GDAL recommends if you ask for the efficient block size for larger files. There's
+# two reasons for this:
+# 1: We use DynamicVectorRangeLayer to incrementally rasterize the vector habitat maps, so as to
+#    not need to hold the entire raster in memory at once. Doing that on a per line basis is
+#    somewhat slow. Thus the step is a tradeoff between memory allocation and CPU cost of
+#    processing the vectors. Moving from 1 line to 512 lines cut the runtime by close to half for
+#    the small sample I tested.
+# 2: With the CUDA version of the calculator you have a cost of moving the data from main memory
+#    over to GPU memory and back. Again, doing so on a line by line basis is inefficient, and using
+#    a larger chunk size gives us better efficiency.
+YSTEP = 512
+
+
 @dataclass
 class LandModel:
     habitat_map_filename: str
@@ -162,17 +176,13 @@ def _calculate_cpu(
     results_dataset: Optional[gdal.Band]
 ) -> float:
 
-    # To make effiecint use of DynamicVectorRangeLayer this has been upped from reading
-    # 1 line at a time to something larger.
-    ystep = 512
-
     # all layers now have the same window width/height, so just take the habitat one
     pixel_width = habitat_layer.window.xsize
     pixel_height = habitat_layer.window.ysize
 
     area_total = 0.0
-    for yoffset in range(0, pixel_height, ystep):
-        this_step = ystep
+    for yoffset in range(0, pixel_height, YSTEP):
+        this_step = YSTEP
         if yoffset + this_step > pixel_height:
             this_step = pixel_height - yoffset
 
@@ -211,10 +221,6 @@ def _calculate_cuda(
     results_dataset: Optional[gdal.Band]
 ) -> float:
 
-    # For CPU work, GDAL general recommends processing one line at a time, but for
-    # GPU work we generally need to use larger chunks to amortize the data transfer costs
-    ystep = 512
-
     # all layers now have the same window width/height, so just take the habitat one
     pixel_width = habitat_layer.window.xsize
     pixel_height = habitat_layer.window.ysize
@@ -242,8 +248,8 @@ def _calculate_cuda(
 
     area_total = 0.0
     data = None
-    for yoffset in range(0, pixel_height, ystep):
-        this_step = ystep
+    for yoffset in range(0, pixel_height, YSTEP):
+        this_step = YSTEP
         if yoffset + this_step > pixel_height:
             this_step = pixel_height - yoffset
 
