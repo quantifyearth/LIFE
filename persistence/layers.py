@@ -312,10 +312,8 @@ class UniformAreaLayer(Layer):
         self.area = Area(-180, self.area.top, 180, self.area.bottom)
 
     def read_array(self, xoffset, yoffset, _xsize, ysize) -> Any:
-        # TODO: make work with 2D requests
         offset = self.window.yoff + yoffset
-        subset = self.databand[offset:offset + ysize][0]
-        return subset
+        return self.databand[offset:offset + ysize]
 
 
 class NullLayer(Layer):
