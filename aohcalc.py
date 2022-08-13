@@ -3,7 +3,8 @@ import json
 import os
 import sys
 
-import aoh
+from iucn_modlib.factories import TaxonFactories
+
 import persistence
 
 
@@ -86,11 +87,11 @@ except KeyError:
     sys.exit(-1)
 
 if 'iucn_batch' in experiment:
-    batch = aoh.lib.taxon.loadBatchSource(experiment['iucn_batch'])
-    species = aoh.lib.taxon.TaxonFactoryRedListBatch(args['species'], batch)
+    batch = TaxonFactories.loadBatchSource(experiment['iucn_batch'])
+    species = TaxonFactories.TaxonFactoryRedListBatch(args['species'], batch)
 else:
     try:
-        species = aoh.lib.taxon.TaxonFactoryRedListAPI(args['species'], config['iucn']['api_key'])
+        species = TaxonFactories.TaxonFactoryRedListAPI(args['species'], config['iucn']['api_key'])
     except KeyError:
         print("Failed to find IUCN API key in config file or batch path in experiment.")
         sys.exit(-1)

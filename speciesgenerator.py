@@ -7,8 +7,9 @@ from typing import List, Set, Tuple
 import geopandas as gpd
 import pandas as pd
 
-from aoh.lib import seasonality, taxon
+from aoh.lib import seasonality
 from iucn_modlib.classes.Taxon import Taxon
+from iucn_modlib.factories import TaxonFactories
 
 @contextlib.contextmanager
 def file_writer(file_name = None):
@@ -122,7 +123,7 @@ def main() -> None:
 
     batch = None
     if 'iucn_batch' in experiment:
-        batch = taxon.loadBatchSource(experiment['iucn_batch'])
+        batch = TaxonFactories.loadBatchSource(experiment['iucn_batch'])
 
     # Work part 1: get the species list
     species_list = project_species_list(args["project"], range_path)
@@ -132,13 +133,13 @@ def main() -> None:
         for species_id, _ in species_list:
             if batch:
                 try:
-                    species = taxon.TaxonFactoryRedListBatch(species_id, batch)
+                    species = TaxonFactories.TaxonFactoryRedListBatch(species_id, batch)
                 except IndexError:
                     # Some of the data in the batch needs tidy...
                     continue
             else:
                 try:
-                    species = taxon.TaxonFactoryRedListAPI(species_id, config['iucn']['api_key'])
+                    species = TaxonFactories.TaxonFactoryRedListAPI(species_id, config['iucn']['api_key'])
                 except KeyError:
                     print("Failed to find IUCN API key in config file or batch path in experiment.")
                     sys.exit(-1)

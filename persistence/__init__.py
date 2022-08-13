@@ -24,6 +24,7 @@ except ModuleNotFoundError:
     USE_GPU = False
 
 from iucn_modlib.classes.Taxon import Taxon
+from iucn_modlib.classes.HabitatFilters import HabitatFilters
 import iucn_modlib.translator
 
 from .layers import Layer, DynamicVectorRangeLayer, NullLayer, UniformAreaLayer
@@ -102,14 +103,12 @@ def calculator(
     # it pointlessly hogs memory, and then spends a long time tidying it up after.
     gdal.SetCacheMax(1024 * 1024 * 16)
 
-    habitat_params = iucn_modlib.ModelParameters(
-        habMap = None,
-        translator = land_model.translator,
+    habitat_params = iucn_modlib.HabitatFilters(
         season = seasonality.iucn_seasons,
         suitability = ('Suitable', 'Unknown'),
         majorImportance = ('Yes', 'No'),
     )
-    habitat_list = species.habitatCodes(habitat_params)
+    habitat_list = land_model.translator(species.habitatCodes(habitat_params))
 
     # These three map layers don't change across seasons
     habitat_layer = land_model.new_habitat_layer()

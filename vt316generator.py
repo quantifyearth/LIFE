@@ -4,8 +4,9 @@ import json
 import sys
 from typing import Set
 
-from aoh.lib import seasonality, taxon
+from aoh.lib import seasonality
 from iucn_modlib.classes.Taxon import Taxon
+from iucn_modlib.factories import TaxonFactories
 
 @contextlib.contextmanager
 def file_writer(file_name = None):
@@ -96,7 +97,7 @@ def main() -> None:
 
     batch = None
     if 'iucn_batch' in experiment:
-        batch = taxon.loadBatchSource(experiment['iucn_batch'])
+        batch = TaxonFactories.loadBatchSource(experiment['iucn_batch'])
 
     # Work part 1: get the species list
     with open(args["list"], "r", encoding="utf-8") as listfile:
@@ -108,14 +109,14 @@ def main() -> None:
         for species_id in species_list:
             if batch:
                 try:
-                    species = taxon.TaxonFactoryRedListBatch(species_id, batch)
+                    species = TaxonFactories.TaxonFactoryRedListBatch(species_id, batch)
                 except IndexError:
                     # Some of the data in the batch needs tidy...
                     print(f'{species_id} not in batch')
                     continue
             else:
                 try:
-                    species = taxon.TaxonFactoryRedListAPI(species_id, config['iucn']['api_key'])
+                    species = TaxonFactories.TaxonFactoryRedListAPI(species_id, config['iucn']['api_key'])
                 except KeyError:
                     print("Failed to find IUCN API key in config file or batch path in experiment.")
                     sys.exit(-1)
