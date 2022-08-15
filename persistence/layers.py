@@ -168,9 +168,7 @@ class VectorRangeLayer(Layer):
 
         dataset.SetProjection(projection)
         dataset.SetGeoTransform([area.left, scale.xstep, 0.0, area.top, 0.0, scale.ystep])
-        print("ratering...")
         gdal.RasterizeLayer(dataset, [1], range_layer, burn_values=[1], options=["ALL_TOUCHED=TRUE"])
-        print("done")
 
         super().__init__(dataset)
 
@@ -216,6 +214,12 @@ class DynamicVectorRangeLayer(Layer):
         self._projection = projection
         self._dataset = None
         self._intersection = self.area
+        self.window = Window(
+            xoff=0,
+            yoff=0,
+            xsize=(self.area.right - self.area.left) / scale.xstep,
+            ysize=(self.area.bottom - self.area.top) / scale.ystep,
+        )
 
 
     def read_array(self, xoffset, yoffset, xsize, ysize):
