@@ -1,5 +1,6 @@
 import sys
 from collections import namedtuple
+from dataclasses import dataclass
 from math import ceil, floor
 from typing import Any, List, Optional, Tuple
 
@@ -7,13 +8,77 @@ import numpy
 from osgeo import gdal, ogr
 
 
-Window = namedtuple('Window', ['xoff', 'yoff', 'xsize', 'ysize'])
 Area = namedtuple('Area', ['left', 'top', 'right', 'bottom'])
 PixelScale = namedtuple('PixelScale', ['xstep', 'ystep'])
 
 def _almost_equal(aval: float, bval: float) -> bool:
     """Safe floating point equality check."""
     return abs(aval - bval) < sys.float_info.epsilon
+
+
+@dataclass
+class Window:
+    xoff: int
+    yoff: int
+    xsize: int
+    ysize: int
+
+    @property
+    def as_array_args(self):
+        return (self.xoff, self.yoff, self.xsize, self.ysize)
+
+    def __lt__(self, other) -> bool:
+        return (self.xsize < other.xsize) and \
+            (self.ysize < other.ysize) and \
+            (self.xoff >= other.xoff) and \
+            (self.yoff >= other.yoff) and \
+            ((self.xoff + self.xsize) < (other.xoff + other.xsize)) and \
+            ((self.yoff + self.ysize) < (other.yoff + other.ysize))
+
+    def __gt__(self, other) -> bool:
+        return (self.xsize > other.xsize) and \
+            (self.ysize > other.ysize) and \
+            (self.xoff <= other.xoff) and \
+            (self.yoff <= other.yoff) and \
+            ((self.xoff + self.xsize) > (other.xoff + other.xsize)) and \
+            ((self.yoff + self.ysize) > (other.yoff + other.ysize))
+
+    def __le__(self, other) -> bool:
+        return (self.xsize <= other.xsize) and \
+            (self.ysize <= other.ysize) and \
+            (self.xoff >= other.xoff) and \
+            (self.yoff >= other.yoff) and \
+            ((self.xoff + self.xsize) <= (other.xoff + other.xsize)) and \
+            ((self.yoff + self.ysize) <= (other.yoff + other.ysize))
+
+    def __ge__(self, other) -> bool:
+        return (self.xsize >= other.xsize) and \
+            (self.ysize >= other.ysize) and \
+            (self.xoff <= other.xoff) and \
+            (self.yoff <= other.yoff) and \
+            ((self.xoff + self.xsize) >= (other.xoff + other.xsize)) and \
+            ((self.yoff + self.ysize) >= (other.yoff + other.ysize))
+
+    @staticmethod
+    def find_intersection(windows: List) -> "Window":
+        if not windows:
+            raise ValueError("Expected list of windows")
+        areas = [Area(x.xoff, x.yoff, x.xoff + x.xsize, x.yoff + x.ysize) for x in windows]
+        intersection = Area(
+            left=max(x.left for x in areas),
+            top=max(x.top for x in areas),
+            right=min(x.right for x in areas),
+            bottom=min(x.bottom for x in areas)
+        )
+        if (intersection.left >= intersection.right) or (intersection.top >= intersection.bottom):
+            raise ValueError('No intersection possible')
+        return Window(
+            intersection.left,
+            intersection.top,
+            intersection.right - intersection.left,
+            intersection.bottom - intersection.top
+        )
+
 
 class Layer:
     """Layer provides a wrapper around a gdal dataset/band that also records offset state so that
@@ -66,9 +131,9 @@ class Layer:
         dataset = gdal.Open(filename, gdal.GA_ReadOnly)
         if dataset is None:
             raise FileNotFoundError(filename)
-        return cls(dataset)
+        return cls(dataset, filename)
 
-    def __init__(self, dataset: gdal.Dataset):
+    def __init__(self, dataset: gdal.Dataset, name: Optional[str] = None):
         if not dataset:
             raise ValueError("None is not a valid dataset")
         self._dataset = dataset
@@ -76,6 +141,7 @@ class Layer:
         self._raster_xsize = dataset.RasterXSize
         self._raster_ysize = dataset.RasterYSize
         self._intersection: Optional[Area] = None
+        self.name = name
 
         # Global position of the layer
         self.area = Area(
@@ -132,12 +198,64 @@ class Layer:
         self.window = new_window
         self._intersection = intersection
 
+    def set_window_for_union(self, intersection: Area) -> None:
+        new_window = Window(
+            xoff=int((intersection.left - self.area.left) / self._transform[1]),
+            yoff=int((self.area.top - intersection.top) / (self._transform[5] * -1.0)),
+            xsize=int((intersection.right - intersection.left) / self._transform[1]),
+            ysize=int((intersection.top - intersection.bottom) / (self._transform[5] * -1.0)),
+        )
+        if (new_window.xoff > 0) or (new_window.yoff > 0):
+            raise ValueError('Window has positive offset')
+        if self._dataset:
+            if ((new_window.xsize - new_window.xoff) < self._raster_xsize) or \
+                ((new_window.ysize - new_window.yoff) < self._raster_ysize):
+                raise ValueError('Window is smaller than dataset')
+        self.window = new_window
+        self._intersection = intersection
+
     def read_array(self, xoffset, yoffset, xsize, ysize) -> Any:
-        return self._dataset.GetRasterBand(1).ReadAsArray(
+        # if we're dealing with an intersection, we can just read the data directly,
+        # otherwise we need to read the data into another array with suitable padding
+        target_window = Window(
             self.window.xoff + xoffset,
             self.window.yoff + yoffset,
-            xsize, ysize
+            xsize,
+            ysize
         )
+        source_window = Window(
+            xoff=0,
+            yoff=0,
+            xsize=self._raster_xsize,
+            ysize=self._raster_ysize,
+        )
+        try:
+            intersection = Window.find_intersection([source_window, target_window])
+        except ValueError:
+            return numpy.zeros((ysize, xsize))
+
+        if target_window == intersection:
+            # The target window is a subset of or equal to the source, so we can just ask for the data
+            data = self._dataset.GetRasterBand(1).ReadAsArray(*intersection.as_array_args)
+            return data
+        else:
+            # We should read the intersection from the array, and the rest should be zeros
+            subset = self._dataset.GetRasterBand(1).ReadAsArray(*intersection.as_array_args)
+            data = numpy.pad(
+                subset,
+                (
+                    (
+                        (intersection.yoff - self.window.yoff) - yoffset,
+                        (ysize - ((intersection.yoff - self.window.yoff) + intersection.ysize)) + yoffset,
+                    ),
+                    (
+                        (intersection.xoff - self.window.xoff) - xoffset,
+                        xsize - ((intersection.xoff - self.window.xoff) + intersection.xsize) + xoffset,
+                    )
+                ),
+                'constant'
+            )
+            return data
 
 
 class VectorRangeLayer(Layer):

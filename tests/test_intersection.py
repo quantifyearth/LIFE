@@ -63,9 +63,10 @@ def test_find_intersection_different_pixel_pitch() -> None:
 
 def test_set_intersection_subset() -> None:
 	layer = Layer(make_dataset_of_region(Area(-10, 10, 10, -10), 0.02))
-	intersection = Area(-1.0, 1.0, 1.0, -1.0)
 	assert layer.window == Window(0, 0, 1000, 1000)
 	origin_before_pixel = layer.read_array(0, 0, 1, 1)
+
+	intersection = Area(-1.0, 1.0, 1.0, -1.0)
 
 	layer.set_window_for_intersection(intersection)
 	assert layer.window == Window(450, 450, 100, 100)
