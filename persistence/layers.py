@@ -42,6 +42,25 @@ class Layer:
             raise ValueError('No intersection possible')
         return intersection
 
+    @staticmethod
+    def find_union(layers: List) -> Area:
+        if not layers:
+            raise ValueError("Expected list of layers")
+
+        # This only makes sense (currently) if all layers
+        # have the same pixel pitch
+        scale = layers[0].pixel_scale
+        for layer in layers[1:]:
+            if not layer.check_pixel_scale(scale):
+                raise ValueError("Not all layers are at the same pixel scale")
+
+        return Area(
+            left=min(x.area.left for x in layers),
+            top=max(x.area.top for x in layers),
+            right=max(x.area.right for x in layers),
+            bottom=min(x.area.bottom for x in layers)
+        )
+
     @classmethod
     def layer_from_file(cls, filename: str):
         dataset = gdal.Open(filename, gdal.GA_ReadOnly)
