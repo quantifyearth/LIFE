@@ -10,9 +10,6 @@ from persistence.layers import Layer
 def main():
     layers = [Layer.layer_from_file(x) for x in sys.argv[1:]]
     area = Layer.find_union(layers)
-    for layer in layers:
-        print(layer.name, layer.area)
-    print(area)
 
     for layer in layers:
         layer.set_window_for_union(area)
