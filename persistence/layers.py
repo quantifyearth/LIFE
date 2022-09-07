@@ -194,23 +194,25 @@ class Layer:
         if self._dataset:
             if ((new_window.xoff + new_window.xsize) > self._raster_xsize) or \
                 ((new_window.yoff + new_window.ysize) > self._raster_ysize):
-                raise ValueError('Window is bigger than dataset')
+                raise ValueError(f'Window is bigger than dataset: raster is {self._raster_xsize}x{self._raster_ysize}'\
+                    f', new window is {new_window.xsize - new_window.xoff}x{new_window.ysize - new_window.yoff}')
         self.window = new_window
         self._intersection = intersection
 
     def set_window_for_union(self, intersection: Area) -> None:
         new_window = Window(
-            xoff=int((intersection.left - self.area.left) / self._transform[1]),
-            yoff=int((self.area.top - intersection.top) / (self._transform[5] * -1.0)),
-            xsize=int((intersection.right - intersection.left) / self._transform[1]),
-            ysize=int((intersection.top - intersection.bottom) / (self._transform[5] * -1.0)),
+            xoff=floor((intersection.left - self.area.left) / self._transform[1]),
+            yoff=floor((self.area.top - intersection.top) / (self._transform[5] * -1.0)),
+            xsize=ceil((intersection.right - intersection.left) / self._transform[1]),
+            ysize=ceil((intersection.top - intersection.bottom) / (self._transform[5] * -1.0)),
         )
         if (new_window.xoff > 0) or (new_window.yoff > 0):
             raise ValueError('Window has positive offset')
         if self._dataset:
             if ((new_window.xsize - new_window.xoff) < self._raster_xsize) or \
                 ((new_window.ysize - new_window.yoff) < self._raster_ysize):
-                raise ValueError('Window is smaller than dataset')
+                raise ValueError(f'Window is smaller than dataset: raster is {self._raster_xsize}x{self._raster_ysize}'\
+                    f', new window is {new_window.xsize - new_window.xoff}x{new_window.ysize - new_window.yoff}')
         self.window = new_window
         self._intersection = intersection
 
