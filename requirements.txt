@@ -3,6 +3,7 @@ numpy
 gdal
 pandas
 geopandas
+git+https://gitlab.com/daniele.baisero/iucn-modlib
 
 pytest
 pylint
