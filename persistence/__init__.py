@@ -175,39 +175,16 @@ def _calculate_cpu(
     results_dataset: Optional[gdal.Band]
 ) -> float:
 
-    # all layers now have the same window width/height, so just take the habitat one
-    pixel_width = habitat_layer.window.xsize
-    pixel_height = habitat_layer.window.ysize
+    filtered_habitat = habitat_layer.numpy_apply(lambda chunk: numpy.isin(chunk, habitat_list))
+    filtered_elevation = elevation_layer.numpy_apply(lambda chunk: numpy.logical_and(chunk >= min(elevation_range), chunk <= max(elevation_range)))
 
-    area_total = 0.0
-    for yoffset in range(0, pixel_height, YSTEP):
-        this_step = YSTEP
-        if yoffset + this_step > pixel_height:
-            this_step = pixel_height - yoffset
+    # TODO: this isn't free - so if there's no nan's we'd like to avoid this stage
+    cleaned_area = area_layer.numpy_apply(lambda chunk: numpy.nan_to_num(chunk, copy=False, nan=0.0))
 
-        habitat, elevation, species_range, pixel_areas = [
-            x.read_array(0, yoffset, pixel_width, this_step)
-            for x in [habitat_layer, elevation_layer, range_layer, area_layer]
-        ]
-
-        filtered_habitat = numpy.isin(habitat, habitat_list)
-        filtered_elevation = numpy.logical_and(elevation >= min(elevation_range), elevation <= max(elevation_range))
-        del habitat
-        del elevation
-
-        # TODO: this isn't free - so if there's no nan's we'd like to avoid this stage
-        pixel_areas = numpy.nan_to_num(pixel_areas, copy=False, nan=0.0)
-
-        data = filtered_habitat * filtered_elevation * pixel_areas * species_range
-        if results_dataset:
-            results_dataset.WriteArray(data, 0, yoffset)
-        area_total += numpy.sum(data)
-
-        del filtered_habitat
-        del filtered_elevation
-        del species_range
-
-    return area_total
+    data = filtered_habitat * filtered_elevation * cleaned_area * range_layer
+    if results_dataset:
+        data.save(results_dataset)
+    return data.sum()
 
 
 def _calculate_cuda(
