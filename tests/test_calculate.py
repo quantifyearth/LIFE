@@ -4,7 +4,7 @@ import numpy
 import pytest
 from osgeo import gdal
 
-from persistence.layers import Layer, Window, UniformAreaLayer
+from yirgacheffe.layers import Layer, Window, UniformAreaLayer
 import persistence
 
 class SingleValueLayer(Layer):

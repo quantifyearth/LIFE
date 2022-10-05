@@ -27,7 +27,7 @@ from iucn_modlib.classes.Taxon import Taxon
 from iucn_modlib.classes.HabitatFilters import HabitatFilters
 import iucn_modlib.translator
 
-from .layers import Layer, DynamicVectorRangeLayer, NullLayer, UniformAreaLayer
+from yirgacheffe.layers import Layer, DynamicVectorRangeLayer, NullLayer, UniformAreaLayer
 
 # When working with rasters we read larger chunks that just a single line, despite that usually
 # being what GDAL recommends if you ask for the efficient block size for larger files. There's

@@ -132,11 +132,12 @@ def main() -> None:
         output.write('--taxid,--seasonality,--experiment\n')
         for species_id, _ in species_list:
             if batch:
-                try:
-                    species = TaxonFactories.TaxonFactoryRedListBatch(species_id, batch)
-                except IndexError:
-                    # Some of the data in the batch needs tidy...
-                    continue
+                # try:
+                species = TaxonFactories.TaxonFactoryRedListBatch(species_id, batch)
+                # except IndexError as e:
+                #     # Some of the data in the batch needs tidy...
+                #     print(f"Oh no {e}")
+                #     continue
             else:
                 try:
                     species = TaxonFactories.TaxonFactoryRedListAPI(species_id, config['iucn']['api_key'])

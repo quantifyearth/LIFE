@@ -4,6 +4,7 @@ gdal
 pandas
 geopandas
 git+https://gitlab.com/daniele.baisero/iucn-modlib
+git+https://github.com/carboncredits/yirgacheffe
 
 pytest
 pylint
