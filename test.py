@@ -67,12 +67,6 @@ def geometry_to_polygons(geo, subdivide=True, prefix=''):
                             [left, -90.0],
                             [left, 90.0],
                         ]
-                        # [
-                        #     [90.0, left],
-                        #     [90.0, right],
-                        #     [-90.0, right],
-                        #     [-90.0, left],
-                        # ]
                     ]
                 }
                 band_geometry = ogr.CreateGeometryFromJson(json.dumps(frame))
@@ -81,38 +75,6 @@ def geometry_to_polygons(geo, subdivide=True, prefix=''):
                 assert intersection
                 if not intersection.IsEmpty():
                     polygons += geometry_to_polygons(intersection, subdivide=False)
-
-
-            # # Some of these can be very big, so first do a quick check at half the resolution, and 
-            # # and then decompose.
-            # course_tiles = h3.polygon_to_cells(polygon, math.floor(1))
-            # # print(len(course_tiles))
-            # if (len(course_tiles) < 1) or not subdivide:
-            #     polygons.append(polygon)
-            #     continue
-
-            # processed_tiles = set()
-            # next_round = set(course_tiles)
-            # while next_round:
-            #     this_round = next_round
-            #     next_round = set()
-
-            #     for tile in this_round:
-            #         tile_boundary = h3.cell_to_boundary(tile, geo_json=True)
-            #         geojson = {
-            #             'type': 'POLYGON',
-            #             'coordinates': [tile_boundary],
-            #         }
-            #         tile_geometry = ogr.CreateGeometryFromJson(json.dumps(geojson))
-
-            #         intersection = geo.Intersection(tile_geometry)
-            #         if not intersection.IsEmpty():
-            #             _ = geometry_to_polygons(intersection, subdivide=False)
-            #             # polygons += geometry_to_polygons(intersection, subdivide=False)
-            #             processed_tiles.add(tile)
-            #             next_round = next_round.union(h3.grid_ring(tile, 1))
-
-            #     next_round = next_round - processed_tiles
 
         return polygons
 
@@ -127,12 +89,29 @@ def geometry_to_polygons(geo, subdivide=True, prefix=''):
         return []
 
 def polygon_to_tiles(polygon):
-    tiles = set(h3.polygon_to_cells(polygon, MAG))
-    outer = {h3.latlng_to_cell(*x, MAG) for x in polygon.outer}
-    tiles = tiles.union(outer)
-    for hole in polygon.holes:
-        boundary = {h3.latlng_to_cell(*x, MAG) for x in hole}
-        tiles = tiles.union(boundary)
+
+    list_of_tiles = []
+
+    # First we get all the cells with a mid point within the polygon
+    tiles = h3.polygon_to_cells(polygon, MAG)
+    list_of_tiles.append(tiles)
+
+    # now for every vertice on the polygon, work use the minimum distance path to approximate 
+    # all cells on the boundry
+    polygons = [polygon.outer] + list(polygon.holes)
+    for loop in polygons:
+        if loop[0] != loop[-1]:
+            loop.append(loop[0])
+        for i in range(len(loop) - 1):
+            start = h3.latlng_to_cell(*(loop[i]), MAG)
+            end = h3.latlng_to_cell(*(loop[i + 1]), MAG)
+            line = h3.grid_path_cells(start, end)
+            list_of_tiles.append(line)
+            for cell in line:
+                list_of_tiles.append(h3.grid_ring(cell, 1))
+
+    tiles = itertools.chain.from_iterable(list_of_tiles)
+
     return tiles
 
 def process_cell(args):
@@ -147,7 +126,10 @@ def process_cell(args):
 
     # calculate intersection
     layers = [aoh_layer, tile_layer]
-    intersection = Layer.find_intersection(layers)
+    try:
+        intersection = Layer.find_intersection(layers)
+    except ValueError:
+        return (tile, 0.0)
     for layer in layers:
         layer.set_window_for_intersection(intersection)
 
@@ -180,55 +162,69 @@ def process_pure_cell(args):
     tile_aoh = calc.sum()
     
     return (tile, tile_aoh)
-
-for species_id in ID_LIST:
-    print(species_id)
-    start = time.time()
-    aoh_layer_path = os.path.join(CURRENT_RASTERS_DIR, f'Seasonality.RESIDENT-{species_id}.tif')
-    aoh_layer = Layer.layer_from_file(aoh_layer_path)
-
-    where_filter = f"id_no = {species_id} and season = 'resident'"
-    layer = DynamicVectorRangeLayer(RANGE_FILE, where_filter, aoh_layer.pixel_scale, aoh_layer.projection)
-    range_layer = layer.range_layer
-    range_layer.ResetReading()
-
-    # Get the polygons from OGR - this can not be done concurrently, as osgeo and multiprocessing
-    # are not friends
-    polygons = []
-    feature = range_layer.GetNextFeature()
-    while feature:
-        geo = feature.GetGeometryRef()
-        polygons += geometry_to_polygons(geo, subdivide=True)
-        feature = range_layer.GetNextFeature()
-    s1 = time.time()
-    print(f"Found {len(polygons)} polygons in {s1 - start} seconds")
     
 
-    # The h3 lookup can be ran concurrently thought
-    tiles = set()
-    with Pool(cpu_count()) as p:
-        results = p.map(polygon_to_tiles, polygons)
-        tiles = set(itertools.chain.from_iterable(results))
-
-    s2 = time.time()
-    print(f"Found {len(tiles)} tiles in {s2 - s1} seconds")
-
+def tiles_to_area(aoh_layer_path, species_id, tiles, s2):
     # we now have all the tiles, so work out the AoH in just that tile
     results = []
     args = [(aoh_layer_path, tile) for tile in tiles]
 
     with Pool(cpu_count()) as p:
         results = p.map(process_cell, args)
-    # results += res
 
     s3 = time.time()
     print(f"Processed {len(tiles)} tiles in {s3 - s2} seconds - {float(len(tiles)) / (s3 - s2)} tiles per second")
 
+    total = 0.0
+    max = 0.0
     with open(f'res_{species_id}_{MAG}.csv', 'w') as f:
         for result in results:
+            total += result[1]
+            if result[1] > max:
+                max = result[1]
             f.write(f'{result[0]}, {result[1]},\n')
 
     end = time.time()
+    print(f'total: {total}')
+    print(f'max: {max}')
     print(f'Wrote out results in {end - s3} seconds')
-    print(f'{species_id} at mag {MAG} took {end - start} seconds')
 
+
+
+if __name__ == "__main__":
+
+    for species_id in ID_LIST:
+        print(species_id)
+        start = time.time()
+        aoh_layer_path = os.path.join(CURRENT_RASTERS_DIR, f'Seasonality.RESIDENT-{species_id}.tif')
+        aoh_layer = Layer.layer_from_file(aoh_layer_path)
+
+        where_filter = f"id_no = {species_id} and season = 'resident'"
+        layer = DynamicVectorRangeLayer(RANGE_FILE, where_filter, aoh_layer.pixel_scale, aoh_layer.projection)
+        range_layer = layer.range_layer
+        range_layer.ResetReading()
+
+        # Get the polygons from OGR - this can not be done concurrently, as osgeo and multiprocessing
+        # are not friends
+        polygons = []
+        feature = range_layer.GetNextFeature()
+        while feature:
+            geo = feature.GetGeometryRef()
+            polygons += geometry_to_polygons(geo, subdivide=True)
+            feature = range_layer.GetNextFeature()
+        s1 = time.time()
+        print(f"Found {len(polygons)} polygons in {s1 - start} seconds")
+        
+        # The h3 lookup can be ran concurrently thought
+        tiles = set()
+        with Pool(cpu_count()) as p:
+            results = p.map(polygon_to_tiles, polygons)
+            tiles = set(itertools.chain.from_iterable(results))
+
+        s2 = time.time()
+        print(f"Found {len(tiles)} tiles in {s2 - s1} seconds")
+
+        tiles_to_area(aoh_layer_path, species_id, tiles, s2)
+
+        end = time.time()
+        print(f'{species_id} at mag {MAG} took {end - start} seconds')
