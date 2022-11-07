@@ -16,8 +16,8 @@ from yirgacheffe.h3layer import H3CellLayer
 
 CURRENT_RASTERS_DIR = "/maps/results/alison/mammal_current_raster/"
 AOH_VALUES_CSV = "/home/ae491/dev/persistence-calculator/mammal_example_P.csv"
-RANGE_FILE = "/maps/biodiversity/mammals_extinct_final.gpkg"
-# RANGE_FILE = "/maps-priv/maps/mwd24/mammals_terrestrial_filtered_collected_fix.gpkg"
+# RANGE_FILE = "/maps/biodiversity/mammals_extinct_final.gpkg"
+RANGE_FILE = "/maps-priv/maps/mwd24/mammals_terrestrial_filtered_collected_fix.gpkg"
 OUTPUT_DIR = "/maps/mwd24/h3results"
 
 MAG = 7
@@ -53,27 +53,44 @@ def geometry_to_polygons(geo, subdivide=True, prefix=''):
             # This poly is quite wide, so split it into smaller chunks
             # OGR is quite slow (relative to the test of the work here)
             # so we just do a simple lat banding
-            for i in range(math.ceil(longitude_width / LONG_BAND_WIDTH)):
-                left = envelope[0] + (i * LONG_BAND_WIDTH)
-                right = envelope[0] + ((i + 1) * LONG_BAND_WIDTH)
-                frame = {
-                    'type': 'POLYGON',
-                    'coordinates': [
-                        [
-                            [left, envelope[3]],
-                            [right, envelope[3]],
-                            [right, envelope[2]],
-                            [left, envelope[2]],
-                            [left, envelope[3]],
+            try:
+                slices = []
+                for i in range(math.ceil(longitude_width / LONG_BAND_WIDTH)):
+                    left = envelope[0] + (i * LONG_BAND_WIDTH)
+                    right = envelope[0] + ((i + 1) * LONG_BAND_WIDTH)
+                    frame = {
+                        'type': 'POLYGON',
+                        'coordinates': [
+                            [
+                                [left, envelope[3]],
+                                [right, envelope[3]],
+                                [right, envelope[2]],
+                                [left, envelope[2]],
+                                [left, envelope[3]],
+                            ]
                         ]
-                    ]
-                }
-                band_geometry = ogr.CreateGeometryFromJson(json.dumps(frame))
-                assert band_geometry
-                intersection = subgeometry.Intersection(band_geometry)
-                assert intersection
-                if not intersection.IsEmpty():
+                    }
+                    band_geometry = ogr.CreateGeometryFromJson(json.dumps(frame))
+                    if band_geometry is None:
+                        raise ValueError("Failed to create mask for slicing")
+                    intersection = subgeometry.Intersection(band_geometry)
+                    if intersection is None:
+                        raise ValueError("Failed to create intersection")
+                    if not intersection.IsEmpty():
+                        slices.append(intersection)
+
+                for intersection in slices:
                     polygons += geometry_to_polygons(intersection, subdivide=False)
+            except ValueError:
+                # In rare cases it seems OGR doesn't like the original geometry for
+                # creating an intersection. I've seen errors like:
+                #
+                # ERROR 1: TopologyException: Input geom 0 is invalid: Ring Self-intersection at or near point...
+                #
+                # and the general advice I've seen is to keep fudging geometries until it
+                # works, which isn't a scalable solution. Instead we just take the hit and turn the entire
+                # polygon into hextiles in a single pass.
+                polygons.append(polygon)
 
         return polygons
 
@@ -96,7 +113,7 @@ def geometry_to_polygons(geo, subdivide=True, prefix=''):
         return []
 
     else:
-        raise ValueError(f"unknown type {geotype}: {get.GetGeometryName()}")
+        raise ValueError(f"unknown type {geotype}: {geo.GetGeometryName()}")
 
 def polygon_to_tiles(polygon):
 
@@ -193,30 +210,6 @@ def process_cell(args):
 
     return (tile, tile_aoh)
 
-def process_pure_cell(args):
-    aoh_layer_path, tile = args
-
-    # Load the raster of total aoh of species
-    aoh_layer_path = os.path.join(CURRENT_RASTERS_DIR, f'Seasonality.RESIDENT-{species_id}.tif')
-    aoh_layer = Layer.layer_from_file(aoh_layer_path)
-    area_layer = UniformAreaLayer.layer_from_file('/maps-priv/maps/biodiversity/jung_aoh_basemaps/small_jung.tif')
-
-    # create a layer the H3 cell of interest
-    tile_layer = H3CellLayer(tile, aoh_layer.pixel_scale, aoh_layer.projection)
-
-    # calculate intersection
-    layers = [aoh_layer, tile_layer]
-    intersection = Layer.find_intersection(layers)
-    layers.append(area_layer)
-    for layer in layers:
-        layer.set_window_for_intersection(intersection)
-
-    # work out area of habitate contributed by just that cell
-    calc = area_layer * tile_layer
-    tile_aoh = calc.sum()
-
-    return (tile, tile_aoh)
-
 
 def tiles_to_area(aoh_layer_path, species_id, tiles, s2):
     # we now have all the tiles, so work out the AoH in just that tile
@@ -232,6 +225,7 @@ def tiles_to_area(aoh_layer_path, species_id, tiles, s2):
     total = 0.0
     max = 0.0
     with open(os.path.join(OUTPUT_DIR, f'res_{species_id}_{MAG}.csv'), 'w') as f:
+        f.write('cell, area\n')
         for result in results:
             total += result[1]
             if result[1] > max:
@@ -275,8 +269,15 @@ if __name__ == "__main__":
     species_list.sort()
 
     # for test run, just do first dozen
-    for species_id in species_list[:256]:
+    for species_id in species_list:
         print(species_id)
+
+        # Due to errors as we find new corner cases, we keep having to restart the script
+        # so we don't overwrite old results and just keep moving on. 
+        if os.path.exists(os.path.join(OUTPUT_DIR, f'res_{species_id}_{MAG}.csv')):
+            print('Species result exists, skipping')
+            continue
+
         start = time.time()
         aoh_layer_path = os.path.join(CURRENT_RASTERS_DIR, f'Seasonality.RESIDENT-{species_id}.tif')
 
@@ -288,6 +289,10 @@ if __name__ == "__main__":
 
             aoh_layer_total = res_aoh_total.get()
             polygons = res_polygons.get()
+
+        if aoh_layer_total == 0.0:
+            print(f'Skipping species, as AoH is {aoh_layer_total}')
+            continue
 
         s1 = time.time()
         print(f"Found {len(polygons)} polygons in {s1 - start} seconds")
