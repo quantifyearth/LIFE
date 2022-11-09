@@ -14,15 +14,22 @@ from yirgacheffe.layers import Layer, DynamicVectorRangeLayer, PixelScale, Unifo
 from yirgacheffe.window import Area, Window
 from yirgacheffe.h3layer import H3CellLayer
 
-CURRENT_RASTERS_DIR = "/maps/results/alison/mammal_current_raster/"
+# CURRENT_RASTERS_DIR = "/maps/results/alison/mammal_current_raster/"
+# CURRENT_RASTERS_DIR = "/maps/results/alison/amphibian_current_raster/"
+CURRENT_RASTERS_DIR = "/maps/results/alison/reptile_current_raster/"
 AOH_VALUES_CSV = "/home/ae491/dev/persistence-calculator/mammal_example_P.csv"
 # RANGE_FILE = "/maps/biodiversity/mammals_extinct_final.gpkg"
-RANGE_FILE = "/maps-priv/maps/mwd24/mammals_terrestrial_filtered_collected_fix.gpkg"
-OUTPUT_DIR = "/maps/mwd24/h3results"
+# RANGE_FILE = "/maps-priv/maps/mwd24/mammals_terrestrial_filtered_collected_fix.gpkg"
+# RANGE_FILE = "/maps-priv/maps/ae491/inputs/IUCN/polygons/amphibians_filtered_collected_season.gpkg"
+RANGE_FILE = "/maps-priv/maps/ae491/inputs/IUCN/polygons/reptiles_filtered_collected_season.gpkg"
+OUTPUT_DIR = "/maps/mwd24/h3results_reptile/"
 
 MAG = 7
 
 LONG_BAND_WIDTH = 1.0
+
+def threads():
+    return cpu_count()
 
 def geometry_to_pointlist(geo):
     points = []
@@ -216,7 +223,7 @@ def tiles_to_area(aoh_layer_path, species_id, tiles, s2):
     results = []
     args = [(aoh_layer_path, tile) for tile in tiles]
 
-    with Pool(processes=cpu_count()) as p:
+    with Pool(processes=threads()) as p:
         results = p.map(process_cell, args)
 
     s3 = time.time()
@@ -283,7 +290,7 @@ if __name__ == "__main__":
 
         # We can't currently parallelise either of these tasks, but they are independant, so we can 
         # at least run them concurrently...
-        with Pool(processes=cpu_count()) as p:
+        with Pool(processes=threads()) as p:
             res_aoh_total = p.apply_async(get_original_aoh_info, (aoh_layer_path,))
             res_polygons = p.apply_async(get_range_polygons, (RANGE_FILE, species_id))
 
@@ -299,7 +306,7 @@ if __name__ == "__main__":
 
         # The h3 lookup can be ran concurrently thought
         tiles = set()
-        with Pool(processes=cpu_count()) as p:
+        with Pool(processes=threads()) as p:
             results = p.map(polygon_to_tiles, polygons)
             tiles = set(itertools.chain.from_iterable(results))
 
