@@ -2,13 +2,18 @@
 
 ## Usage
 
-Currently it's all a bit manual, but could easily be tidied up. At the top of test.py are three parameters that you might want to change:
+To run for a set of species do:
+
+```
+$ python ./calculate.py CURRENT_RASTERS_DIR RANGE_FILE OUTPUT_DIR
+```
+
+Where the arguments are:
 
 * CURRENT_RASTERS_DIR - A directory of AoH GeoTIFFs, where each pixel contains an area value of the habitate in the land area covered by that pixel for the species. We currently assume the ID of the species is in the filename.
 * RANGE_FILE - A vertor range file that contains the range for all species in the CURRENT_RASTERS_DIR
 * OUTPUT_DIR - A directory where to write the output
 
-Once you have set these you can just run test.py
 
 ## Notes
 
