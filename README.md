@@ -16,6 +16,7 @@ Where the arguments are:
 * RANGE_FILE - A vertor range file that contains the range for all species in the CURRENT_RASTERS_DIR
 * OUTPUT_DIR - A directory where to write the output
 
+The output is a CSV file per species that contains the area per tile. If you want to see what those look like you can load them into [Kepler GL](https://kepler.gl/).
 
 ## Notes
 
