@@ -3,6 +3,7 @@ import json
 import math
 import os
 import re
+import sys
 import tempfile
 import time
 from multiprocessing import Pool, cpu_count
@@ -13,10 +14,6 @@ from osgeo import ogr, gdal
 from yirgacheffe.layers import Layer, DynamicVectorRangeLayer, PixelScale, UniformAreaLayer
 from yirgacheffe.window import Area, Window
 from yirgacheffe.h3layer import H3CellLayer
-
-CURRENT_RASTERS_DIR = "/maps/results/alison/reptile_current_raster/"
-RANGE_FILE = "/maps-priv/maps/ae491/inputs/IUCN/polygons/reptiles_filtered_collected_season.gpkg"
-OUTPUT_DIR = "/maps/mwd24/h3results_reptile/"
 
 # This regular expression is how we get the species ID from the filename
 FILERE = re.compile('^Seasonality.RESIDENT-(\d+).tif$')
@@ -185,7 +182,6 @@ def process_cell(args):
     aoh_layer_path, tile = args
 
     # Load the raster of total aoh of species
-    aoh_layer_path = os.path.join(CURRENT_RASTERS_DIR, f'Seasonality.RESIDENT-{species_id}.tif')
     aoh_layer = Layer.layer_from_file(aoh_layer_path)
 
     # create a layer the H3 cell of interest
@@ -215,7 +211,7 @@ def process_cell(args):
     return (tile, tile_aoh)
 
 
-def tiles_to_area(aoh_layer_path, species_id, tiles, s2):
+def tiles_to_area(aoh_layer_path, species_id, tiles, target_file, s2):
     # we now have all the tiles, so work out the AoH in just that tile
     results = []
     args = [(aoh_layer_path, tile) for tile in tiles]
@@ -228,7 +224,7 @@ def tiles_to_area(aoh_layer_path, species_id, tiles, s2):
 
     total = 0.0
     max = 0.0
-    with open(os.path.join(OUTPUT_DIR, f'res_{species_id}_{MAG}.csv'), 'w') as f:
+    with open(target_file, 'w') as f:
         f.write('cell, area\n')
         for result in results:
             total += result[1]
@@ -265,16 +261,24 @@ def get_range_polygons(range_path, species_id):
 
 if __name__ == "__main__":
 
-    try:
-        os.makedirs(OUTPUT_DIR, exist_ok=True)
-    except FileExistsError:
-        print(f'Could not create {OUTPUT_DIR} as file is there')
-        sys.exit(1)
-    except PermissionError:
-        print(f'Could not create {OUTPUT_DIR} due to permissions')
+    if len(sys.argv) != 4:
+        print(f'Usage: {sys.argv[0]} [AoH raster directory] [Range file] [Output directory]')
         sys.exit(1)
 
-    species_list = [FILERE.match(x).groups()[0] for x in os.listdir(CURRENT_RASTERS_DIR) if FILERE.match(x)]
+    current_rasters_dir = sys.argv[1]
+    range_file = sys.argv[2]
+    output_dir = sys.argv[3] 
+
+    try:
+        os.makedirs(output_dir, exist_ok=True)
+    except FileExistsError:
+        print(f'Could not create {output_dir} as file is there')
+        sys.exit(1)
+    except PermissionError:
+        print(f'Could not create {output_dir} due to permissions')
+        sys.exit(1)
+
+    species_list = [FILERE.match(x).groups()[0] for x in os.listdir(current_rasters_dir) if FILERE.match(x)]
     species_list.sort()
 
     # for test run, just do first dozen
@@ -283,19 +287,20 @@ if __name__ == "__main__":
 
         # Due to errors as we find new corner cases, we keep having to restart the script
         # so we don't overwrite old results and just keep moving on. 
-        if os.path.exists(os.path.join(OUTPUT_DIR, f'res_{species_id}_{MAG}.csv')):
+        target_file = os.path.join(output_dir, f'res_{species_id}_{MAG}.csv')
+        if os.path.exists(target_file):
             print('Species result exists, skipping')
             continue
 
         start = time.time()
-        aoh_layer_path = os.path.join(CURRENT_RASTERS_DIR, f'Seasonality.RESIDENT-{species_id}.tif')
+        aoh_layer_path = os.path.join(current_rasters_dir, f'Seasonality.RESIDENT-{species_id}.tif')
 
         # We can't currently parallelise either of these tasks, but they are independant, so we can 
         # at least run them concurrently...
         try:
             with Pool(processes=threads()) as p:
                 res_aoh_total = p.apply_async(get_original_aoh_info, (aoh_layer_path,))
-                res_polygons = p.apply_async(get_range_polygons, (RANGE_FILE, species_id))
+                res_polygons = p.apply_async(get_range_polygons, (range_file, species_id))
 
                 aoh_layer_total = res_aoh_total.get()
                 polygons = res_polygons.get()
@@ -319,7 +324,7 @@ if __name__ == "__main__":
         s2 = time.time()
         print(f"Found {len(tiles)} tiles in {s2 - s1} seconds")
 
-        total = tiles_to_area(aoh_layer_path, species_id, tiles, s2)
+        total = tiles_to_area(aoh_layer_path, species_id, tiles, target_file, s2)
         diff = ((total - aoh_layer_total) / aoh_layer_total) * 100.0
         if f'{abs(diff):.5f}' != '0.00000':
             print(f'AoH layer total: {aoh_layer_total}')
