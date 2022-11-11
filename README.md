@@ -1,3 +1,17 @@
+# H3AreaTest
+
+## Usage
+
+Currently it's all a bit manual, but could easily be tidied up. At the top of test.py are three parameters that you might want to change:
+
+* CURRENT_RASTERS_DIR - A directory of AoH GeoTIFFs, where each pixel contains an area value of the habitate in the land area covered by that pixel for the species. We currently assume the ID of the species is in the filename.
+* RANGE_FILE - A vertor range file that contains the range for all species in the CURRENT_RASTERS_DIR
+* OUTPUT_DIR - A directory where to write the output
+
+Once you have set these you can just run test.py
+
+## Notes
+
 This is a test of using H3 as the basis for doing equal area calculatins on non-uniform map projections. Currently it just calculates the area of habitat per h3 tile.
 
 The key so far has been using parallelism to make things work well, but avoiding using GDAL in any concurrent context, as GDAL is both thread-unsafe and leaks memory. Thus we use python multiprocessing for parallelism, which uses a new process per worker, and use a new GDAL context in each worker so we don't accumlate leaked memory - it goes away when the worker goes away.

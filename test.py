@@ -14,15 +14,12 @@ from yirgacheffe.layers import Layer, DynamicVectorRangeLayer, PixelScale, Unifo
 from yirgacheffe.window import Area, Window
 from yirgacheffe.h3layer import H3CellLayer
 
-# CURRENT_RASTERS_DIR = "/maps/results/alison/mammal_current_raster/"
-# CURRENT_RASTERS_DIR = "/maps/results/alison/amphibian_current_raster/"
 CURRENT_RASTERS_DIR = "/maps/results/alison/reptile_current_raster/"
-AOH_VALUES_CSV = "/home/ae491/dev/persistence-calculator/mammal_example_P.csv"
-# RANGE_FILE = "/maps/biodiversity/mammals_extinct_final.gpkg"
-# RANGE_FILE = "/maps-priv/maps/mwd24/mammals_terrestrial_filtered_collected_fix.gpkg"
-# RANGE_FILE = "/maps-priv/maps/ae491/inputs/IUCN/polygons/amphibians_filtered_collected_season.gpkg"
 RANGE_FILE = "/maps-priv/maps/ae491/inputs/IUCN/polygons/reptiles_filtered_collected_season.gpkg"
 OUTPUT_DIR = "/maps/mwd24/h3results_reptile/"
+
+# This regular expression is how we get the species ID from the filename
+FILERE = re.compile('^Seasonality.RESIDENT-(\d+).tif$')
 
 MAG = 7
 
@@ -240,8 +237,6 @@ def tiles_to_area(aoh_layer_path, species_id, tiles, s2):
             f.write(f'{result[0]}, {result[1]},\n')
 
     end = time.time()
-    print(f'max: {max}')
-    print(f'Wrote out results in {end - s3} seconds')
     return total
 
 
@@ -270,9 +265,16 @@ def get_range_polygons(range_path, species_id):
 
 if __name__ == "__main__":
 
-    filere = re.compile('^Seasonality.RESIDENT-(\d+).tif$')
+    try:
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
+    except FileExistsError:
+        print(f'Could not create {OUTPUT_DIR} as file is there')
+        sys.exit(1)
+    except PermissionError:
+        print(f'Could not create {OUTPUT_DIR} due to permissions')
+        sys.exit(1)
 
-    species_list = [filere.match(x).groups()[0] for x in os.listdir(CURRENT_RASTERS_DIR) if filere.match(x)]
+    species_list = [FILERE.match(x).groups()[0] for x in os.listdir(CURRENT_RASTERS_DIR) if FILERE.match(x)]
     species_list.sort()
 
     # for test run, just do first dozen
@@ -290,12 +292,16 @@ if __name__ == "__main__":
 
         # We can't currently parallelise either of these tasks, but they are independant, so we can 
         # at least run them concurrently...
-        with Pool(processes=threads()) as p:
-            res_aoh_total = p.apply_async(get_original_aoh_info, (aoh_layer_path,))
-            res_polygons = p.apply_async(get_range_polygons, (RANGE_FILE, species_id))
+        try:
+            with Pool(processes=threads()) as p:
+                res_aoh_total = p.apply_async(get_original_aoh_info, (aoh_layer_path,))
+                res_polygons = p.apply_async(get_range_polygons, (RANGE_FILE, species_id))
 
-            aoh_layer_total = res_aoh_total.get()
-            polygons = res_polygons.get()
+                aoh_layer_total = res_aoh_total.get()
+                polygons = res_polygons.get()
+        except (FileNotFoundError, TypeError):
+            print(f'Failed to load raster for {species_id}, skipping')
+            continue
 
         if aoh_layer_total == 0.0:
             print(f'Skipping species, as AoH is {aoh_layer_total}')
@@ -314,11 +320,11 @@ if __name__ == "__main__":
         print(f"Found {len(tiles)} tiles in {s2 - s1} seconds")
 
         total = tiles_to_area(aoh_layer_path, species_id, tiles, s2)
-        print(f'AoH layer total: {aoh_layer_total}')
-        print(f'Hex tile total:  {total}')
-
         diff = ((total - aoh_layer_total) / aoh_layer_total) * 100.0
-        print(f'Error is {diff:.5f}%')
+        if f'{abs(diff):.5f}' != '0.00000':
+            print(f'AoH layer total: {aoh_layer_total}')
+            print(f'Hex tile total:  {total}')
+            print(f'Error is {diff:.5f}%')
 
         end = time.time()
         print(f'{species_id} at mag {MAG} took {end - start} seconds')
