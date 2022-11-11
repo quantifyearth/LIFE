@@ -1,5 +1,7 @@
 # H3AreaTest
 
+This is the script for calculating the area of a species AoH to individual hex tiles, based on the [H3 tile system](https://h3geo.org/).
+
 ## Usage
 
 To run for a set of species do:
