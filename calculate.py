@@ -121,8 +121,17 @@ def polygon_to_tiles(polygon):
     list_of_tiles = []
 
     # First we get all the cells with a mid point within the polygon
-    tiles = h3.polygon_to_cells(polygon, MAG)
-    list_of_tiles.append(tiles)
+    try:
+        tiles = h3.polygon_to_cells(polygon, MAG)
+        list_of_tiles.append(tiles)
+    except MemoryError:
+        # It seems that in some rare cases we have generated very narrow slices as a result of the
+        # fragmeting we do, and that causes h3 to get super confused and run out of memory. This
+        # is most likely a bug in h3 but I can't say why currently, and don't have more time right
+        # now to dig in. Thankfully though, because of the second stage in this method where we
+        # expand the boundary of the polygon, this kinda fixes skipping the polygon_to_cells in
+        # all cases I've seen, so we at least have a temporary work around.
+        pass
 
     # now for every vertice on the polygon, work use the minimum distance path to approximate
     # all cells on the boundry
