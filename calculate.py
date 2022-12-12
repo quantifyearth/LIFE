@@ -1,9 +1,9 @@
-import datetime
 import itertools
 import json
 import math
 import os
 import re
+import subprocess
 import sys
 import tempfile
 import time
@@ -18,6 +18,13 @@ from osgeo import ogr, gdal
 from yirgacheffe.layers import Layer, DynamicVectorRangeLayer, PixelScale, UniformAreaLayer
 from yirgacheffe.window import Area, Window
 from yirgacheffe.h3layer import H3CellLayer
+
+try:
+    COMMIT = subprocess.check_output('git rev-parse HEAD', shell=True).decode('utf-8').strip()
+    if len(subprocess.check_output('git diff -q', shell=True)) != 0:
+        COMMIT += '*'
+except subprocess.CalledProcessError:
+    COMMIT = 'unknown'
 
 # This regular expression is how we get the species ID from the filename
 FILERE = re.compile('^Seasonality.RESIDENT-(\d+).tif$')
@@ -241,9 +248,10 @@ def tiles_to_area(aoh_layer_path, species_id, tiles, target_file, s2):
             'species': species_id,
             'source': aoh_layer_path,
             'user': os.environ['USER'],
-            'timestamp': datetime.datetime.now(),
+            'timestamp': time.time(),
             'host': os.uname()[1],
             'src': __file__,
+            'commit': COMMIT,
         }).encode('utf8')
     })
     pq.write_table(table, target_file, compression='GZIP')
@@ -304,7 +312,7 @@ if __name__ == "__main__":
         # so we don't overwrite old results and just keep moving on.
         old_target_file = os.path.join(output_dir, f'res_{species_id}_{MAG}.csv')
         target_file = os.path.join(output_dir, f'res_{species_id}_{MAG}.parquet')
-        if os.path.exists(target_file) || os.path.exists(old_target_file):
+        if os.path.exists(target_file) or os.path.exists(old_target_file):
             print('Species result exists, skipping')
             continue
 
@@ -322,6 +330,9 @@ if __name__ == "__main__":
                 polygons = res_polygons.get()
         except (FileNotFoundError, TypeError):
             print(f'Failed to load raster for {species_id}, skipping')
+            continue
+        except ValueError:
+            print(f'Species {species_id} had bad range, skipping')
             continue
 
         if aoh_layer_total == 0.0:
