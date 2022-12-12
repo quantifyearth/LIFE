@@ -1,6 +1,10 @@
+#!/usr/bin/env python3
+
+import os
 import sys
 
 from osgeo import gdal
+import pandas as pd
 
 from yirgacheffe import WSG_84_PROJECTION
 from yirgacheffe.layers import Layer, PixelScale, Area
@@ -9,28 +13,30 @@ from yirgacheffe.h3layer import H3CellLayer
 if len(sys.argv) != 3:
 	print(f'USAGE: {sys.argv[0]} CSV TIF')
 	sys.exit(-1)
+filename = sys.argv[1]
 
 # Make up the geo transform based on image resolution
 width, height = 3840.0, 2180.0 # 4K screen
 scale = PixelScale(360.0 / width, -180.0/height)
 area = Area(left=-180.0, right=180, top=90, bottom=-90)
 
-# I should use pandas for this, but that needs me to have more than five minutes to
-# learn it, sorry
-with open(sys.argv[1]) as f:
-	rawdata = f.readlines()[1:]
-data = []
-for line in rawdata:
-	parts = line.split(',')
-	data.append((parts[0], float(parts[1].strip())))
+ext = os.path.splitext(filename)[1]
+if ext == 'parquet':
+	df = pd.read_parquet(filename)
+elif ext == 'csv':
+	df = pd.read_csv(filename, index_col=False)
+elif ext == 'hdf5':
+	df = pd.read_hdf(filename)
+else:
+	print(f'unrecognised data type {ext}')
+	sys.exit(-1)
 
 scratch = Layer.empty_raster_layer(area, scale, gdal.GDT_Float64)
 
 # work in progress...
 band = scratch._dataset.GetRasterBand(1)
 
-for index in range(len(data)):
-	tile, area = data[index]
+for _, tile, area in df.itertuples():
 	if area == 0.0:
 		continue
 	tileLayer = H3CellLayer(tile, scale, WSG_84_PROJECTION)

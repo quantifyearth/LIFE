@@ -1,3 +1,4 @@
+import datetime
 import itertools
 import json
 import math
@@ -10,6 +11,9 @@ from multiprocessing import Pool, cpu_count
 
 import h3
 import numpy as np
+import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 from osgeo import ogr, gdal
 from yirgacheffe.layers import Layer, DynamicVectorRangeLayer, PixelScale, UniformAreaLayer
 from yirgacheffe.window import Area, Window
@@ -146,13 +150,13 @@ def polygon_to_tiles(polygon):
             end_cell = h3.latlng_to_cell(*end, MAG)
 
             line = [start_cell, end_cell]
-            
+
             if start_cell != end_cell:
                 try:
                     distance_estimate = h3.grid_distance(start_cell, end_cell)
                 except Exception as e:
                     # if the distance is too far then h3 will give up
-                    # this is usually along the boundaries added by 
+                    # this is usually along the boundaries added by
                     # the chunking we do to let us parallelise things, and so
                     # we don't mi9d, as the polygon_to_cell is sufficient there
                     print(f'Failed to find path from {start} to {end}: {e}')
@@ -231,18 +235,20 @@ def tiles_to_area(aoh_layer_path, species_id, tiles, target_file, s2):
     s3 = time.time()
     print(f"Processed {len(tiles)} tiles in {s3 - s2} seconds - {float(len(tiles)) / (s3 - s2)} tiles per second")
 
-    total = 0.0
-    max = 0.0
-    with open(target_file, 'w') as f:
-        f.write('cell, area\n')
-        for result in results:
-            total += result[1]
-            if result[1] > max:
-                max = result[1]
-            f.write(f'{result[0]}, {result[1]},\n')
+    dataframe = pd.DataFrame(results, columns=['cell', 'area'])
+    table = pa.Table.from_pandas(dataframe).replace_schema_metadata({
+        b'experiment': json.dumps({
+            'species': species_id,
+            'source': aoh_layer_path,
+            'user': os.environ['USER'],
+            'timestamp': datetime.datetime.now(),
+            'host': os.uname()[1],
+            'src': __file__,
+        }).encode('utf8')
+    })
+    pq.write_table(table, target_file, compression='GZIP')
 
-    end = time.time()
-    return total
+    return dataframe.loc[:, 'area'].sum()
 
 
 def get_original_aoh_info(raster_path: str):
@@ -253,7 +259,7 @@ def get_original_aoh_info(raster_path: str):
 def get_range_polygons(range_path, species_id):
     where_filter = f"id_no = {species_id} and season = 'resident'"
 
-    # The pixel scale and projection don't matter here, as we're just 
+    # The pixel scale and projection don't matter here, as we're just
     # abusing yirgacheffe to load the range file. Feels like I need to split this
     # out at some point
     layer = DynamicVectorRangeLayer(range_path, where_filter, PixelScale(0.1, 0.1), "UNUSED")
@@ -266,7 +272,7 @@ def get_range_polygons(range_path, species_id):
         polygons.append(geometry_to_polygons(geo, subdivide=True))
         feature = range_layer.GetNextFeature()
     return list(itertools.chain.from_iterable(polygons))
-    
+
 
 if __name__ == "__main__":
 
@@ -276,7 +282,7 @@ if __name__ == "__main__":
 
     current_rasters_dir = sys.argv[1]
     range_file = sys.argv[2]
-    output_dir = sys.argv[3] 
+    output_dir = sys.argv[3]
 
     try:
         os.makedirs(output_dir, exist_ok=True)
@@ -295,16 +301,17 @@ if __name__ == "__main__":
         print(species_id)
 
         # Due to errors as we find new corner cases, we keep having to restart the script
-        # so we don't overwrite old results and just keep moving on. 
-        target_file = os.path.join(output_dir, f'res_{species_id}_{MAG}.csv')
-        if os.path.exists(target_file):
+        # so we don't overwrite old results and just keep moving on.
+        old_target_file = os.path.join(output_dir, f'res_{species_id}_{MAG}.csv')
+        target_file = os.path.join(output_dir, f'res_{species_id}_{MAG}.parquet')
+        if os.path.exists(target_file) || os.path.exists(old_target_file):
             print('Species result exists, skipping')
             continue
 
         start = time.time()
         aoh_layer_path = os.path.join(current_rasters_dir, f'Seasonality.RESIDENT-{species_id}.tif')
 
-        # We can't currently parallelise either of these tasks, but they are independant, so we can 
+        # We can't currently parallelise either of these tasks, but they are independant, so we can
         # at least run them concurrently...
         try:
             with Pool(processes=threads()) as p:

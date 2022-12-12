@@ -1,4 +1,6 @@
 numpy
+pandas
+pyarrow
 gdal==3.4.1
 h3==4.0.0b1
 git+https://github.com/carboncredits/yirgacheffe
