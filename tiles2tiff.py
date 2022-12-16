@@ -31,9 +31,12 @@ else:
 	print(f'unrecognised data type {ext}')
 	sys.exit(-1)
 
+# Every time you write to a gdal layer that has a file store you
+# risk it trying to save the compressed file, which is slow. So
+# we first use a memory only raster layer, and then at the end save
+# the result we built up out to file.
 scratch = Layer.empty_raster_layer(area, scale, gdal.GDT_Float64)
 
-# work in progress...
 for _, tile, area in df.itertuples():
 	if area == 0.0:
 		continue
@@ -51,5 +54,4 @@ for _, tile, area in df.itertuples():
 # now we've done the calc in memory, save it to a file
 scratch.reset_window()
 output = Layer.empty_raster_layer_like(scratch, filename=sys.argv[2])
-
 scratch.save(output)
