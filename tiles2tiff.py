@@ -34,23 +34,22 @@ else:
 scratch = Layer.empty_raster_layer(area, scale, gdal.GDT_Float64)
 
 # work in progress...
-band = scratch._dataset.GetRasterBand(1)
-
 for _, tile, area in df.itertuples():
 	if area == 0.0:
 		continue
 	tileLayer = H3CellLayer(tile, scale, WSG_84_PROJECTION)
 
-	layers = [scratch, tileLayer]
+	scratch.reset_window()
+	layers = [scratch, tileLayer, scratch]
 	intersection = Layer.find_intersection(layers)
 	for layer in layers:
 		layer.set_window_for_intersection(intersection)
 
 	result = scratch + (tileLayer * area)
-	result.save(band)
+	result.save(scratch)
 
 # now we've done the calc in memory, save it to a file
+scratch.reset_window()
 output = Layer.empty_raster_layer_like(scratch, filename=sys.argv[2])
 
-scratch.reset_window()
-scratch.save(output._dataset.GetRasterBand(1))
+scratch.save(output)
