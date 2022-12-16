@@ -21,11 +21,11 @@ scale = PixelScale(360.0 / width, -180.0/height)
 area = Area(left=-180.0, right=180, top=90, bottom=-90)
 
 ext = os.path.splitext(filename)[1]
-if ext == 'parquet':
+if ext == '.parquet':
 	df = pd.read_parquet(filename)
-elif ext == 'csv':
+elif ext == '.csv':
 	df = pd.read_csv(filename, index_col=False)
-elif ext == 'hdf5':
+elif ext == '.hdf5':
 	df = pd.read_hdf(filename)
 else:
 	print(f'unrecognised data type {ext}')
