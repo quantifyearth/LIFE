@@ -12,7 +12,7 @@ import shutil
 import tempfile
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Optional, Any, Tuple, Set
+from typing import List, Optional, Any, Tuple
 
 import numpy
 from osgeo import gdal
@@ -27,7 +27,7 @@ from iucn_modlib.classes.Taxon import Taxon
 from iucn_modlib.classes.HabitatFilters import HabitatFilters
 import iucn_modlib.translator
 
-from yirgacheffe.layers import Layer, DynamicVectorRangeLayer, NullLayer, UniformAreaLayer
+from yirgacheffe.layers import Layer, DynamicVectorRangeLayer, ConstantLayer, UniformAreaLayer
 
 # When working with rasters we read larger chunks that just a single line, despite that usually
 # being what GDAL recommends if you ask for the efficient block size for larger files. There's
@@ -58,7 +58,7 @@ class LandModel:
 
     def new_area_layer(self) -> Layer:
         if self.area_map_filename is None:
-            return NullLayer()
+            return ConstantLayer(1.0)
         try:
             return UniformAreaLayer.layer_from_file(self.area_map_filename)
         except ValueError:
@@ -126,25 +126,27 @@ def calculator(
 
     # Work out the intersection of all the maps
     layers = [habitat_layer, elevation_layer, area_layer, range_layer]
-    intersection = Layer.find_intersection(layers)
+    try:
+        intersection = Layer.find_intersection(layers)
+    except ValueError:
+        for layer in layers:
+            print(f'Scale of {layer} is {layer.pixel_scale}')
+        raise
     for layer in layers:
         layer.set_window_for_intersection(intersection)
 
     with tempfile.TemporaryDirectory() as tempdir:
-        results_dataset = None
+        results_layer = None
         results_dataset_filename = ''
         if results_path:
             results_dataset_filename = f'{seasonality}-{species.taxonid}.tif'
-            results_dataset = gdal.GetDriverByName('GTiff').Create(
+            results_layer = Layer.empty_raster_layer(
+                intersection,
+                habitat_layer.pixel_scale,
+                gdal.GDT_Float32,
                 os.path.join(tempdir, results_dataset_filename),
-                habitat_layer.window.xsize,
-                habitat_layer.window.ysize,
-                1,
-                gdal.GDT_Float32, # TODO: This needs to vary based on area optionality
-                ['COMPRESS=LZW']
+                habitat_layer.projection,
             )
-            results_dataset.SetProjection(habitat_layer.projection)
-            results_dataset.SetGeoTransform(habitat_layer.geo_transform)
 
         calculate_function = _calculate_cpu if not USE_GPU else _calculate_cuda
 
@@ -155,11 +157,11 @@ def calculator(
             elevation_layer,
             (species.elevation_lower, species.elevation_upper),
             area_layer,
-            results_dataset.GetRasterBand(1) if results_dataset else None
+            results_layer,
         )
         # if we got here, then consider the experiment a success
-        if results_dataset and results_path:
-            del results_dataset # aka close for gdal
+        if results_layer and results_path:
+            del results_layer # aka close for gdal
             shutil.move(os.path.join(tempdir, results_dataset_filename),
                 os.path.join(results_path, results_dataset_filename))
         return result, results_dataset_filename
@@ -172,18 +174,18 @@ def _calculate_cpu(
     elevation_layer: Layer,
     elevation_range: Tuple[float, float],
     area_layer: Layer,
-    results_dataset: Optional[gdal.Band]
+    results_layer: Optional[Layer]
 ) -> float:
 
     filtered_habitat = habitat_layer.numpy_apply(lambda chunk: numpy.isin(chunk, habitat_list))
     filtered_elevation = elevation_layer.numpy_apply(lambda chunk: numpy.logical_and(chunk >= min(elevation_range), chunk <= max(elevation_range)))
 
     # TODO: this isn't free - so if there's no nan's we'd like to avoid this stage
-    cleaned_area = area_layer.numpy_apply(lambda chunk: numpy.nan_to_num(chunk, copy=False, nan=0.0))
+    #cleaned_area = area_layer.numpy_apply(lambda chunk: numpy.nan_to_num(chunk, copy=False, nan=0.0))
 
-    data = filtered_habitat * filtered_elevation * cleaned_area * range_layer
-    if results_dataset:
-        data.save(results_dataset)
+    data = filtered_habitat * filtered_elevation * area_layer * range_layer
+    if results_layer:
+        data.save(results_layer)
     return data.sum()
 
 
@@ -194,7 +196,7 @@ def _calculate_cuda(
     elevation_layer: Layer,
     elevation_range: Tuple[float, float],
     area_layer: Layer,
-    results_dataset: Optional[gdal.Band]
+    results_layer: Optional[Layer]
 ) -> float:
 
     # all layers now have the same window width/height, so just take the habitat one
@@ -240,13 +242,13 @@ def _calculate_cuda(
         # the summation and sum in a single reduction shader. Otherwise we need to
         # calc to an area and then reduce, which is slower but is the price of
         # getting the intermediary data
-        if not results_dataset:
+        if not results_layer:
             area_total += aoh_reduction_shader(filtered_habitat, elevation, species_range, pixel_areas)
         else:
-            if not data:
-                data = cupy.same_as(filtered_habitat)
+            if data is None or data.shape != filtered_habitat.shape:
+                data = cupy.zeros(filtered_habitat.shape, cupy.float64)
             aoh_shader(filtered_habitat, elevation, species_range, pixel_areas, data)
             area_total += cupy.sum(data)
-            results_dataset.WriteArray(data.get(), 0, yoffset)
+            results_layer._dataset.GetRasterBand(1).WriteArray(data.get(), 0, yoffset)
 
     return area_total

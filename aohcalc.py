@@ -3,6 +3,10 @@ import json
 import os
 import sys
 
+
+import cProfile
+import pstats
+
 from iucn_modlib.factories import TaxonFactories
 
 import persistence
@@ -129,5 +133,13 @@ if args['results_path']:
         print(f'Provided results path {args["results_path"]} is not a directory')
         sys.exit(-1)
 
-result = persistence.calculator(species, range_path, land, seasonality, args['results_path'])
+profiler = cProfile.Profile()
+profiler.enable()
+try:
+    result = persistence.calculator(species, range_path, land, seasonality, args['results_path'])
+except KeyboardInterrupt:
+    pass
+profiler.disable()
+p = pstats.Stats(profiler)
+p.sort_stats(pstats.SortKey.TIME).print_stats(20)
 print(', '.join([str(x) for x in result]))
