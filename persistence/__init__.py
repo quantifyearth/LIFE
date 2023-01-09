@@ -185,8 +185,9 @@ def _calculate_cpu(
 
     data = filtered_habitat * filtered_elevation * area_layer * range_layer
     if results_layer:
-        data.save(results_layer)
-    return data.sum()
+        return data.save(results_layer, and_sum=True)
+    else:
+        return data.sum()
 
 
 def _calculate_cuda(
