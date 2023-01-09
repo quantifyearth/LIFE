@@ -56,7 +56,15 @@ parser.add_argument(
     help='disable CUDA usage',
     required=False,
     dest='nogpu',
-    default='False',
+    default='True',
+)
+parser.add_argument(
+    '--profile',
+    type=bool,
+    help='enable profiling',
+    required=False,
+    dest='profile',
+    default=False,
 )
 args = vars(parser.parse_args())
 
@@ -133,13 +141,20 @@ if args['results_path']:
         print(f'Provided results path {args["results_path"]} is not a directory')
         sys.exit(-1)
 
-profiler = cProfile.Profile()
-profiler.enable()
+if args['profile']:
+    profiler = cProfile.Profile()
+    profiler.enable()
+else:
+    profiler = None
+
 try:
     result = persistence.calculator(species, range_path, land, seasonality, args['results_path'])
 except KeyboardInterrupt:
     pass
-profiler.disable()
-p = pstats.Stats(profiler)
-p.sort_stats(pstats.SortKey.TIME).print_stats(20)
+
+if profiler:
+    profiler.disable()
+    p = pstats.Stats(profiler)
+    p.sort_stats(pstats.SortKey.TIME).print_stats(20)
+
 print(', '.join([str(x) for x in result]))
