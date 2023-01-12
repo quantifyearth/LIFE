@@ -7,7 +7,7 @@ from typing import List, Set, Tuple
 import geopandas as gpd
 import pandas as pd
 
-from aoh.lib import seasonality
+from aoh.apps.lib import seasonality
 from iucn_modlib.classes.Taxon import Taxon
 from iucn_modlib.factories import TaxonFactories
 

@@ -3,7 +3,10 @@ numpy
 gdal
 pandas
 geopandas
+
 git+https://gitlab.com/daniele.baisero/iucn-modlib
+-e git+https://gitlab.com/daniele.baisero/aoh#egg=aoh[apps]
+
 git+https://github.com/carboncredits/yirgacheffe
 
 pytest
