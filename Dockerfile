@@ -20,3 +20,5 @@ WORKDIR /root/
 RUN python3 -m pytest
 RUN mypy persistence
 RUN pylint persistence *.py
+
+RUN chmod 755 aohcalc.py speciesgenerator.py
