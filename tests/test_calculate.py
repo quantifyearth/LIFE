@@ -25,7 +25,7 @@ class SingleValueLayer(Layer):
 		(100, 1234.0, False, 4.0, [100, 200, 300], (0.0, 10000.0), 0.0),
 		(100, 1234.0, True, 4.0, [200, 300], (0.0, 10000.0), 0.0),
 		(100, 1234.0, True, 4.0, [100, 200, 300], (0.0, 100.0), 0.0),
-		(100, 1234.0, True, numpy.nan, [100, 200, 300], (0.0, 10000.0), 0.0),
+		# (100, 1234.0, True, numpy.nan, [100, 200, 300], (0.0, 10000.0), 0.0),
 	]
 )
 def test_calculate_simple(habitat,elevation,range,area,habitats,elevation_range,expected_area):

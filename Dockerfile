@@ -1,11 +1,10 @@
-from carboncredits/aoh-packages as aoh
-
 from debian:latest
 
 RUN apt-get update -qqy && \
 	apt-get install -qy \
 		gdal-bin \
 		gdal-data \
+		git \
 		libgdal-dev \
 		python3 \
 		python3-pip \
@@ -17,9 +16,6 @@ RUN apt-get update -qqy && \
 COPY requirements.txt /tmp/
 RUN pip install numpy
 RUN pip install -r /tmp/requirements.txt
-
-COPY --from=aoh /iucn_modlib /usr/local/lib/python3.9/dist-packages/iucn_modlib
-COPY --from=aoh /aoh /usr/local/lib/python3.9/dist-packages/aoh
 
 COPY ./ /root/
 WORKDIR /root/

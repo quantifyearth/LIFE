@@ -178,7 +178,8 @@ def _calculate_cpu(
 ) -> float:
 
     filtered_habitat = habitat_layer.numpy_apply(lambda chunk: numpy.isin(chunk, habitat_list))
-    filtered_elevation = elevation_layer.numpy_apply(lambda chunk: numpy.logical_and(chunk >= min(elevation_range), chunk <= max(elevation_range)))
+    filtered_elevation = elevation_layer.numpy_apply(lambda chunk:
+        numpy.logical_and(chunk >= min(elevation_range), chunk <= max(elevation_range)))
 
     # TODO: this isn't free - so if there's no nan's we'd like to avoid this stage
     #cleaned_area = area_layer.numpy_apply(lambda chunk: numpy.nan_to_num(chunk, copy=False, nan=0.0))
@@ -250,6 +251,6 @@ def _calculate_cuda(
                 data = cupy.zeros(filtered_habitat.shape, cupy.float64)
             aoh_shader(filtered_habitat, elevation, species_range, pixel_areas, data)
             area_total += cupy.sum(data)
-            results_layer._dataset.GetRasterBand(1).WriteArray(data.get(), 0, yoffset)
+            results_layer._dataset.GetRasterBand(1).WriteArray(data.get(), 0, yoffset) # pylint: disable=W0212
 
     return area_total

@@ -141,18 +141,18 @@ if args['results_path']:
         print(f'Provided results path {args["results_path"]} is not a directory')
         sys.exit(-1)
 
+# pylint: disable=C0103
+profiler = None
 if args['profile']:
     profiler = cProfile.Profile()
     profiler.enable()
-else:
-    profiler = None
 
 try:
     result = persistence.calculator(species, range_path, land, seasonality, args['results_path'])
 except KeyboardInterrupt:
     pass
 
-if profiler:
+if profiler is not None:
     profiler.disable()
     p = pstats.Stats(profiler)
     p.sort_stats(pstats.SortKey.TIME).print_stats(20)

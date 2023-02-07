@@ -5,7 +5,7 @@ import sys
 import tempfile
 
 from osgeo import gdal
-from persistence.layers import Layer
+from yirgacheffe.layers import Layer
 
 def main():
     layers = [Layer.layer_from_file(x) for x in sys.argv[1:]]
