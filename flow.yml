@@ -1,0 +1,92 @@
+
+tile-sensitivity:
+  type: "program"
+  author:
+    - ae491
+  synopsis: ""
+  inputs:
+    - area-per-tile-per-species
+  outputs:
+    - sensitivity-per-tile
+
+
+H3AreaCalculator:
+  type: "program"
+  author:
+    - mwd24
+  synopsis: "Generates area per species per H3 tile"
+  inputs:
+    - range-file
+    - AoH-raster
+  outputs:
+    - area-per-tile-per-species*
+
+
+aohcalc.py:
+  type: "program"
+  author:
+    - mwd24
+  synopsis: "Generates raster of area oh habitat per species/seasonality"
+  inputs:
+    - range-file
+    - elevation-map
+    - habitat-map
+    - IUCN species info
+    - tiny-area-file
+    - species-id
+    - season
+  outputs:
+    - AoH-raster*
+
+
+speciesgenerator.py:
+  type: "program"
+  author:
+    - mwd24
+  synopsis: "Generates the species/seasonality list per project."
+  inputs:
+    - IUCN species info
+    - project-polygon
+  outputs:
+    - species-id
+    - season
+
+
+iucnfetch:
+  type: "program"
+  author:
+    - ae491
+  synopsis: "Fetches IUCN data in batches to avoid API failures later"
+  outputs:
+    - IUCN species info
+
+
+range-file-generator:
+  type: "program"
+  author:
+    - ae491
+  outputs:
+    - range-file
+  
+JUNG-download:
+  type: "download"
+  author:
+    - ae491
+  outputs:
+    - elevation-map
+    - habitat-map
+    - area-file
+
+area-file-redimension:
+  type: "program"
+  author:
+    - mwd24
+  inputs:
+    - area-file
+  outputs:
+    - tiny-area-file
+
+project-definition:
+  type: "unknown"
+  outputs:
+    - project-polygon
