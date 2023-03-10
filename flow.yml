@@ -31,7 +31,7 @@ aohcalc.py:
     - range-file
     - elevation-map
     - habitat-map
-    - IUCN species info
+    - IUCN polygon data
     - tiny-area-file
     - species-id
     - season
@@ -45,7 +45,8 @@ speciesgenerator.py:
     - mwd24
   synopsis: "Generates the species/seasonality list per project."
   inputs:
-    - IUCN species info
+    - IUCN polygon data
+    - Raw IUCN species info
     - project-polygon
   outputs:
     - species-id
@@ -58,8 +59,33 @@ iucnfetch:
     - ae491
   synopsis: "Fetches IUCN data in batches to avoid API failures later"
   outputs:
-    - IUCN species info
+    - IUCN raw data
 
+iucntidy:
+  type: "program"
+  author:
+    - ae491
+  synopsis: "Filter/tidy IUCN data"
+  inputs:
+    - IUCN raw data
+  outputs:
+    - IUCN polygon data
+
+iucnfetch2:
+  type: "program"
+  synopsis: ""
+  author:
+    - ae491
+  outputs:
+    - Raw IUCN species info
+
+iucntidy2:
+  type: "program"
+  synopsis: ""
+  author:
+    - ae491
+  inputs:
+    - Raw IUCN species info
 
 range-file-generator:
   type: "program"
@@ -67,7 +93,7 @@ range-file-generator:
     - ae491
   outputs:
     - range-file
-  
+
 JUNG-download:
   type: "download"
   author:
