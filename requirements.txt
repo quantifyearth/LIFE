@@ -1,12 +1,11 @@
 requests
 numpy
-gdal
+gdal[numpy]
 pandas
 geopandas
 
-git+https://gitlab.com/daniele.baisero/iucn-modlib
--e git+https://gitlab.com/daniele.baisero/aoh#egg=aoh[apps]
-
+git+https://github.com/carboncredits/iucn_modlib
+git+https://github.com/carboncredits/seasonality
 git+https://github.com/carboncredits/yirgacheffe
 
 pytest
