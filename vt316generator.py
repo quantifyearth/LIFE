@@ -3,8 +3,8 @@ import contextlib
 import json
 import sys
 from typing import Set
-
-from aoh.lib import seasonality
+import seasonality
+#from aoh.lib import seasonality
 from iucn_modlib.classes.Taxon import Taxon
 from iucn_modlib.factories import TaxonFactories
 
