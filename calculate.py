@@ -27,7 +27,7 @@ except subprocess.CalledProcessError:
     COMMIT = 'unknown'
 
 # This regular expression is how we get the species ID from the filename
-FILERE = re.compile('^Seasonality.RESIDENT-(\d+).tif$')
+FILERE = re.compile('^Seasonality.(\w+)-(\d+).tif$')
 
 MAG = 7
 
@@ -301,23 +301,25 @@ if __name__ == "__main__":
         print(f'Could not create {output_dir} due to permissions')
         sys.exit(1)
 
-    species_list = [FILERE.match(x).groups()[0] for x in os.listdir(current_rasters_dir) if FILERE.match(x)]
+    species_list = [FILERE.match(x).groups() for x in os.listdir(current_rasters_dir) if FILERE.match(x)]
     species_list.sort()
 
     # for test run, just do first dozen
-    for species_id in species_list:
-        print(species_id)
+    for season, species_id in species_list:
+        print(species_id, season)
+
+        file_prefix = season.lower()[:3]
 
         # Due to errors as we find new corner cases, we keep having to restart the script
         # so we don't overwrite old results and just keep moving on.
-        old_target_file = os.path.join(output_dir, f'res_{species_id}_{MAG}.csv')
-        target_file = os.path.join(output_dir, f'res_{species_id}_{MAG}.parquet')
+        old_target_file = os.path.join(output_dir, f'{file_prefix}_{species_id}_{MAG}.csv')
+        target_file = os.path.join(output_dir, f'{file_prefix}_{species_id}_{MAG}.parquet')
         if os.path.exists(target_file) or os.path.exists(old_target_file):
             print('Species result exists, skipping')
             continue
 
         start = time.time()
-        aoh_layer_path = os.path.join(current_rasters_dir, f'Seasonality.RESIDENT-{species_id}.tif')
+        aoh_layer_path = os.path.join(current_rasters_dir, f'Seasonality.{season}-{species_id}.tif')
 
         # We can't currently parallelise either of these tasks, but they are independant, so we can
         # at least run them concurrently...
