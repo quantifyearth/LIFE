@@ -7,12 +7,14 @@
 # one way or the other, so the logic was hard to read. So instead we now have
 # some duplication, but it is easier to see the logic in each one.
 
+import functools
+import operator
 import os
 import shutil
 import tempfile
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Optional, Any, Tuple
+from typing import List, Optional, Any, Tuple, Dict
 
 import numpy
 from osgeo import gdal
@@ -42,6 +44,8 @@ from yirgacheffe.layers import Layer, DynamicVectorRangeLayer, ConstantLayer, Un
 #    a larger chunk size gives us better efficiency.
 YSTEP = 512
 
+def flatten(x):
+    return functools.reduce(operator.iconcat, x, [])
 
 @dataclass
 class LandModel:
@@ -105,10 +109,21 @@ def calculator(
 
     habitat_params = iucn_modlib.HabitatFilters(
         season = seasonality.iucn_seasons,
-        suitability = ('Suitable', 'Unknown'),
+        suitability = ('Suitable', 'Unknown', 'Marginal'),
         majorImportance = ('Yes', 'No'),
     )
-    habitat_list = land_model.translator(species.habitatCodes(habitat_params))
+
+    habitat_list = species.habitatsRaw(habitat_params)
+    habitat_score_table = dict()
+    score_habitiat_table = {'Suitable': [], 'Marginal': []}
+    for habitat in habitat_list:
+        print(habitat)
+        translated = land_model.translator([habitat['code']])
+        score = 1.0 if habitat.get('suitability', 'Suitable') else 0.5
+        for code in translated:
+            existing_score = habitat_score_table.get(code, 0.0)
+            habitat_score_table[code] = max(score, existing_score)
+            score_habitiat_table[habitat['suitability']].append(code)
 
     # These three map layers don't change across seasons
     habitat_layer = land_model.new_habitat_layer()
@@ -153,7 +168,7 @@ def calculator(
         result = calculate_function(
             range_layer,
             habitat_layer,
-            habitat_list,
+            score_habitiat_table,
             elevation_layer,
             (species.elevation_lower, species.elevation_upper),
             area_layer,
@@ -166,18 +181,27 @@ def calculator(
                 os.path.join(results_path, results_dataset_filename))
         return result, results_dataset_filename
 
+def blah(chunk, score_habitiat_table):
+    res = numpy.isin(chunk, score_habitiat_table['Suitable'])
+    if len(score_habitiat_table['Marginal']) > 0:
+        res = res + (numpy.isin(chunk, score_habitiat_table['Marginal']) * 0.5)
+    return res
 
 def _calculate_cpu(
     range_layer: Layer,
     habitat_layer: Layer,
-    habitat_list: List,
+    score_habitiat_table: Dict,
     elevation_layer: Layer,
     elevation_range: Tuple[float, float],
     area_layer: Layer,
     results_layer: Optional[Layer]
 ) -> float:
 
-    filtered_habitat = habitat_layer.numpy_apply(lambda chunk: numpy.isin(chunk, habitat_list))
+    # filtered_habitat = habitat_layer.numpy_apply(lambda chunk: numpy.isin(chunk, flatten([h['translated'] for h in habitat_list])))
+    # filtered_habitat = habitat_layer.shader_apply(lambda pixel: habitat_score_table.get(pixel, 0.0))
+
+    filtered_habitat = habitat_layer.numpy_apply(lambda chunk: blah(chunk, score_habitiat_table))
+
     filtered_elevation = elevation_layer.numpy_apply(lambda chunk:
         numpy.logical_and(chunk >= min(elevation_range), chunk <= max(elevation_range)))
 
