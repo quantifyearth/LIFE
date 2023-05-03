@@ -65,6 +65,14 @@ def main() -> None:
         required=True,
         dest="epochs"
     )
+    parser.add_argument(
+        '--class',
+        type=str,
+        help="Options are 'MAMMALIA', 'AVES', 'AMPHIBIA' and 'REPTILIA'",
+        required=True,
+        dest="class"
+    )
+
     args = vars(parser.parse_args())
 
     try:
@@ -102,7 +110,10 @@ def main() -> None:
     # Work part 1: get the species list
     with open(args["list"], "r", encoding="utf-8") as listfile:
         all_species = listfile.readlines()
-    species_list = [int(x.split(',')[1]) for x in all_species if "MAMMALIA" in x]
+
+    species_class = args['class']
+
+    species_list = [int(x.split(',')[1]) for x in all_species if species_class in x]
 
     with file_writer(args["output"]) as output:
         output.write('--taxid,--seasonality,--experiment\n')
