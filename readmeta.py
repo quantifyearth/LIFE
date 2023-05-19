@@ -1,5 +1,6 @@
 import json
 import sys
+import time
 
 import pyarrow.parquet as pq
 
@@ -30,4 +31,9 @@ for k in keys:
 		maxlen = len(k)
 
 for k in keys:
-	print(f'{k}{" " * (maxlen - len(k))}\t{info[k]}')
+	if k == 'timestamp':
+		val = time.ctime(info[k])
+	else:
+		val = info[k]
+
+	print(f'{k}{" " * (maxlen - len(k))}\t{val}')
