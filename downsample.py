@@ -6,6 +6,8 @@ from yirgacheffe.layers import Layer, PixelScale
 
 from osgeo import gdal
 
+gdal.SetCacheMax(1024 * 1024 * 16)
+
 target_scale = PixelScale(0.083333333333333, -0.083333333333333)
 
 try:
