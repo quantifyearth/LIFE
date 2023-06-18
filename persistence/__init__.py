@@ -27,7 +27,7 @@ from iucn_modlib.classes.Taxon import Taxon
 from iucn_modlib.classes.HabitatFilters import HabitatFilters
 import iucn_modlib.translator
 
-from yirgacheffe.layers import Layer, DynamicVectorRangeLayer, ConstantLayer, UniformAreaLayer
+from yirgacheffe.layers import RasterLayer, VectorLayer, ConstantLayer, UniformAreaLayer, YirgacheffeLayer
 
 # When working with rasters we read larger chunks that just a single line, despite that usually
 # being what GDAL recommends if you ask for the efficient block size for larger files. There's
@@ -50,19 +50,19 @@ class LandModel:
     area_map_filename: Optional[str]
     translator: Any
 
-    def new_habitat_layer(self) -> Layer:
-        return Layer.layer_from_file(self.habitat_map_filename)
+    def new_habitat_layer(self) -> RasterLayer:
+        return RasterLayer.layer_from_file(self.habitat_map_filename)
 
-    def new_elevation_layer(self) -> Layer:
-        return Layer.layer_from_file(self.elevation_map_filename)
+    def new_elevation_layer(self) -> RasterLayer:
+        return RasterLayer.layer_from_file(self.elevation_map_filename)
 
-    def new_area_layer(self) -> Layer:
+    def new_area_layer(self) -> YirgacheffeLayer:
         if self.area_map_filename is None:
             return ConstantLayer(1.0)
         try:
             return UniformAreaLayer.layer_from_file(self.area_map_filename)
         except ValueError:
-            return Layer.layer_from_file(self.area_map_filename)
+            return RasterLayer.layer_from_file(self.area_map_filename)
 
 class JungModel(LandModel):
     def __init__(self, habitat_map_filename: str, elevation_map_filename: str, area_map_filename: Optional[str] = None):
@@ -120,14 +120,14 @@ def calculator(
     pixel_scale = habitat_layer.pixel_scale
     assert pixel_scale
     try:
-        range_layer = DynamicVectorRangeLayer(range_path, where_filter, pixel_scale, habitat_layer.projection)
+        range_layer = VectorLayer.layer_from_file(range_path, where_filter, pixel_scale, habitat_layer.projection)
     except ValueError:
         return 0.0, None
 
     # Work out the intersection of all the maps
     layers = [habitat_layer, elevation_layer, area_layer, range_layer]
     try:
-        intersection = Layer.find_intersection(layers)
+        intersection = YirgacheffeLayer.find_intersection(layers)
     except ValueError:
         for layer in layers:
             print(f'Scale of {layer} is {layer.pixel_scale}')
@@ -168,13 +168,13 @@ def calculator(
 
 
 def _calculate_cpu(
-    range_layer: Layer,
-    habitat_layer: Layer,
+    range_layer: YirgacheffeLayer,
+    habitat_layer: YirgacheffeLayer,
     habitat_list: List,
-    elevation_layer: Layer,
+    elevation_layer: YirgacheffeLayer,
     elevation_range: Tuple[float, float],
-    area_layer: Layer,
-    results_layer: Optional[Layer]
+    area_layer: YirgacheffeLayer,
+    results_layer: Optional[YirgacheffeLayer]
 ) -> float:
 
     filtered_habitat = habitat_layer.numpy_apply(lambda chunk: numpy.isin(chunk, habitat_list))
@@ -192,13 +192,13 @@ def _calculate_cpu(
 
 
 def _calculate_cuda(
-    range_layer: Layer,
-    habitat_layer: Layer,
+    range_layer: YirgacheffeLayer,
+    habitat_layer: YirgacheffeLayer,
     habitat_list: List,
-    elevation_layer: Layer,
+    elevation_layer: YirgacheffeLayer,
     elevation_range: Tuple[float, float],
-    area_layer: Layer,
-    results_layer: Optional[Layer]
+    area_layer: YirgacheffeLayer,
+    results_layer: Optional[YirgacheffeLayer]
 ) -> float:
 
     # all layers now have the same window width/height, so just take the habitat one

@@ -1,12 +1,12 @@
 requests
 numpy
-gdal[numpy]==3.6.0
+gdal[numpy]
 pandas
 geopandas
 
-git+https://github.com/carboncredits/iucn_modlib.git@relax_data_requirements
-git+https://github.com/carboncredits/seasonality
+git+https://github.com/carboncredits/iucn_modlib.git
 git+https://github.com/carboncredits/yirgacheffe
+git+https://github.com/carboncredits/seasonality
 pytest
 pylint
 mypy
