@@ -102,7 +102,7 @@ def main() -> None:
     # Work part 1: get the species list
     with open(args["list"], "r", encoding="utf-8") as listfile:
         all_species = listfile.readlines()
-    species_list = [int(x.split(',')[1]) for x in all_species if "MAMMALIA" in x]
+    species_list = [int(x.split(',')[1]) for x in all_species if "AVES" in x]
 
     with file_writer(args["output"]) as output:
         output.write('--taxid,--seasonality,--experiment\n')
