@@ -140,7 +140,7 @@ def calculator(
         results_dataset_filename = ''
         if results_path:
             results_dataset_filename = f'{seasonality}-{species.taxonid}.tif'
-            results_layer = Layer.empty_raster_layer(
+            results_layer = layer.empty_raster_layer(
                 intersection,
                 habitat_layer.pixel_scale,
                 gdal.GDT_Float32,
