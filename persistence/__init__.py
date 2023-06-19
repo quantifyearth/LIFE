@@ -140,12 +140,10 @@ def calculator(
         results_dataset_filename = ''
         if results_path:
             results_dataset_filename = f'{seasonality}-{species.taxonid}.tif'
-            results_layer = RasterLayer.empty_raster_layer(
-                intersection,
-                habitat_layer.pixel_scale,
-                gdal.GDT_Float32,
+            result_layer = RasterLayer.empty_raster_layer_like(
+                habitat_layer,
                 os.path.join(tempdir, results_dataset_filename),
-                habitat_layer.projection,
+                datatype=gdal.GDT_Float32,
             )
 
         calculate_function = _calculate_cpu if not USE_GPU else _calculate_cuda
