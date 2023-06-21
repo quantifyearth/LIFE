@@ -140,14 +140,13 @@ def calculator(
         results_dataset_filename = ''
         if results_path:
             results_dataset_filename = f'{seasonality}-{species.taxonid}.tif'
-            result_layer = RasterLayer.empty_raster_layer_like(
+            results_layer = RasterLayer.empty_raster_layer_like(
                 habitat_layer,
                 os.path.join(tempdir, results_dataset_filename),
                 datatype=gdal.GDT_Float32,
             )
 
         calculate_function = _calculate_cpu if not USE_GPU else _calculate_cuda
-
         result = calculate_function(
             range_layer,
             habitat_layer,
@@ -174,7 +173,6 @@ def _calculate_cpu(
     area_layer: YirgacheffeLayer,
     results_layer: Optional[YirgacheffeLayer]
 ) -> float:
-
     filtered_habitat = habitat_layer.numpy_apply(lambda chunk: numpy.isin(chunk, habitat_list))
     filtered_elevation = elevation_layer.numpy_apply(lambda chunk:
         numpy.logical_and(chunk >= min(elevation_range), chunk <= max(elevation_range)))
