@@ -12,7 +12,7 @@ target_scale = PixelScale(0.083333333333333, -0.083333333333333)
 
 try:
     source = RasterLayer.layer_from_file(sys.argv[1])
-    target_name = sys.argv[2]
+    target_name = sys.argv[2]  # pylint: disable=C0103
 except IndexError:
     print(f"Usage: {sys.argv[0]} [SRC] [DEST]", file=sys.stderr)
     sys.exit(1)
