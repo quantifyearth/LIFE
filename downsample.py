@@ -2,7 +2,7 @@ from math import ceil, floor
 import sys
 
 import numpy as np
-from yirgacheffe.layers import Layer, PixelScale
+from yirgacheffe.layers import RasterLayer, PixelScale
 
 from osgeo import gdal
 
@@ -11,16 +11,16 @@ gdal.SetCacheMax(1024 * 1024 * 16)
 target_scale = PixelScale(0.083333333333333, -0.083333333333333)
 
 try:
-    source = Layer.layer_from_file(sys.argv[1])
+    source = RasterLayer.layer_from_file(sys.argv[1])
     targetname = sys.argv[2]
 except IndexError:
     print(f"Usage: {sys.argv[0]} [SRC] [DEST]", file=sys.stderr)
     sys.exit(1)
 
-target = Layer.empty_raster_layer(
+target = RasterLayer.empty_raster_layer(
     area=source.area,
     scale=target_scale,
-    data_type=source.datatype,
+    datatype=source.datatype,
     filename=targetname,
     projection=source.projection
 )
@@ -38,7 +38,7 @@ for y in range(target.window.ysize):
 
     dest = np.zeros((1, target.window.xsize))
     for x in range(target.window.xsize):
-        
+
         low_x = floor(x * pixels_per_x)
         high_x = ceil((x+1) * pixels_per_x)
 
@@ -49,7 +49,7 @@ for y in range(target.window.ysize):
 
         first_y = float(low_y + 1) - (y * pixels_per_y)
         assert 0.0 <= first_y <= 1.0
-        last_y = ((y + 1) * pixels_per_y) - float(high_y - 1)  
+        last_y = ((y + 1) * pixels_per_y) - float(high_y - 1)
         assert 0.0 <= last_y <= 1.0
 
         first_x = float(low_x + 1) - (x * pixels_per_x)
@@ -62,7 +62,7 @@ for y in range(target.window.ysize):
         total += np.sum(band[1:band_height - 1, high_x - 2:high_x - 1]) * last_y
 
         total += np.sum(band[0][low_x+1:high_x - 1]) * first_x
-        total += np.sum(band[band_height - 1][low_x + 1:high_x - 1]) * last_x 
+        total += np.sum(band[band_height - 1][low_x + 1:high_x - 1]) * last_x
 
         # corners
         total += band[0][low_x] * first_x * first_y
@@ -73,7 +73,7 @@ for y in range(target.window.ysize):
         dest[0][x] = total
 
 
-    target._dataset.GetRasterBand(1).WriteArray(dest, 0, y)
+    target._dataset.GetRasterBand(1).WriteArray(dest, 0, y) # pylint: disable=W0212
 
 
 before = source.sum()
