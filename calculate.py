@@ -284,14 +284,16 @@ def get_range_polygons(range_path, species_id):
 
 if __name__ == "__main__":
 
-    if len(sys.argv) != 4:
-        print(f'Usage: {sys.argv[0]} [AoH raster directory] [Range file] [Output directory]')
+    if len(sys.argv) != 5:
+        print(f'Usage: {sys.argv[0]} [AoH raster directory] [Range file] [Output directory] [Direction]')
         sys.exit(1)
 
     current_rasters_dir = sys.argv[1]
     range_file = sys.argv[2]
     output_dir = sys.argv[3]
+    direction = sys.argv[4]
 
+    print(direction)
     try:
         os.makedirs(output_dir, exist_ok=True)
     except FileExistsError:
@@ -302,7 +304,16 @@ if __name__ == "__main__":
         sys.exit(1)
 
     species_list = [FILERE.match(x).groups() for x in os.listdir(current_rasters_dir) if FILERE.match(x)]
-    species_list.sort()
+    
+    if direction == "forward":
+        print("Running H3 forward")
+        species_list.sort()
+    elif direction == "reverse":
+        print("Running H3 backwards")
+        species_list.sort(reverse=True)
+     
+
+    
 
     # for test run, just do first dozen
     for season, species_id in species_list:
