@@ -40,6 +40,11 @@ def generate_mollweide(
 			gdal.GDT_Float64,
 			['COMPRESS=LZW'],
 		)
+		output_dataset.SetProjection(mollweide_crs.to_string())
+		output_dataset.SetGeoTransform((
+				transformer.transform(-180, 0)[0], x_scale, 0.0,
+				transformer.transform(0, 90)[1] * 2.0, 0.0, -y_scale
+		))
 		band = output_dataset.GetRasterBand(1)
 
 		for _, row in df.iterrows():
