@@ -40,7 +40,11 @@ scratch = Layer.empty_raster_layer(area, scale, gdal.GDT_Float64)
 for _, tile, area in df.itertuples():
 	if area == 0.0:
 		continue
-	tileLayer = H3CellLayer(tile, scale, WSG_84_PROJECTION)
+	try:
+		tileLayer = H3CellLayer(tile, scale, WSG_84_PROJECTION)
+	except ValueError:
+		print(f"Skipping tile with invalid id: {tile}")
+		continue
 
 	scratch.reset_window()
 	layers = [scratch, tileLayer, scratch]
