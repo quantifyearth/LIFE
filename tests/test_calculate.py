@@ -4,14 +4,23 @@ import numpy
 import pytest
 from osgeo import gdal
 
-from yirgacheffe.layers import Layer, Window, UniformAreaLayer
+from yirgacheffe import WGS_84_PROJECTION
+from yirgacheffe.layers import YirgacheffeLayer, UniformAreaLayer
+from yirgacheffe.window import Area, Window
 import persistence
 
-class SingleValueLayer(Layer):
+class SingleValueLayer(YirgacheffeLayer):
 	"""Mocked layer to make testing calc function easier"""
 	def __init__(self, value: Any, width: int, height: int):
 		self.value = value
-		self.window = Window(0, 0, width, height)
+		area = Area(
+			left = -180.0,
+			top = 90.0,
+			right = 180.0,
+			bottom = -90.0
+		)
+		super().__init__(area, None, WGS_84_PROJECTION)
+		self._window = Window(0, 0, width, height)
 
 	def read_array(self, xoffset: int, yoffset: int, xsize: int, ysize: int) -> Any:
 		assert (xoffset + xsize) <= self.window.xsize
