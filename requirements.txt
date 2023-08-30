@@ -1,12 +1,15 @@
 requests
 numpy
 gdal[numpy]
+pyarrow
 pandas
 geopandas
+h3==4.0.0b1
 
 git+https://github.com/carboncredits/iucn_modlib.git
 git+https://github.com/carboncredits/yirgacheffe
 git+https://github.com/carboncredits/seasonality
+
 pytest
 pylint
 mypy
