@@ -5,19 +5,16 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 import time
 from multiprocessing import Pool, cpu_count
 
 import h3
-import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
-from osgeo import ogr, gdal
-from yirgacheffe.layers import Layer, DynamicVectorRangeLayer, PixelScale, UniformAreaLayer
-from yirgacheffe.window import Area, Window
-from yirgacheffe.h3layer import H3CellLayer
+from osgeo import ogr
+from yirgacheffe.layers import RasterLayer, VectorLayer, H3CellLayer
+from yirgacheffe.window import PixelScale
 
 try:
     COMMIT = subprocess.check_output('git rev-parse HEAD', shell=True).decode('utf-8').strip()
@@ -27,23 +24,23 @@ except subprocess.CalledProcessError:
     COMMIT = 'unknown'
 
 # This regular expression is how we get the species ID from the filename
-FILERE = re.compile('^Seasonality.(\w+)-(\d+).tif$')
+FILERE = re.compile(r'^Seasonality.(\w+)-(\d+).tif$')
 
 MAG = 7
 
 LONG_BAND_WIDTH = 1.0
 
-def threads():
+def threads() -> int:
     return cpu_count()
 
 def geometry_to_pointlist(geo):
     points = []
     for i in range(geo.GetPointCount()):
-        p = geo.GetPoint(i)
-        points.append((p[1], p[0]))
+        point = geo.GetPoint(i)
+        points.append((point[1], point[0]))
     return points
 
-def geometry_to_polygons(geo, subdivide=True, prefix=''):
+def geometry_to_polygons(geo, subdivide=True):
     geotype = geo.GetGeometryType()
 
     if geotype == ogr.wkbMultiPolygon:
@@ -110,7 +107,7 @@ def geometry_to_polygons(geo, subdivide=True, prefix=''):
         points = []
         for i in range(geo.GetGeometryCount()):
             points.append(geometry_to_pointlist(geo.GetGeometryRef(i)))
-        polygon = h3.Polygon(*points)
+        polygon = h3.Polygon(*points) # pylint: disable=E1120
         return [polygon]
 
     elif geotype == ogr.wkbGeometryCollection:
@@ -137,7 +134,7 @@ def polygon_to_tiles(polygon):
         list_of_tiles.append(tiles)
     except MemoryError:
         # It seems that in some rare cases we have generated very narrow slices as a result of the
-        # fragmeting we do, and that causes h3 to get super confused and run out of memory. This
+        # fragmenting we do, and that causes h3 to get super confused and run out of memory. This
         # is most likely a bug in h3 but I can't say why currently, and don't have more time right
         # now to dig in. Thankfully though, because of the second stage in this method where we
         # expand the boundary of the polygon, this kinda fixes skipping the polygon_to_cells in
@@ -145,7 +142,7 @@ def polygon_to_tiles(polygon):
         pass
 
     # now for every vertice on the polygon, work use the minimum distance path to approximate
-    # all cells on the boundry
+    # all cells on the boundary
     polygons = [polygon.outer] + list(polygon.holes)
     for loop in polygons:
         if loop[0] != loop[-1]:
@@ -161,23 +158,26 @@ def polygon_to_tiles(polygon):
             if start_cell != end_cell:
                 try:
                     distance_estimate = h3.grid_distance(start_cell, end_cell)
-                except Exception as e:
+                except Exception as exc: # pylint: disable=W0718
                     # if the distance is too far then h3 will give up
                     # this is usually along the boundaries added by
                     # the chunking we do to let us parallelise things, and so
-                    # we don't mi9d, as the polygon_to_cell is sufficient there
-                    print(f'Failed to find path from {start} to {end}: {e}')
+                    # we don't mind, as the polygon_to_cell is sufficient there
+                    print(f'Failed to find path from {start} to {end}: {exc}')
                     continue
 
                 # In an ideal world we'd use h3.grid_path_cells() for this, but in some places
                 # we observe that this does not take the direct route, and the docs do not
                 # say that it'll produce an optimal output, nor that the results are stable.
-                # Instead we do this appoximation by hand, which isn't guaranteed to generate
+                # Instead we do this approximation by hand, which isn't guaranteed to generate
                 # a contiguous line of cells, but is good enough, particularly once we add
                 # cell padding, which we did anyway even on the original implementation that
                 # had h3.grid_path_cells()
                 if distance_estimate:
-                    diffs = ((end[0] - start[0]) / float(distance_estimate), (end[1] - start[1]) / float(distance_estimate))
+                    diffs = (
+                        (end[0] - start[0]) / float(distance_estimate),
+                        (end[1] - start[1]) / float(distance_estimate)
+                    )
                     for i in range(distance_estimate):
                         here = (start[0] + (diffs[0] * i), start[1] + (diffs[1] * i))
                         cell = h3.latlng_to_cell(*here, MAG)
@@ -202,7 +202,7 @@ def process_cell(args):
     aoh_layer_path, tile = args
 
     # Load the raster of total aoh of species
-    aoh_layer = Layer.layer_from_file(aoh_layer_path)
+    aoh_layer = RasterLayer.layer_from_file(aoh_layer_path)
 
     # create a layer the H3 cell of interest
     tile_layer = H3CellLayer(tile, aoh_layer.pixel_scale, aoh_layer.projection)
@@ -210,7 +210,7 @@ def process_cell(args):
     # calculate intersection
     layers = [aoh_layer, tile_layer]
     try:
-        intersection = Layer.find_intersection(layers)
+        intersection = RasterLayer.find_intersection(layers)
     except ValueError:
         return (tile, 0.0)
     for layer in layers:
@@ -231,16 +231,17 @@ def process_cell(args):
     return (tile, tile_aoh)
 
 
-def tiles_to_area(aoh_layer_path, species_id, tiles, target_file, s2):
+def tiles_to_area(aoh_layer_path, species_id, tiles, target_file, timestamp_2):
     # we now have all the tiles, so work out the AoH in just that tile
     results = []
     args = [(aoh_layer_path, tile) for tile in tiles]
 
-    with Pool(processes=threads()) as p:
-        results = p.map(process_cell, args)
+    with Pool(processes=threads()) as pool:
+        results = pool.map(process_cell, args)
 
-    s3 = time.time()
-    print(f"Processed {len(tiles)} tiles in {s3 - s2} seconds - {float(len(tiles)) / (s3 - s2)} tiles per second")
+    timestamp_3 = time.time()
+    print(f"Processed {len(tiles)} tiles in {timestamp_3 - timestamp_2} seconds "\
+        "- {float(len(tiles)) / (timestamp_3 - timestamp_2)} tiles per second")
 
     dataframe = pd.DataFrame(results, columns=['cell', 'area'])
     table = pa.Table.from_pandas(dataframe).replace_schema_metadata({
@@ -259,8 +260,8 @@ def tiles_to_area(aoh_layer_path, species_id, tiles, target_file, s2):
     return dataframe.loc[:, 'area'].sum()
 
 
-def get_original_aoh_info(raster_path: str):
-    aoh_layer = Layer.layer_from_file(aoh_layer_path)
+def get_original_aoh_info(raster_path: str) -> float:
+    aoh_layer = RasterLayer.layer_from_file(raster_path)
     return aoh_layer.sum()
 
 
@@ -270,8 +271,8 @@ def get_range_polygons(range_path, species_id):
     # The pixel scale and projection don't matter here, as we're just
     # abusing yirgacheffe to load the range file. Feels like I need to split this
     # out at some point
-    layer = DynamicVectorRangeLayer(range_path, where_filter, PixelScale(0.1, 0.1), "UNUSED")
-    range_layer = layer.range_layer
+    layer = VectorLayer(range_path, where_filter, PixelScale(0.1, 0.1), "UNUSED")
+    range_layer = layer.layer
     range_layer.ResetReading()
     polygons = []
     feature = range_layer.GetNextFeature()
@@ -282,8 +283,7 @@ def get_range_polygons(range_path, species_id):
     return list(itertools.chain.from_iterable(polygons))
 
 
-if __name__ == "__main__":
-
+def main() -> None:
     if len(sys.argv) != 5:
         print(f'Usage: {sys.argv[0]} [AoH raster directory] [Range file] [Output directory] [Direction]')
         sys.exit(1)
@@ -304,16 +304,13 @@ if __name__ == "__main__":
         sys.exit(1)
 
     species_list = [FILERE.match(x).groups() for x in os.listdir(current_rasters_dir) if FILERE.match(x)]
-    
+
     if direction == "forward":
         print("Running H3 forward")
         species_list.sort()
     elif direction == "reverse":
         print("Running H3 backwards")
         species_list.sort(reverse=True)
-     
-
-    
 
     # for test run, just do first dozen
     for season, species_id in species_list:
@@ -335,9 +332,9 @@ if __name__ == "__main__":
         # We can't currently parallelise either of these tasks, but they are independant, so we can
         # at least run them concurrently...
         try:
-            with Pool(processes=threads()) as p:
-                res_aoh_total = p.apply_async(get_original_aoh_info, (aoh_layer_path,))
-                res_polygons = p.apply_async(get_range_polygons, (range_file, species_id))
+            with Pool(processes=threads()) as pool:
+                res_aoh_total = pool.apply_async(get_original_aoh_info, (aoh_layer_path,))
+                res_polygons = pool.apply_async(get_range_polygons, (range_file, species_id))
 
                 aoh_layer_total = res_aoh_total.get()
                 polygons = res_polygons.get()
@@ -352,19 +349,19 @@ if __name__ == "__main__":
             print(f'Skipping species, as AoH is {aoh_layer_total}')
             continue
 
-        s1 = time.time()
-        print(f"Found {len(polygons)} polygons in {s1 - start} seconds")
+        timestamp_1 = time.time()
+        print(f"Found {len(polygons)} polygons in {timestamp_1 - start} seconds")
 
         # The h3 lookup can be ran concurrently thought
         tiles = set()
-        with Pool(processes=threads()) as p:
-            results = p.map(polygon_to_tiles, polygons)
+        with Pool(processes=threads()) as pool:
+            results = pool.map(polygon_to_tiles, polygons)
             tiles = set(itertools.chain.from_iterable(results))
 
-        s2 = time.time()
-        print(f"Found {len(tiles)} tiles in {s2 - s1} seconds")
+        timestamp_2 = time.time()
+        print(f"Found {len(tiles)} tiles in {timestamp_2 - timestamp_1} seconds")
 
-        total = tiles_to_area(aoh_layer_path, species_id, tiles, target_file, s2)
+        total = tiles_to_area(aoh_layer_path, species_id, tiles, target_file, timestamp_2)
         diff = ((total - aoh_layer_total) / aoh_layer_total) * 100.0
         if f'{abs(diff):.5f}' != '0.00000':
             print(f'AoH layer total: {aoh_layer_total}')
@@ -373,3 +370,6 @@ if __name__ == "__main__":
 
         end = time.time()
         print(f'{species_id} at mag {MAG} took {end - start} seconds')
+
+if __name__ == "__main__":
+    main()
