@@ -1,10 +1,11 @@
 requests
 numpy
-gdal[numpy]
+gdal[numpy]<3.7
 pyarrow
 pandas
 geopandas
 h3==4.0.0b1
+scipy
 
 git+https://github.com/carboncredits/iucn_modlib.git
 git+https://github.com/carboncredits/yirgacheffe
@@ -13,3 +14,5 @@ git+https://github.com/carboncredits/seasonality
 pytest
 pylint
 mypy
+pandas-stubs
+types-requests
