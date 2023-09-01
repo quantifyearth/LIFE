@@ -90,3 +90,6 @@ Working out the H3 files to use is a two stage process, again due to GDAL concur
 
 Then we just process each hex tile in as many concurrent workers as there are CPU cores on the machine. I suspect here we hit an overhead based on having to repeatedly search the GDAL raster file for data, as we see on hipp we go from 10k hex tiles per second to 1k hex tiles per second as the raster gets significantly larger. An optimisation to investigate is opening the raster once and then using shared memory between the workers. But even without this, the largest example we have takes just 4.4 hours on hipp, with others being considerably less. So again, for a proof of concept, this seems a good place to be.
 
+# IUCN Data Importer
+
+See IUCN-importer for scripts for combining csv and shp files from IUCN. 
