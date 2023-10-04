@@ -136,8 +136,8 @@ if "resident" in seas:
         else:
             quit("Warning: missing historic aoh in csv - skipping species. This is probably due to artificial hab-preference.")
     persistence = global_p_calc(current_AOH,historic_AOH,exponent)
-    curr_mask = (current_arr != 0).astype(int)
-    new_aoh = (curr_mask * current_AOH) - current_arr + scenario_arr
+    const_AOH = np.full(current_arr.shape, current_AOH, dtype=int)
+    new_aoh = (const_AOH - current_arr) + scenario_arr
     new_p = (new_aoh / historic_AOH) ** exponent
     new_p[new_p > 1] = 1
     np_mask = (new_p != 0).astype(int)
