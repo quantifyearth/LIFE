@@ -51,7 +51,7 @@ f = []
 for path, subdirs, files in os.walk(args["target_dir"]):
     for name in files:
         f.append(os.path.join(path, name))
-f = [file for file in f if ".csv" in file]
+f = [file for file in f if ".tif" in file]
 
 df = pd.DataFrame()
 index_levels = ["taxid", "season", "taxclass"]
@@ -89,7 +89,7 @@ with open(os.path.join(args["output_dir"], "file_index_lj.csv"), "w+") as out_fi
         curr = row.current
         scen = row.scenario
         hist = row.historic
-        ofname = f"Seasonality.{row.season}-{row.taxid}.csv"
+        ofname = f"Seasonality.{row.season}-{row.taxid}.tif"
         of = os.path.join(args["output_dir"], row.taxclass, ofname)
 
         out_file.write(f"{curr},{scen},{hist},{of}")
