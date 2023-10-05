@@ -22,7 +22,7 @@ import os
 import warnings
 import rasterio
 
-quiet = True
+quiet = False
 overwrite = True
 exponent = 0.25 
 
@@ -136,7 +136,7 @@ if "resident" in seas:
         else:
             quit("Warning: missing historic aoh in csv - skipping species. This is probably due to artificial hab-preference.")
     persistence = global_p_calc(current_AOH,historic_AOH,exponent)
-    const_AOH = np.full(current_arr.shape, current_AOH, dtype=int)
+    const_AOH = np.full(current_arr.shape, current_AOH)
     new_aoh = (const_AOH - current_arr) + scenario_arr
     new_p = (new_aoh / historic_AOH) ** exponent
     new_p[new_p > 1] = 1
@@ -190,8 +190,10 @@ if "nonbreeding" in seas:
     (br_curr, nb_curr, br_scen, nb_scen), transform, shape, crs, window = harmonise(
         [current_br_ds, current_nb_ds, scenario_br_ds, scenario_nb_ds])
     
-    new_aoh_br = (br_curr.sum() * (br_curr != 0).astype(int)) - br_curr + br_scen
-    new_aoh_nb = (nb_curr.sum() * (nb_curr != 0).astype(int)) - nb_curr + nb_scen
+    br_curr_const = np.full(br_curr.shape, br_curr.sum())
+    new_aoh_br = (br_curr_const - br_curr) + br_scen
+    nb_curr_const = np.full(nb_curr.shape, nb_curr.sum())
+    new_aoh_nb = (nb_curr_const - nb_curr) + nb_scen
 
     if historic_AOH_br == 0 or historic_AOH_nb == 0:
         if quiet:
@@ -203,9 +205,12 @@ if "nonbreeding" in seas:
     new_p_nb = (new_aoh_nb / historic_AOH_nb) ** exponent
     new_p_nb[new_p_nb > 1] = 1 
     new_p = (new_p_br ** 0.5) * (new_p_nb ** 0.5)
-    old_p = (((br_curr.sum()/historic_AOH_br)**exponent)**0.5) * (((nb_curr.sum()/historic_AOH_nb)**exponent)**0.5)
-    np_mask = (new_p != 0).astype(int)
-    deltap = new_p - (old_p * np_mask) 
+    old_p = min(1.0, (((br_curr.sum()/historic_AOH_br)**exponent)**0.5)) * min(1.0, (((nb_curr.sum()/historic_AOH_nb)**exponent)**0.5))
+    # old_p = (((br_curr.sum()/historic_AOH_br)**exponent)**0.5) * (((nb_curr.sum()/historic_AOH_nb)**exponent)**0.5)
+
+    # np_mask = (new_p != 0).astype(int)
+    # deltap = new_p - (old_p * np_mask)
+    deltap = new_p - old_p
     with rasterio.open(
         args["output_path"], "w", driver="GTiff",
         height = shape[0], width=shape[1], 
