@@ -59,6 +59,13 @@ def ExtractingSeries(habitats, allotherfields, geo):
                        ElevationUpper = pd.Series(allotherfields['ElevationUpper.limit']).fillna(9000.0))
 
     notfinal = gpd.GeoDataFrame(data = geo['geometry'])
+    # We've seen both CAPS and noncaps column names, so here we just force everything to CAPS for consistency
+    geo = geo.rename(columns={
+        'id_no': 'ID_NO',
+        'presence': 'PRESENCE',
+        'origin': 'ORIGIN',
+        'seasonal': 'SEASONAL',
+    })
     notfinal = notfinal.assign(internalTaxonId = pd.Series(geo['ID_NO']), Presence = pd.Series(geo['PRESENCE']), 
                                Origin = pd.Series(geo['ORIGIN']), season = ChangingSeasons(pd.Series(geo['SEASONAL'])))
     
