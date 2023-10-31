@@ -13,10 +13,10 @@
 # breeding and non-breeding/resident.
 
 # Imports
+import argparse
 import glob
 import json
 import os.path
-import sys
 from typing import Tuple
 
 import pandas as pd
@@ -118,13 +118,13 @@ def shape_sort(notfinal: gpd.GeoDataFrame, habitats: pd.DataFrame) -> gpd.GeoDat
     return notfinal
 
 # This function converts the GeoDataFrame into a GeoPackage
-def to_file(notfinal: gpd.GeoDataFrame, folder: str) -> None:
+def to_file(notfinal: gpd.GeoDataFrame, output_path: str) -> None:
     print("Building file...")
     # When the non-geometry related series are added, final becomes a DataFrame -
     # so it has to be turned back into a GeoDataFrame
     final = gpd.GeoDataFrame(notfinal, geometry = 'geometry')
-    final.to_file(os.path.join(folder, "keydata.gpkg"), driver = 'GPKG', index = None)
-    print("File keydata.gpkg created")
+    final.to_file(output_path, driver = 'GPKG', index = None)
+    print(f"File {output_path} created")
 
 # This function records the IUCN Red List Taxonomy ID for the species that were
 # not in the final geopackage
@@ -146,16 +146,28 @@ def unrecorded_data(habitats: pd.DataFrame, notfinal: gpd.GeoDataFrame):
             print(x)
 
 def main():
-    # Setting up the keydata.csv file in the correct folder to write to.
-    if len(sys.argv) == 1:
-        folder = input("Enter folder of csv files: ")
-    else:
-        folder = sys.argv[1]
-    habitats, allotherfields, geo = reading_files(folder)
+    parser = argparse.ArgumentParser(description="Process IUCN raw data to gpkg file.")
+    parser.add_argument(
+        '--raw',
+        type=str,
+        help='Directory containing raw CSV and shape files from IUCN',
+        required=True,
+        dest='input_directory_path',
+    )
+    parser.add_argument(
+        '--output',
+        type=str,
+        help='Name of result package file',
+        required=True,
+        dest='output_path',
+    )
+    args = parser.parse_args()
+
+    habitats, allotherfields, geo = reading_files(args.input_directory_path)
     habitats, temp, notfinal = extracting_series(habitats, allotherfields, geo)
     habitats = habitats_sort(habitats, temp)
     notfinal = shape_sort(notfinal, habitats)
-    to_file(notfinal, folder)
+    to_file(notfinal, args.output_path)
     #unrecorded_data(habitats, notfinal)
 
 if __name__ == "__main__":
