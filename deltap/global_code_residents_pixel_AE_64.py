@@ -41,18 +41,33 @@ def numpy_gompertz(x):
     return np.exp(-np.exp(gompertz_a + (gompertz_b * (x ** gompertz_alpha))))
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--current_path',
-    type=str,required=True,dest="current_path",
-    help="path to species current AOH hex")
-parser.add_argument('--historic_path',
-    type=str,required=False,dest="historic_path",
-    help="path to species historic AOH hex")
-parser.add_argument('--scenario_path',
-    type=str,required=True,dest="scenario_path",
-    help="path to species scenario AOH hex")
+parser.add_argument(
+    '--current_path',
+    type=str,
+    required=True,
+    dest="current_path",
+    help="path to species current AOH hex"
+)
+parser.add_argument(
+    '--historic_path',
+    type=str,
+    required=False,
+    dest="historic_path",
+    help="path to species historic AOH hex"
+)
+parser.add_argument(
+    '--scenario_path',
+    type=str,
+    required=True,
+    dest="scenario_path",
+    help="path to species scenario AOH hex"
+)
 parser.add_argument('--output_path',
-    type=str,required=True,dest="output_path",
-    help="path to save output csv")
+    type=str,
+    required=True,
+    dest="output_path",
+    help="path to save output csv"
+)
 parser.add_argument('--z', dest='exponent', type=str, default='0.25')
 parser.add_argument('-ht', '--hist_table',
                     dest = "hist_table",
@@ -84,6 +99,8 @@ season = season.lower()
 
 
 def open_layer_as_float64(filename: str) -> RasterLayer:
+    if filename == "nan":
+        return ConstantLayer(0.0)
     layer = RasterLayer.layer_from_file(filename)
     if layer.datatype == gdal.GDT_Float64:
         return layer
@@ -127,7 +144,10 @@ if season == 'resident':
     layers = [current, scenario]
     union = RasterLayer.find_union(layers)
     for layer in layers:
-        layer.set_window_for_union(union)
+        try:
+            layer.set_window_for_union(union)
+        except ValueError:
+            pass
 
     current_AOH = current.sum()
     historic_AOH = hdf[(hdf.id_no == int(taxid))&(hdf.season == " " + season)].AOH.values[0]
@@ -148,9 +168,12 @@ elif season == 'nonbreeding':
     breeding_current_path = os.path.join(directory, f'Seasonality.BREEDING-{taxid}.tif')
 
     non_breeding_scenario_path = args['scenario_path']
-    assert 'NONBREEDING' in non_breeding_scenario_path
-    directory, _ = os.path.split(non_breeding_scenario_path)
-    breeding_scenario_path = os.path.join(directory, f'Seasonality.BREEDING-{taxid}.tif')
+    if non_breeding_scenario_path != "nan":
+        assert 'NONBREEDING' in non_breeding_scenario_path
+        directory, _ = os.path.split(non_breeding_scenario_path)
+        breeding_scenario_path = os.path.join(directory, f'Seasonality.BREEDING-{taxid}.tif')
+    else:
+        breeding_scenario_path = non_breeding_scenario_path
 
     try:
         current_breeding = open_layer_as_float64(breeding_current_path)
@@ -163,7 +186,10 @@ elif season == 'nonbreeding':
     layers = [current_breeding, current_non_breeding, scenario_breeding, scenario_non_breeding]
     union = RasterLayer.find_union(layers)
     for layer in layers:
-        layer.set_window_for_union(union)
+        try:
+            layer.set_window_for_union(union)
+        except ValueError:
+            pass
 
 
     current_AOH_breeding = current_breeding.sum()
