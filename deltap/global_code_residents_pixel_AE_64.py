@@ -76,8 +76,8 @@ args = vars(parser.parse_args())
 
 try:
     exp_val = float(args['exponent'])
-    z_exponent_func_float = lambda x: x ** exp_val
-    z_exponent_func_raster = lambda x: x ** exp_val
+    z_exponent_func_float = lambda x: np.float_power(x, exp_val)
+    z_exponent_func_raster = lambda x: np.float_power(x, exp_val)
 except ValueError:
     if args['exponent'] == "gompertz":
         z_exponent_func_float = gen_gompertz
@@ -117,7 +117,6 @@ def calc_persistence_value(current_AOH: float, historic_AOH: float, exponent_fun
 
 def process_delta_p(current: RasterLayer, scenario: RasterLayer, current_AOH: float, historic_AOH: float) -> RasterLayer:
     # In theory we could recalc current_AOH, but given we already have it don't duplicate work
-
     # New section added in: Calculating for rasters rather than csv's
     const_layer = ConstantLayer(current_AOH) # MAKE A LAYER WITH THE SAME PROPERTIES AS CURRENT AOH RASTER BUT FILLED WITH THE CURRENT AOH
     calc_1 = (const_layer - current) + scenario # FIRST CALCULATION : NEW AOH
