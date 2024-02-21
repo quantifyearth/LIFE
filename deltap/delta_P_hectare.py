@@ -10,7 +10,7 @@ def main():
         input_layer = sys.argv[1]
         output_layer = sys.argv[2]
     except KeyError:
-        print(f"Usage: {sys.argv[0] [INPUT LAYER] [OUTPUT LAYER]}", file=sys.stderr)
+        print(f"Usage: {sys.argv[0]} [INPUT LAYER] [OUTPUT LAYER]}", file=sys.stderr)
         sys.exit(1)
     
     area_restore = RasterLayer.layer_from_file(RESTORE_MAP)    
