@@ -1,12 +1,16 @@
-requests
-numpy
-gdal[numpy]<3.7
+geopandas
+numpy<2
 pyarrow
 pandas
-geopandas
-h3==4.0.0b1
+psutil
 scipy
+pyproj
+scikit-image
 rasterio
+requests
+alive-progress
+
+gdal[numpy]
 
 git+https://github.com/carboncredits/iucn_modlib.git
 git+https://github.com/carboncredits/yirgacheffe
