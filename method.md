@@ -5,7 +5,6 @@ path: /root
 
 ## Build the environment
 
-
 ### The geospatial compute container
 
 The dockerfile that comes with the repo should be used to run the pipeline.
@@ -62,9 +61,8 @@ For querying the IUCN data held in the PostGIS database we use a seperate contai
  (run (network host) (shell "apt-get update -qqy && apt-get -y install libpq-dev gcc git && rm -rf /var/lib/apt/lists/* && rm -rf /var/cache/apt/*"))
  (run (network host) (shell "pip install psycopg2 SQLalchemy geopandas"))
  (run (network host) (shell "pip install git+https://github.com/quantifyearth/pyshark"))
- (copy (src "./") (dst "/root/"))
+ (copy (src "./prepare-species") (dst "/root/"))
  (workdir "/root/")
- (run (shell "chmod 755 *.py"))
 )
 ```
 
@@ -165,6 +163,38 @@ python3 ./aoh-calculator/habitat_process.py --habitat /data/habitat/arable.tif \
                                             --output /data/habitat_maps/arable/
 ```
 
+### Generate area map
+
+For LIFE we need to know the actual area, not just pixel count. For this we generate a map that contains the area per pixel for a given latitude which is one pixel wide, and then we sweep that across for a given longitude.
+
+```shark-run:aohbuilder
+python3 ./prepare-layers/make_area_map.py --scale 0.016666666666667 --output /data/area-per-pixel.tif
+```
+
+### Differences maps
+
+In the algorithm we use need to account for map projection distortions, so all values in the AoHs are based on the area per pixel. To get the final extinction risk values we must remove that scaling. To do that we generate a map of area difference from current for the given scenario.
+
+```shark-run:aohbuilder
+python3 ./prepare-layers/make_diff_map.py --current /data/habitat/current_raw.tif \
+                                          --scenario /data/habitat/restore.tif \
+                                          --output /data/habitat/restore_diff_raw.tif
+
+gdalwarp -t_srs EPSG:4326 -tr 0.016666666666667 -0.016666666666667 -r min -co COMPRESS=LZW -wo NUM_THREADS=40 /data/habitat/restore_diff_raw.tif /data/habitat/restore_diff.tif
+
+gdal_calc -A /data/habitat/restore_diff.tif -B /data/area-per-pixel.tif --out /data/habitat/restore_diff_area.tif --calc="A*B"
+```
+
+```shark-run:aohbuilder
+python3 ./prepare-layers/make_diff_map.py --current /data/habitat/current_raw.tif \
+                                          --scenario /data/habitat/arable.tif \
+                                          --output /data/habitat/arable_diff_raw.tif
+
+gdalwarp -t_srs EPSG:4326 -tr 0.016666666666667 -0.016666666666667 -r min -co COMPRESS=LZW -wo NUM_THREADS=40 /data/habitat/arable_diff_raw.tif /data/habitat/arable_diff.tif
+
+gdal_calc -A /data/habitat/arable_diff.tif -B /data/area-per-pixel.tif --out /data/habitat/arable_diff_area.tif --calc="A*B"
+```
+
 
 ### Fetching the elevation map
 
@@ -210,6 +240,7 @@ This step generates a single AoH raster for a single one of the above GeoJSON fi
 python3 ./aoh-calculator/aohcalc.py --habitats /data/habitat_maps/current/ \
                                     --elevation-max /data/elevation-max-1k.tif \
                                     --elevation-min /data/elevation-min-1k.tif \
+                                    --area /data/area-per-pixel.tif \
                                     --crosswalk /data/crosswalk.csv \
                                     --speciesdata /data/species-info/current/* \
                                     --output /data/aohs/current/
@@ -217,6 +248,7 @@ python3 ./aoh-calculator/aohcalc.py --habitats /data/habitat_maps/current/ \
 python3 ./aoh-calculator/aohcalc.py --habitats /data/habitat_maps/restore/ \
                                     --elevation-max /data/elevation-max-1k.tif \
                                     --elevation-min /data/elevation-min-1k.tif \
+                                    --area /data/area-per-pixel.tif \
                                     --crosswalk /data/crosswalk.csv \
                                     --speciesdata /data/species-info/current/* \
                                     --output /data/aohs/restore/
@@ -224,6 +256,7 @@ python3 ./aoh-calculator/aohcalc.py --habitats /data/habitat_maps/restore/ \
 python3 ./aoh-calculator/aohcalc.py --habitats /data/habitat_maps/arable/ \
                                     --elevation-max /data/elevation-max-1k.tif \
                                     --elevation-min /data/elevation-min-1k.tif \
+                                    --area /data/area-per-pixel.tif \
                                     --crosswalk /data/crosswalk.csv \
                                     --speciesdata /data/species-info/current/* \
                                     --output /data/aohs/arable/
@@ -231,6 +264,7 @@ python3 ./aoh-calculator/aohcalc.py --habitats /data/habitat_maps/arable/ \
 python3 ./aoh-calculator/aohcalc.py --habitats /data/habitat_maps/pnv/ \
                                     --elevation-max /data/elevation-max-1k.tif \
                                     --elevation-min /data/elevation-min-1k.tif \
+                                    --area /data/area-per-pixel.tif \
                                     --crosswalk /data/crosswalk.csv \
                                     --speciesdata /data/species-info/historic/* \
                                     --output /data/aohs/pnv/
@@ -238,7 +272,7 @@ python3 ./aoh-calculator/aohcalc.py --habitats /data/habitat_maps/pnv/ \
 
 The results you then want will all be in:
 
-```shark-publish
+```shark-publish2
 /data/aohs/current/
 /data/aohs/restore/
 /data/aohs/arable/
@@ -248,3 +282,47 @@ The results you then want will all be in:
 
 ## Calculating persistence maps
 
+For each species we use the AoH data to calculate the likelihood of extinction under two scenarios: restoration and conseravation. To do that we work out the delta_p value per species, and then sum together all those results per species into a single layer.
+
+
+```shark-run:aohbuilder
+python3 ./deltap/global_code_residents_pixel_AE_128.py --speciesdata /data/species-info/current/* \
+                                                       --current-path /data/aohs/current/ \
+                                                       --scenario-path /data/aohs/restore/ \
+                                                       --historic-path /data/aohs/pnv/ \
+                                                       --z 0.25 \
+                                                       --output /data/deltap/restore/
+
+python3 ./utils/raster_sum.py --input /data/deltap/restore/ --output /data/deltap/restore_0.25.tif
+
+python3 ./deltap/global_code_residents_pixel_AE_128.py --speciesdata /data/species-info/current/* \
+                                                       --current-path /data/aohs/current/ \
+                                                       --scenario-path /data/aohs/arable/ \
+                                                       --historic-path /data/aohs/pnv/ \
+                                                       --z 0.25 \
+                                                       --output /data/deltap/arable/
+
+python3 ./utils/raster_sum.py --input /data/deltap/arable/ --output /data/deltap/arable_0.25.tif
+```
+
+```shark-publish2
+/data/deltap/restore/
+/data/deltap/arable/
+```
+
+Finally, we need to scale the results for publication:
+
+```shark-run:aohbuilder
+python3 ./deltap/delta_p_hectare.py --input /data/deltap/restore_0.25.tif \
+                                    --diffmap /data/habitat/restore_diff_area.tif \
+                                    --output /data/deltap/scaled_restore_0.25.tif
+
+python3 ./deltap/delta_p_hectare.py --input /data/deltap/arable_0.25.tif \
+                                    --diffmap /data/habitat/arable_diff_area.tif \
+                                    --output /data/deltap/scaled_arable_0.25.tif
+```
+
+```shark-publish
+/data/deltap/scaled_restore_0.25.tif
+/data/deltap/scaled_arable_0.25.tif
+```
