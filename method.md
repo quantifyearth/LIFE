@@ -1,7 +1,10 @@
 ---
 path: /root
 ---
+
 # How to run the pipeline for LIFE
+
+From [Eyres et al](https://www.cambridge.org/engage/coe/article-details/65801ab4e9ebbb4db92dad33).
 
 ## Build the environment
 
@@ -70,12 +73,12 @@ For querying the IUCN data held in the PostGIS database we use a seperate contai
 
 To calculate the AoH we need various basemaps:
 
-* Habitat maps for four scenarios:
-    * Current day, in both L1 and L2 IUCN habitat classification
-    * Potential Natural Vegetation (PNV) showing the habitats predicted without human intevention
-    * Restore scenario - a map derived from the PNV and current maps showing certain lands restored to their pre-human
-    * Conserve scenario - a map derived form current indicating the impact of placement of arable lands
-* The Digital Elevation Map (DEM) which has the height per pixel in meters
+- Habitat maps for four scenarios:
+  - Current day, in both L1 and L2 IUCN habitat classification
+  - Potential Natural Vegetation (PNV) showing the habitats predicted without human intevention
+  - Restore scenario - a map derived from the PNV and current maps showing certain lands restored to their pre-human
+  - Conserve scenario - a map derived form current indicating the impact of placement of arable lands
+- The Digital Elevation Map (DEM) which has the height per pixel in meters
 
 All these maps must be at the same pixel spacing and projection, and the output AoH maps will be at that same pixel resolution and projection.
 
@@ -129,14 +132,15 @@ python3 ./aoh-calculator/habitat_process.py --habitat /data/habitat/current_raw.
                                             --output /data/habitat_maps/current/
 ```
 
-
 ### Generating additional habitat maps
 
-From [Eyres et al]():
+LIFE calculates the impact on extinction rates under two future scenarios: restoration of habitats to their pre-human state, and the converstion of non-urban terrestrial habitat to arable.
 
-For the restoration map:
+The definition of the restore layer from [Eyres et al](https://www.cambridge.org/engage/coe/article-details/65801ab4e9ebbb4db92dad33 is:
 
 | In the restoration scenario all areas classified as arable or pasture were restored to their PNV.
+
+We generate the restore habitat layers thus:
 
 ```shark-run:aohbuilder
 python3 ./prepare-layers/make_restore_map.py --pnv /data/habitat/pnv_raw.tif \
@@ -149,7 +153,7 @@ python3 ./prepare-layers/make_restore_map.py --pnv /data/habitat/pnv_raw.tif \
                                              --output /data/habitat_maps/restore/
 ```
 
-For the conservation map:
+The definition of the arable layer from [Eyres et al](https://www.cambridge.org/engage/coe/article-details/65801ab4e9ebbb4db92dad33 is:
 
 | In the conversion scenario all habitats currently mapped as natural or pasture were converted to arable land.
 
@@ -195,7 +199,6 @@ gdalwarp -t_srs EPSG:4326 -tr 0.016666666666667 -0.016666666666667 -r min -co CO
 gdal_calc -A /data/habitat/arable_diff.tif -B /data/area-per-pixel.tif --out /data/habitat/arable_diff_area.tif --calc="A*B"
 ```
 
-
 ### Fetching the elevation map
 
 To assist with provenance, we download the data from the Zenodo ID.
@@ -210,7 +213,6 @@ Similarly to the habitat map we need to resample to 1km, however rather than pic
 gdalwarp -t_srs EPSG:4326 -tr 0.016666666666667 -0.016666666666667 -r min -co COMPRESS=LZW -wo NUM_THREADS=40 /data/elevation.tif /data/elevation-min-1k.tif
 gdalwarp -t_srs EPSG:4326 -tr 0.016666666666667 -0.016666666666667 -r max -co COMPRESS=LZW -wo NUM_THREADS=40 /data/elevation.tif /data/elevation-max-1k.tif
 ```
-
 
 ## Calculating AoH
 
@@ -230,7 +232,6 @@ python3 ./prepare-species/extract_species_psql.py --output /data/species-info/ -
 ```
 
 The reason for doing this primarly one of pipeline optimisation, though it also makes the tasks of debugging and provenance tracing much easier. Most build systems, including the one we use, let you notice when files have updated and only do the work required based on that update. If we have many thousands of species on the redlise and only a few update, if we base our calculation on a single file with all species in, we'll have to calculate all thousands of results. But with this step added in, we will re-generate the per species per season GeoJSON files, which is cheap, but then we can spot that most of them haven't changed and we don't need to then calculate the rasters for those ones in the next stage.
-
 
 ### Calculate AoH
 
@@ -279,11 +280,9 @@ The results you then want will all be in:
 /data/aohs/pnv/
 ```
 
-
 ## Calculating persistence maps
 
 For each species we use the AoH data to calculate the likelihood of extinction under two scenarios: restoration and conseravation. To do that we work out the delta_p value per species, and then sum together all those results per species into a single layer.
-
 
 ```shark-run:aohbuilder
 python3 ./deltap/global_code_residents_pixel_AE_128.py --speciesdata /data/species-info/current/* \
