@@ -140,8 +140,6 @@ The definition of the restore layer from [Eyres et al](https://www.cambridge.org
 
 | In the restoration scenario all areas classified as arable or pasture were restored to their PNV.
 
-We generate the restore habitat layers thus:
-
 ```shark-run:aohbuilder
 python3 ./prepare-layers/make_restore_map.py --pnv /data/habitat/pnv_raw.tif \
                                    --current /data/habitat/current_raw.tif \
