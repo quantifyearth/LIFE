@@ -136,7 +136,7 @@ python3 ./aoh-calculator/habitat_process.py --habitat /data/habitat/current_raw.
 
 LIFE calculates the impact on extinction rates under two future scenarios: restoration of habitats to their pre-human state, and the converstion of non-urban terrestrial habitat to arable.
 
-The definition of the restore layer from [Eyres et al](https://www.cambridge.org/engage/coe/article-details/65801ab4e9ebbb4db92dad33) is:
+The definition of the restore layer from Section 5 of [Eyres et al](https://www.cambridge.org/engage/coe/article-details/65801ab4e9ebbb4db92dad33) is:
 
 | In the restoration scenario all areas classified as arable or pasture were restored to their PNV.
 
@@ -151,7 +151,7 @@ python3 ./prepare-layers/make_restore_map.py --pnv /data/habitat/pnv_raw.tif \
                                              --output /data/habitat_maps/restore/
 ```
 
-The definition of the arable layer from [Eyres et al](https://www.cambridge.org/engage/coe/article-details/65801ab4e9ebbb4db92dad33) is:
+The definition of the arable layer from Section 5 of [Eyres et al](https://www.cambridge.org/engage/coe/article-details/65801ab4e9ebbb4db92dad33) is:
 
 | In the conversion scenario all habitats currently mapped as natural or pasture were converted to arable land.
 
