@@ -1,6 +1,7 @@
 import argparse
 import math
 import os
+import sys
 import types
 
 import geopandas as gpd
@@ -67,9 +68,9 @@ def global_code_residents_pixel_ae(
     try:
         filtered_species_info = gpd.read_file(species_data_path)
     except: # pylint:disable=W0702
-        quit(f"Failed to read {species_data_path}")
+        sys.exit(f"Failed to read {species_data_path}")
     taxid = filtered_species_info.id_no.values[0]
-    season = filtered_species_info.seasonal.values[0]
+    season = int(filtered_species_info.seasonal.values[0])
 
     try:
         exp_val = float(exponent)
@@ -80,20 +81,30 @@ def global_code_residents_pixel_ae(
             z_exponent_func_float = gen_gompertz
             z_exponent_func_raster = numpy_gompertz
         else:
-            quit(f"unrecognised exponent {exponent}")
+            sys.exit(f"unrecognised exponent {exponent}")
 
     match season:
-        case seasons.RESIDENT:
+        case 1: #seasons.RESIDENT:
             filename = f"{taxid}_{season}.tif"
             try:
                 current = open_layer_as_float64(os.path.join(current_aohs_path, filename))
+            except FileNotFoundError:
+                print(f"Failed to open current layer {os.path.join(current_aohs_path, filename)}")
+                sys.exit()
+            try:
                 scenario = open_layer_as_float64(os.path.join(scenario_aohs_path, filename))
+            except FileNotFoundError:
+                print(f"Failed to open scenario layer {os.path.join(scenario_aohs_path, filename)}")
+                sys.exit()
+            try:
                 historic_AOH = RasterLayer.layer_from_file(os.path.join(historic_aohs_path, filename)).sum()
             except FileNotFoundError as fnf:
-                quit(f"Failed to open {fnf.filename}")
+                print(f"Failed to open historic layer {os.path.join(historic_aohs_path, filename)}")
+                sys.exit()
 
             if historic_AOH == 0.0:
-                quit(f"Historic AoH for {taxid} is zero, aborting")
+                print(f"Historic AoH for {taxid} is zero, aborting")
+                sys.exit()
 
             layers = [current, scenario]
             union = RasterLayer.find_union(layers)
@@ -112,16 +123,26 @@ def global_code_residents_pixel_ae(
             delta_p = RasterLayer.empty_raster_layer_like(new_p_layer, filename=os.path.join(output_folder, filename))
             calc.save(delta_p)
 
-        case seasons.NONBREEDING:
+        case 3: #seasons.NONBREEDING:
             nonbreeding_filename = f"{taxid}_{seasons.NONBREEDING}.tif"
             breeding_filename = f"{taxid}_{seasons.BREEDING}.tif"
 
-            historic_AOH_breeding = RasterLayer.layer_from_file(os.path.join(historic_aohs_path, breeding_filename)).sum()
-            if historic_AOH_breeding == 0.0:
-                quit(f"Historic AoH breeding for {taxid} is zero, aborting")
-            historic_AOH_non_breeding = RasterLayer.layer_from_file(os.path.join(historic_aohs_path, nonbreeding_filename)).sum()
-            if historic_AOH_non_breeding == 0.0:
-                quit(f"Historic AoH for non breeding {taxid} is zero, aborting")
+            try:
+                historic_AOH_breeding = RasterLayer.layer_from_file(os.path.join(historic_aohs_path, breeding_filename)).sum()
+                if historic_AOH_breeding == 0.0:
+                    print(f"Historic AoH breeding for {taxid} is zero, aborting")
+                    sys.exit()
+            except FileNotFoundError:
+                print(f"Historic AoH for breeding {taxid} not found, aborting")
+                sys.exit()
+            try:
+                historic_AOH_non_breeding = RasterLayer.layer_from_file(os.path.join(historic_aohs_path, nonbreeding_filename)).sum()
+                if historic_AOH_non_breeding == 0.0:
+                    print(f"Historic AoH for non breeding {taxid} is zero, aborting")
+                    sys.exit()
+            except FileNotFoundError:
+                print(f"Historic AoH for non breeding {taxid} not found, aborting")
+                sys.exit()
 
 
             if scenario_aohs_path != "nan":
@@ -133,11 +154,24 @@ def global_code_residents_pixel_ae(
 
             try:
                 current_breeding = open_layer_as_float64(os.path.join(current_aohs_path, breeding_filename))
+            except FileNotFoundError as fnf:
+                print(f"Failed to open current breeding {os.path.join(current_aohs_path, breeding_filename)}")
+                sys.exit()
+            try:
                 current_non_breeding = open_layer_as_float64(os.path.join(current_aohs_path, nonbreeding_filename))
+            except FileNotFoundError as fnf:
+                print(f"Failed to open current non breeding {os.path.join(current_aohs_path, nonbreeding_filename)}")
+                sys.exit()
+            try:
                 scenario_breeding = open_layer_as_float64(breeding_scenario_path)
+            except FileNotFoundError as fnf:
+                print(f"Failed to open scenario breeding {breeding_scenario_path}")
+                sys.exit()
+            try:
                 scenario_non_breeding = open_layer_as_float64(non_breeding_scenario_path)
             except FileNotFoundError as fnf:
-                quit(f"Failed to open {fnf.filename}")
+                print(f"Failed to open sceario non breeding{fnf.filename}")
+                sys.exit()
 
             layers = [current_breeding, current_non_breeding, scenario_breeding, scenario_non_breeding]
             union = RasterLayer.find_union(layers)
@@ -165,10 +199,10 @@ def global_code_residents_pixel_ae(
             output = RasterLayer.empty_raster_layer_like(new_p_breeding, filename=args['output_path'])
             delta_p_layer.save(output)
 
-        case seasons.BREEDING:
+        case 2: #seasons.BREEDING:
             pass # covered by the nonbreeding case
         case _:
-            quit(f"Expected season for species {taxid}: {season}")
+            sys.exit(f"Unexpected season for species {taxid}: {season}")
 
 def main() -> None:
     parser = argparse.ArgumentParser()
@@ -213,7 +247,7 @@ def main() -> None:
         args.species_data_path,
         args.current_path,
         args.scenario_path,
-        args.historic_path.
+        args.historic_path,
         args.exponent,
         args.output_path,
     )

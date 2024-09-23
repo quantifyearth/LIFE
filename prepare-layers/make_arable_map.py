@@ -10,9 +10,19 @@ import pandas as pd
 from alive_progress import alive_bar
 from yirgacheffe.layers import RasterLayer
 
-# From Eyres et al: In the conversion scenario all habitats currently mapped as natural or pasture were converted to arable land
-IUCN_CODE_ARTIFICAL = [
-    "14", "14.3", "14.4", "14.5", "14.6"
+# From Eyres et al:
+# All natural terrestrial habitats and non-urban artificial habitats
+IUCN_CODE_NATURAL = [
+    "1", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9",
+    "2", "2.1", "2.2",
+    "3", "3.1", "3.2", "3.3", "3.4", "3.5", "3.6", "3.7", "3.8",
+    "4", "4.1", "4.2", "4.3", "4.4", "4.5", "4.6", "4.7",
+    "6",
+    "8", "8.1", "8.2", "8.3",
+    "14.1", "14.2", "14.3", "14.4", "14.6", # urban removed
+    #"16", # Not in crosswalk due to iucn_modlib
+    "17",
+    #"18", # Not in crosswalk due to iucn_modlib
 ]
 ARABLE = "14.1"
 
@@ -37,13 +47,14 @@ def make_arable_map(
     with RasterLayer.layer_from_file(current_path) as current:
         crosswalk = load_crosswalk_table(crosswalk_path)
 
-        map_preserve_code = list(itertools.chain.from_iterable([crosswalk[x] for x in IUCN_CODE_ARTIFICAL]))
+        map_replace_codes = list(set(list(itertools.chain.from_iterable([crosswalk[x] for x in IUCN_CODE_NATURAL]))))
+        print(map_replace_codes)
         # arable_code = crosswalk[ARABLE][0]
         arable_code = 1401 # This is a hack as Daniele's crosswalk has 14.1 mapped to both 1400 and 1401 and there's no logical way
         # to understand this
 
         calc = current.numpy_apply(
-            lambda a: np.where(np.isin(a, map_preserve_code), a, arable_code)
+            lambda a: np.where(np.isin(a, map_replace_codes), arable_code, a)
         )
 
         with RasterLayer.empty_raster_layer_like(
