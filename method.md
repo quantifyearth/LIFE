@@ -243,7 +243,7 @@ The reason for doing this primarly one of pipeline optimisation, though it also 
 
 This step generates a single AoH raster for a single one of the above GeoJSON files.
 
-```shark-run:aoh-calc
+```shark-run:aohbuilder
 python3 ./aoh-calculator/aohcalc.py --habitats /data/habitat_maps/current/ \
                                     --elevation-max /data/elevation-max-1k.tif \
                                     --elevation-min /data/elevation-min-1k.tif \
@@ -290,7 +290,6 @@ The results you then want will all be in:
 
 
 ```shark-build:deltap
-((from aohbuilder)
 ((from ghcr.io/osgeo/gdal:ubuntu-small-3.8.5)
  (run (network host) (shell "apt-get update -qqy && apt-get -y install python3-pip libpq-dev git && rm -rf /var/lib/apt/lists/* && rm -rf /var/cache/apt/*"))
  (run (network host) (shell "pip install --upgrade pip"))
@@ -302,6 +301,7 @@ The results you then want will all be in:
  (copy (src "aoh-calculator") (dst "./"))
  (run (network host) (shell "pip install --no-cache-dir -r requirements.txt"))
   (copy (src "deltap") (dst "./"))
+  (copy (src "utils") (dst "./"))
 )
 ```
 
@@ -316,7 +316,7 @@ python3 ./deltap/global_code_residents_pixel_AE_128.py --speciesdata /data/speci
                                                        --z 0.25 \
                                                        --output_path /data/deltap/restore/
 
-python3 ./utils/raster_sum.py --input /data/deltap/restore/ --output /data/deltap/restore_0.25.tif
+python3 ./utils/raster_sum.py --rasters_directory /data/deltap/restore/ --output /data/deltap/restore_0.25.tif
 
 python3 ./deltap/global_code_residents_pixel_AE_128.py --speciesdata /data/species-info/current/* \
                                                        --current_path /data/aohs/current/ \
@@ -325,7 +325,7 @@ python3 ./deltap/global_code_residents_pixel_AE_128.py --speciesdata /data/speci
                                                        --z 0.25 \
                                                        --output_path /data/deltap/arable/
 
-python3 ./utils/raster_sum.py --input /data/deltap/arable/ --output /data/deltap/arable_0.25.tif
+python3 ./utils/raster_sum.py --rasters_directory /data/deltap/arable/ --output /data/deltap/arable_0.25.tif
 ```
 
 ```shark-publish2

@@ -196,7 +196,7 @@ def global_code_residents_pixel_ae(
 
             delta_p_layer = new_p_layer - ConstantLayer(old_persistence)
 
-            output = RasterLayer.empty_raster_layer_like(new_p_breeding, filename=args['output_path'])
+            output = RasterLayer.empty_raster_layer_like(new_p_breeding, filename=os.path.join(output_folder, nonbreeding_filename))
             delta_p_layer.save(output)
 
         case 2: #seasons.BREEDING:
