@@ -1,4 +1,6 @@
 import argparse
+import os
+from glob import glob
 
 import numpy as np
 from yirgacheffe.layers import RasterLayer
@@ -10,28 +12,46 @@ def delta_p_scaled_area(
     diff_area_map_path: str,
     output_path: str,
 ):
-    with RasterLayer.layer_from_file(diff_area_map_path) as area_restore:
-        with RasterLayer.layer_from_file(input_path) as inlayer:
+    per_taxa = [
+        RasterLayer.layer_from_file(os.path.join(input_path, x))
+        for x in sorted(glob("*.tif", root_dir=input_path))
+    ]
+    area_restore = RasterLayer.layer_from_file(diff_area_map_path)
 
-            intersection = RasterLayer.find_intersection([area_restore, inlayer])
-            inlayer.set_window_for_intersection(intersection)
-            area_restore.set_window_for_intersection(intersection)
+    for layer in per_taxa:
+        layer.set_window_for_union(area_restore.area)
 
-            with RasterLayer.empty_raster_layer_like(inlayer, filename=output_path, nodata=float('nan')) as result:
+    area_restore_filter = area_restore.numpy_apply(lambda c: np.where(c < SCALE, float('nan'), c)) / SCALE
 
-                area_restore_filter = area_restore.numpy_apply(lambda c: np.where(c < SCALE, 0, c)) / SCALE
-                filtered_layer = inlayer.numpy_apply(lambda il, af: np.where(af != 0, il, 0), area_restore_filter)
-                scaled_filtered_layer = filtered_layer / area_restore_filter
-                scaled_filtered_layer.save(result)
+    dirname, basename = os.path.split(output_path)
+
+    per_taxa_path = os.path.join(dirname, f"per_taxa_{basename}")
+    with RasterLayer.empty_raster_layer_like(area_restore, filename=per_taxa_path, nodata=float('nan'), bands=len(per_taxa)) as result:
+        for idx in range(len(per_taxa)):
+            inlayer = per_taxa[idx]
+            _, name = os.path.split(inlayer.name)
+            result._dataset.GetRasterBand(idx+1).SetDescription(name[:-4])
+            filtered_layer = inlayer.numpy_apply(lambda il, af: np.where(af != 0, il, float('nan')), area_restore_filter)
+            scaled_filtered_layer = (filtered_layer / area_restore_filter) * -1.0
+            scaled_filtered_layer.parallel_save(result, band=idx + 1)
+
+    summed_output_path = os.path.join(dirname, f"summed_{basename}")
+    with RasterLayer.empty_raster_layer_like(area_restore, filename=summed_output_path, nodata=float('nan')) as result:
+        summed_layer = per_taxa[0]
+        for layer in per_taxa[1:]:
+            summed_layer = summed_layer + layer
+        filtered_layer = summed_layer.numpy_apply(lambda il, af: np.where(af != 0, il, float('nan')), area_restore_filter)
+        scaled_filtered_layer = (filtered_layer / area_restore_filter) * -1.0
+        scaled_filtered_layer.parallel_save(result)
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Scale final results.")
+    parser = argparse.ArgumentParser(description="Scale final .")
     parser.add_argument(
         '--input',
         type=str,
         help='Path of map of extinction risk',
         required=True,
-        dest='current_path',
+        dest='input_path',
     )
     parser.add_argument(
         '--diffmap',
