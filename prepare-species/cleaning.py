@@ -25,9 +25,9 @@ def tidy_data(row: pd.Series) -> pd.Series:
 
     # Small difference (<50m) between lower and upper elevation
     elevation_diff = row.elevation_upper - row.elevation_lower
-    if elevation_diff < 50.0:
-        spare = 50.0 - elevation_diff
-        adjust = math.ceil(spare / 2.0)
+    if elevation_diff < 50:
+        spare = 50 - elevation_diff
+        adjust = math.ceil(spare / 2)
         row.elevation_lower -= adjust
         row.elevation_upper += adjust
 

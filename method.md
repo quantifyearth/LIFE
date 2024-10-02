@@ -1,5 +1,5 @@
 ---
-path: /root
+path: /roo
 ---
 
 # How to run the pipeline for LIFE
