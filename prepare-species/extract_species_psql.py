@@ -1,4 +1,5 @@
 import argparse
+import logging
 import os
 from functools import partial
 from multiprocessing import Pool
@@ -8,10 +9,12 @@ from typing import Optional, Tuple
 import geopandas as gpd
 import pyproj
 import psycopg2
+import shapely
 from postgis.psycopg import register
-from shapely import from_wkb
 
 from cleaning import tidy_data
+
+logger = logging.getLogger(__name__)
 
 SEASON_NAME = {
     1: "RESIDENT",
@@ -20,85 +23,50 @@ SEASON_NAME = {
 }
 
 MAIN_STATEMENT = """
-WITH habitat_seasons AS (
-	SELECT
-        assessment_habitats.assessment_id,
-        assessment_habitats.habitat_id,
-        CASE
-            WHEN (assessment_habitats.supplementary_fields->>'season') ILIKE 'Resident' THEN 1
-            WHEN (assessment_habitats.supplementary_fields->>'season') ILIKE 'Breeding%%' THEN 2
-            WHEN (assessment_habitats.supplementary_fields->>'season') ILIKE 'Non%%Bree%%' THEN 3
-            WHEN (assessment_habitats.supplementary_fields->>'season') ILIKE 'Pass%%' THEN 4
-            WHEN (assessment_habitats.supplementary_fields->>'season') ILIKE '%%un%%n%%' THEN 1 -- capture 'uncertain' and 'unknown' as resident
-            ELSE 1
-        END AS seasonal
-    FROM
-        public.assessments
-        LEFT JOIN taxons ON taxons.id = assessments.taxon_id
-        LEFT JOIN assessment_habitats ON assessment_habitats.assessment_id = assessments.id
-    WHERE
-        assessments.latest = true
-        AND (
-            -- LIFE ignores marginal suitability
-            assessment_habitats.supplementary_fields->>'suitability' IS NULL
-            OR assessment_habitats.supplementary_fields->>'suitability' IN ('Suitable', 'Unknown')
-        )
-),
-unique_seasons AS (
-  	SELECT DISTINCT ON (taxons.scientific_name, habitat_seasons.seasonal)
-        assessments.sis_taxon_id as id_no,
-        assessment_ranges.seasonal,
-        assessment_ranges.presence,
-        assessment_ranges.origin,
-        STRING_AGG(habitat_lookup.code, '|') OVER (PARTITION BY taxons.scientific_name, habitat_seasons.seasonal ORDER BY assessment_ranges.id) AS full_habitat_code,
-        STRING_AGG(system_lookup.description->>'en', '|') OVER (PARTITION BY taxons.scientific_name, habitat_seasons.seasonal ORDER BY assessment_ranges.id) AS systems,
-        STRING_AGG(assessment_ranges.id::text, '|') OVER (PARTITION BY taxons.scientific_name, habitat_seasons.seasonal ORDER BY assessment_ranges.id) AS ranges,
-        (assessment_supplementary_infos.supplementary_fields->>'ElevationLower.limit')::numeric AS elevation_lower,
-        (assessment_supplementary_infos.supplementary_fields->>'ElevationUpper.limit')::numeric AS elevation_upper,
-        ROW_NUMBER() OVER (PARTITION BY taxons.scientific_name, habitat_seasons.seasonal ORDER BY assessments.id, assessment_ranges.id) AS rn
-    FROM
-        assessments
-        LEFT JOIN taxons ON taxons.id = assessments.taxon_id
-        LEFT JOIN assessment_ranges ON assessment_ranges.assessment_id = assessments.id
-        LEFT JOIN habitat_seasons ON habitat_seasons.assessment_id = assessments.id AND habitat_seasons.seasonal = assessment_ranges.seasonal
-        LEFT JOIN assessment_systems ON assessment_systems.assessment_id = assessments.id
-        LEFT JOIN system_lookup ON assessment_systems.system_lookup_id = system_lookup.id
-        LEFT JOIN habitat_lookup ON habitat_lookup.id = habitat_seasons.habitat_id
-        LEFT JOIN assessment_supplementary_infos ON assessment_supplementary_infos.assessment_id = assessments.id
-        LEFT JOIN red_list_category_lookup ON red_list_category_lookup.id = assessments.red_list_category_id
-    WHERE
-        assessments.latest = true
-        AND taxons.class_id = 22672813 -- AVES
-        AND habitat_seasons.habitat_id is not null
-        AND assessment_ranges.presence IN %s
-        AND assessment_ranges.origin IN (1, 2, 6)
-        AND assessment_ranges.seasonal IN (1, 2, 3)
-        AND red_list_category_lookup.code != 'EX'
-    )
 SELECT
-    id_no,
-    seasonal,
-    elevation_lower,
-    elevation_upper,
-    full_habitat_code,
-    ranges
+    assessments.sis_taxon_id as id_no,
+    assessments.id as assessment_id,
+    (assessment_supplementary_infos.supplementary_fields->>'ElevationLower.limit')::numeric AS elevation_lower,
+    (assessment_supplementary_infos.supplementary_fields->>'ElevationUpper.limit')::numeric AS elevation_upper
 FROM
-    unique_seasons
+    assessments
+    LEFT JOIN taxons ON taxons.id = assessments.taxon_id
+    LEFT JOIN assessment_supplementary_infos ON assessment_supplementary_infos.assessment_id = assessments.id
+    LEFT JOIN red_list_category_lookup ON red_list_category_lookup.id = assessments.red_list_category_id
 WHERE
-    rn = 1
-    -- the below queries must happen on the aggregate data
-    AND full_habitat_code NOT LIKE '7%%'
-    AND full_habitat_code NOT LIKE '%%|7%%'
-    AND systems NOT LIKE '%%Marine%%'
+    assessments.latest = true
+    AND taxons.class_name = %s
+    AND red_list_category_lookup.code NOT IN ('DD', 'NE', 'EX')
+"""
+
+HABITATS_STATEMENT = """
+SELECT
+    STRING_AGG(habitat_lookup.code, '|') AS full_habitat_code,
+    STRING_AGG(system_lookup.description->>'en', '|') AS systems
+FROM
+    assessments
+    LEFT JOIN assessment_habitats ON assessment_habitats.assessment_id = assessments.id
+    LEFT JOIN habitat_lookup on habitat_lookup.id = assessment_habitats.habitat_id
+    LEFT JOIN assessment_systems ON assessment_systems.assessment_id = assessments.id
+    LEFT JOIN system_lookup ON assessment_systems.system_lookup_id = system_lookup.id
+WHERE
+    assessments.id = %s
+    AND (
+        -- LIFE ignores marginal suitability, and ignores majorImportance
+        assessment_habitats.supplementary_fields->>'suitability' IS NULL
+        OR assessment_habitats.supplementary_fields->>'suitability' IN ('Suitable', 'Unknown')
+    )
 """
 
 GEOMETRY_STATEMENT = """
 SELECT
-    ST_UNION(assessment_ranges.geom::geometry) AS geometry
+    assessment_ranges.seasonal,
+    ST_UNION(assessment_ranges.geom::geometry) OVER (PARTITION BY assessment_ranges.seasonal) AS geometry
 FROM
-    assessment_ranges
+    assessments
+    LEFT JOIN assessment_ranges On assessment_ranges.assessment_id = assessments.id
 WHERE
-    assessment_ranges.id IN %s
+    assessments.id = %s
     AND assessment_ranges.presence IN %s
     AND assessment_ranges.origin IN (1, 2, 6)
     AND assessment_ranges.seasonal IN (1, 2, 3)
@@ -113,44 +81,123 @@ DB_CONFIG = (
 	f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 )
 
-def process_row(
-    output_directory_path: str,
-    presence: Tuple[int],
-    row: Tuple,
+def tidy_reproject_save(
+    gdf: gpd.GeoDataFrame,
+    output_directory_path: str
 ) -> None:
     # The geometry is in CRS 4326, but the AoH work is done in World_Behrmann, aka Projected CRS: ESRI:54017
     src_crs = pyproj.CRS.from_epsg(4326)
     target_crs = src_crs #pyproj.CRS.from_string(target_projection)
 
-    connection = psycopg2.connect(DB_CONFIG)
-    register(connection)
-    curs = connection.cursor()
-
-    id_no, seasonal, elevation_lower, elevation_upper, full_habitat_code, range_ids = row
-
-    cleaned_range_ids = set([int(x) for x in range_ids.split('|')])
-
-    curs.execute(GEOMETRY_STATEMENT, (tuple(cleaned_range_ids), presence))
-    geometry = curs.fetchall()
-    if len(geometry) == 0:
-        return
-    elif len(geometry) > 1:
-        raise ValueError("Expected just a single geometry value")
-
-    x = (geometry[0][0])
-    x = from_wkb(x.to_ewkb())
-
-    gdf = gpd.GeoDataFrame(
-        [[id_no, seasonal, int(elevation_lower) if elevation_lower else None, int(elevation_upper) if elevation_upper else None, full_habitat_code]],
-        columns=["id_no", "seasonal", "elevation_lower", "elevation_upper", "full_habitat_code"],
-        crs='epsg:4326', geometry=[x])
     graw = gdf.loc[0].copy()
-
     grow = tidy_data(graw)
-    output_path = os.path.join(output_directory_path, f"{grow.id_no}_{SEASON_NAME[grow.seasonal]}.geojson")
+    os.makedirs(output_directory_path, exist_ok=True)
+    output_path = os.path.join(output_directory_path, f"{grow.id_no}_{grow.season}.geojson")
     res = gpd.GeoDataFrame(grow.to_frame().transpose(), crs=src_crs, geometry="geometry")
     res_projected = res.to_crs(target_crs)
     res_projected.to_file(output_path, driver="GeoJSON")
+
+
+def process_row(
+    output_directory_path: str,
+    presence: Tuple[int],
+    row: Tuple,
+) -> None:
+
+    connection = psycopg2.connect(DB_CONFIG)
+    register(connection)
+    cursor = connection.cursor()
+
+
+    id_no, assessment_id, elevation_lower, elevation_upper = row
+
+    cursor.execute(HABITATS_STATEMENT, (assessment_id,))
+    habitats = cursor.fetchall()
+
+    if len(habitats) == 0:
+        # No matching habitats
+        return
+    elif len(habitats) > 1:
+        raise ValueError("expected just one habitat value")
+
+    # Clean up habitats to ensure they're unique (the system agg in the SQL statement might duplicate them)
+    raw_habitats, systems = habitats[0]
+
+    if systems is None:
+        logging.warning("Skipping %s: no systems in DB", id_no)
+        return
+    if "Marine" in systems:
+        logging.info("Skipping %s: marine in systems", id_no)
+        return
+
+    if raw_habitats is None:
+        logging.warning("Skipping %s: no habitats in DB", id_no)
+        return
+    habitats = list(set([x for x in raw_habitats.split('|')]))
+    if len(habitats) == 0:
+        logging.info("Skipping %s: No habitats", id_no)
+        return
+    if any([x.startswith('7') for x in habitats]):
+        logging.info("Skipping %s: Habitat 7 in habitat list", id_no)
+        return
+
+    full_habitat_code = '|'.join(habitats)
+
+    cursor.execute(GEOMETRY_STATEMENT, (assessment_id, presence))
+    geometries_data = cursor.fetchall()
+    if len(geometries_data) == 0:
+        logging.info("Skipping %s: no habitats", id_no)
+        return
+    geometries = {}
+    for season, geometry in geometries_data:
+        geometries[season] = shapely.normalize(shapely.from_wkb(geometry.to_ewkb()))
+
+    seasons = list(geometries.keys())
+    if seasons == [1]:
+        # Resident only
+        gdf = gpd.GeoDataFrame(
+            [[id_no, SEASON_NAME[1], int(elevation_lower) if elevation_lower else None, int(elevation_upper) if elevation_upper else None, full_habitat_code, geometries[1]]],
+            columns=["id_no", "season", "elevation_lower", "elevation_upper", "full_habitat_code", "geometry"],
+            crs='epsg:4326'
+        )
+        tidy_reproject_save(gdf, output_directory_path)
+    else:
+        # Breeding and non-breeding
+        if 1 in seasons and 2 in seasons:
+            season_2 = shapely.union(geometries[2], geometries[1])
+        elif 2 in seasons:
+            season_2 = geometries[2]
+        elif 1 in seasons:
+            season_2 = geometries[1]
+        else:
+            logging.info("Skipping %s: no geometries for breeding", id_no)
+            return
+
+        if 1 in seasons and 3 in seasons:
+            season_3 = shapely.union(geometries[3], geometries[1])
+        elif 3 in seasons:
+            season_3 = geometries[3]
+        elif 1 in seasons:
+            season_3 = geometries[1]
+        else:
+            logging.info("Skipping %s: no geometries for non-breeding", id_no)
+            return
+
+        gdf = gpd.GeoDataFrame(
+            [[id_no, SEASON_NAME[2], int(elevation_lower) if elevation_lower else None, int(elevation_upper) if elevation_upper else None, full_habitat_code, season_2]],
+            columns=["id_no", "season", "elevation_lower", "elevation_upper", "full_habitat_code", "geometry"],
+            crs='epsg:4326'
+        )
+        tidy_reproject_save(gdf, output_directory_path)
+
+        gdf = gpd.GeoDataFrame(
+            [[id_no, SEASON_NAME[3], int(elevation_lower) if elevation_lower else None, int(elevation_upper) if elevation_upper else None, full_habitat_code, season_3]],
+            columns=["id_no", "season", "elevation_lower", "elevation_upper", "full_habitat_code", "geometry"],
+            crs='epsg:4326',
+        )
+        tidy_reproject_save(gdf, output_directory_path)
+
+
 
 def extract_data_per_species(
     output_directory_path: str,
@@ -158,21 +205,20 @@ def extract_data_per_species(
 ) -> None:
 
     connection = psycopg2.connect(DB_CONFIG)
-    curs = connection.cursor()
+    cursor = connection.cursor()
 
-    # engine = create_engine(DB_CONFIG, echo=False)
     for era, presence in [("current", (1, 2)), ("historic", (1, 2, 4, 5))]:
-        era_output_directory_path = os.path.join(output_directory_path, era)
-        os.makedirs(os.path.join(era_output_directory_path, era), exist_ok=True)
+        for classname in ['AMPHIBIA', 'AVES', 'MAMMALIA', 'REPTILIA']:
+            era_output_directory_path = os.path.join(output_directory_path, era, classname)
 
-        curs.execute(MAIN_STATEMENT, (presence,))
-        # This can be quite big (tens of thousands), but in modern computer term is quite small
-        # and I need to make a follow on DB query per result.
-        results = curs.fetchall()
+            cursor.execute(MAIN_STATEMENT, (classname,))
+            # This can be quite big (tens of thousands), but in modern computer term is quite small
+            # and I need to make a follow on DB query per result.
+            results = cursor.fetchall()
 
-        # The limiting amount here is how many concurrent connections the database can take
-        with Pool(processes=20) as pool:
-            pool.map(partial(process_row, era_output_directory_path, presence), results)
+            # The limiting amount here is how many concurrent connections the database can take
+            with Pool(processes=20) as pool:
+                pool.map(partial(process_row, era_output_directory_path, presence), results)
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Process agregate species data to per-species-file.")
