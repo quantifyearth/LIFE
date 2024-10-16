@@ -2,7 +2,7 @@ import argparse
 import math
 import os
 import sys
-import types
+from enum import Enum
 
 import geopandas as gpd
 import numpy as np
@@ -13,10 +13,10 @@ GOMPERTZ_A = 2.5
 GOMPERTZ_B = -14.5
 GOMPERTZ_ALPHA = 1
 
-seasons = types.SimpleNamespace()
-seasons.RESIDENT = 1
-seasons.BREEDING = 2
-seasons.NONBREEDING = 3
+class Season(Enum):
+   RESIDENT = 1
+   BREEDING = 2
+   NONBREEDING = 3
 
 def gen_gompertz(x: float) -> float:
     return math.exp(-math.exp(GOMPERTZ_A + (GOMPERTZ_B * (x ** GOMPERTZ_ALPHA))))
@@ -70,7 +70,7 @@ def global_code_residents_pixel_ae(
     except: # pylint:disable=W0702
         sys.exit(f"Failed to read {species_data_path}")
     taxid = filtered_species_info.id_no.values[0]
-    season = int(filtered_species_info.seasonal.values[0])
+    season = Season[filtered_species_info.season.values[0]]
 
     try:
         exp_val = float(exponent)
@@ -84,8 +84,8 @@ def global_code_residents_pixel_ae(
             sys.exit(f"unrecognised exponent {exponent}")
 
     match season:
-        case 1: #seasons.RESIDENT:
-            filename = f"{taxid}_{season}.tif"
+        case Season.RESIDENT:
+            filename = f"{taxid}_{season.name}.tif"
             try:
                 current = open_layer_as_float64(os.path.join(current_aohs_path, filename))
             except FileNotFoundError:
@@ -106,6 +106,8 @@ def global_code_residents_pixel_ae(
                 print(f"Historic AoH for {taxid} is zero, aborting")
                 sys.exit()
 
+            print(f"current: {current.sum()}\nscenario: {scenario.sum()}\nhistoric: {historic_AOH.sum()}")
+
             layers = [current, scenario]
             union = RasterLayer.find_union(layers)
             for layer in layers:
@@ -117,15 +119,17 @@ def global_code_residents_pixel_ae(
             current_AOH = current.sum()
 
             new_p_layer = process_delta_p(current, scenario, current_AOH, historic_AOH, z_exponent_func_raster)
+            print(new_p_layer.sum())
 
             old_persistence = calc_persistence_value(current_AOH, historic_AOH, z_exponent_func_float)
+            print(old_persistence)
             calc = new_p_layer - ConstantLayer(old_persistence)
             delta_p = RasterLayer.empty_raster_layer_like(new_p_layer, filename=os.path.join(output_folder, filename))
             calc.save(delta_p)
 
-        case 3: #seasons.NONBREEDING:
-            nonbreeding_filename = f"{taxid}_{seasons.NONBREEDING}.tif"
-            breeding_filename = f"{taxid}_{seasons.BREEDING}.tif"
+        case Season.NONBREEDING:
+            nonbreeding_filename = f"{taxid}_{Season.NONBREEDING.name}.tif"
+            breeding_filename = f"{taxid}_{Season.BREEDING.name}.tif"
 
             try:
                 historic_AOH_breeding = RasterLayer.layer_from_file(os.path.join(historic_aohs_path, breeding_filename)).sum()
@@ -199,7 +203,7 @@ def global_code_residents_pixel_ae(
             output = RasterLayer.empty_raster_layer_like(new_p_breeding, filename=os.path.join(output_folder, nonbreeding_filename))
             delta_p_layer.save(output)
 
-        case 2: #seasons.BREEDING:
+        case Season.BREEDING:
             pass # covered by the nonbreeding case
         case _:
             sys.exit(f"Unexpected season for species {taxid}: {season}")

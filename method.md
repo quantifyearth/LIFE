@@ -1,5 +1,10 @@
 ---
-path: /roo
+path: /root
+TAXA:
+- AMPHIBIA
+- AVES
+CURVE:
+- "0.25"
 ---
 
 # How to run the pipeline for LIFE
@@ -59,7 +64,7 @@ For querying the IUCN data held in the PostGIS database we use a seperate contai
 ```shark-build:postgis
 ((from python:3.12-slim)
  (run (network host) (shell "apt-get update -qqy && apt-get -y install libpq-dev gcc git && rm -rf /var/lib/apt/lists/* && rm -rf /var/cache/apt/*"))
- (run (network host) (shell "pip install psycopg2 SQLalchemy geopandas"))
+ (run (network host) (shell "pip install psycopg2 postgis geopandas"))
  (run (network host) (shell "pip install git+https://github.com/quantifyearth/pyshark"))
  (copy (src "./prepare-species") (dst "/root/"))
  (workdir "/root/")
@@ -186,7 +191,6 @@ python3 ./prepare-layers/make_area_map.py --scale 0.016666666666667 --output /da
 ```
 
 ### Differences maps
-
 In the algorithm we use need to account for map projection distortions, so all values in the AoHs are based on the area per pixel. To get the final extinction risk values we must remove that scaling. To do that we generate a map of area difference from current for the given scenario.
 
 ```shark-run:layer-prep
@@ -234,7 +238,7 @@ export DB_USER=username
 export DB_PASSWORD=secretpassword
 export DB_NAME=iucnredlist
 
-python3 ./prepare-species/extract_species_psql.py --output /data/species-info/ --projection "EPSG:4326"
+python3 ./prepare-species/extract_species_psql.py --class %{TAXA} --output /data/species-info/%{TAXA}/ --projection "EPSG:4326"
 ```
 
 The reason for doing this primarly one of pipeline optimisation, though it also makes the tasks of debugging and provenance tracing much easier. Most build systems, including the one we use, let you notice when files have updated and only do the work required based on that update. If we have many thousands of species on the redlise and only a few update, if we base our calculation on a single file with all species in, we'll have to calculate all thousands of results. But with this step added in, we will re-generate the per species per season GeoJSON files, which is cheap, but then we can spot that most of them haven't changed and we don't need to then calculate the rasters for those ones in the next stage.
@@ -249,32 +253,32 @@ python3 ./aoh-calculator/aohcalc.py --habitats /data/habitat_maps/current/ \
                                     --elevation-min /data/elevation-min-1k.tif \
                                     --area /data/area-per-pixel.tif \
                                     --crosswalk /data/crosswalk.csv \
-                                    --speciesdata /data/species-info/current/* \
-                                    --output /data/aohs/current/
+                                    --speciesdata /data/species-info/%{TAXA}/current/* \
+                                    --output /data/aohs/current/%{TAXA}/
 
 python3 ./aoh-calculator/aohcalc.py --habitats /data/habitat_maps/restore/ \
                                     --elevation-max /data/elevation-max-1k.tif \
                                     --elevation-min /data/elevation-min-1k.tif \
                                     --area /data/area-per-pixel.tif \
                                     --crosswalk /data/crosswalk.csv \
-                                    --speciesdata /data/species-info/current/* \
-                                    --output /data/aohs/restore/
+                                    --speciesdata /data/species-info/%{TAXA}/current/* \
+                                    --output /data/aohs/restore/%{TAXA}/
 
 python3 ./aoh-calculator/aohcalc.py --habitats /data/habitat_maps/arable/ \
                                     --elevation-max /data/elevation-max-1k.tif \
                                     --elevation-min /data/elevation-min-1k.tif \
                                     --area /data/area-per-pixel.tif \
                                     --crosswalk /data/crosswalk.csv \
-                                    --speciesdata /data/species-info/current/* \
-                                    --output /data/aohs/arable/
+                                    --speciesdata /data/species-info/%{TAXA}/current/* \
+                                    --output /data/aohs/arable/%{TAXA}/
 
 python3 ./aoh-calculator/aohcalc.py --habitats /data/habitat_maps/pnv/ \
                                     --elevation-max /data/elevation-max-1k.tif \
                                     --elevation-min /data/elevation-min-1k.tif \
                                     --area /data/area-per-pixel.tif \
                                     --crosswalk /data/crosswalk.csv \
-                                    --speciesdata /data/species-info/historic/* \
-                                    --output /data/aohs/pnv/
+                                    --speciesdata /data/species-info/%{TAXA}/historic/* \
+                                    --output /data/aohs/pnv/%{TAXA}/
 ```
 
 The results you then want will all be in:
@@ -309,23 +313,23 @@ For each species we use the AoH data to calculate the likelihood of extinction u
 
 
 ```shark-run:deltap
-python3 ./deltap/global_code_residents_pixel_AE_128.py --speciesdata /data/species-info/current/* \
-                                                       --current_path /data/aohs/current/ \
-                                                       --scenario_path /data/aohs/restore/ \
-                                                       --historic_path /data/aohs/pnv/ \
-                                                       --z 0.25 \
-                                                       --output_path /data/deltap/restore/
+python3 ./deltap/global_code_residents_pixel_AE_128.py --speciesdata /data/species-info/%{TAXA}/current/* \
+                                                       --current_path /data/aohs/current/%{TAXA}/ \
+                                                       --scenario_path /data/aohs/restore/%{TAXA}/ \
+                                                       --historic_path /data/aohs/pnv/%{TAXA}/ \
+                                                       --z %{CURVE} \
+                                                       --output_path /data/deltap/restore/%{CURVE}/%{TAXA}/
 
-python3 ./utils/raster_sum.py --rasters_directory /data/deltap/restore/ --output /data/deltap/restore_0.25.tif
+python3 ./utils/raster_sum.py --rasters_directory /data/deltap/restore/%{CURVE}/%{TAXA}/ --output /data/deltap_sum/restore/%{CURVE}/%{TAXA}.tif
 
-python3 ./deltap/global_code_residents_pixel_AE_128.py --speciesdata /data/species-info/current/* \
-                                                       --current_path /data/aohs/current/ \
-                                                       --scenario_path /data/aohs/arable/ \
-                                                       --historic_path /data/aohs/pnv/ \
-                                                       --z 0.25 \
-                                                       --output_path /data/deltap/arable/
+python3 ./deltap/global_code_residents_pixel_AE_128.py --speciesdata /data/species-info/%{TAXA}/current/* \
+                                                       --current_path /data/aohs/current/%{TAXA}/ \
+                                                       --scenario_path /data/aohs/arable/%{TAXA}/ \
+                                                       --historic_path /data/aohs/pnv/%{TAXA}/ \
+                                                       --z %{CURVE} \
+                                                       --output_path /data/deltap/arable/%{CURVE}/%{TAXA}/
 
-python3 ./utils/raster_sum.py --rasters_directory /data/deltap/arable/ --output /data/deltap/arable_0.25.tif
+python3 ./utils/raster_sum.py --rasters_directory /data/deltap/arable/%{CURVE}/%{TAXA}/ --output /data/deltap_sum/arable/%{CURVE}/%{TAXA}.tif
 ```
 
 ```shark-publish2
@@ -336,16 +340,16 @@ python3 ./utils/raster_sum.py --rasters_directory /data/deltap/arable/ --output 
 Finally, we need to scale the results for publication:
 
 ```shark-run:deltap
-python3 ./deltap/delta_p_hectare.py --input /data/deltap/restore_0.25.tif \
-                                    --diffmap /data/habitat/restore_diff_area.tif \
-                                    --output /data/deltap/scaled_restore_0.25.tif
+python3 ./deltap/delta_p_scaled_area.py --input /data/deltap_sum/restore/%{CURVE}/ \
+                                        --diffmap /data/habitat/restore_diff_area.tif \
+                                        --output /data/deltap_final/scaled_restore_%{CURVE}.tif
 
-python3 ./deltap/delta_p_hectare.py --input /data/deltap/arable_0.25.tif \
-                                    --diffmap /data/habitat/arable_diff_area.tif \
-                                    --output /data/deltap/scaled_arable_0.25.tif
+python3 ./deltap/delta_p_scaled_area.py --input /data/deltap_sum/arable/%{CURVE}/ \
+                                        --diffmap /data/habitat/arable_diff_area.tif \
+                                        --output /data/deltap_final/scaled_arable_%{CURVE}.tif
 ```
 
 ```shark-publish
-/data/deltap/scaled_restore_0.25.tif
-/data/deltap/scaled_arable_0.25.tif
+/data/deltap_final/scaled_restore_%{CURVE}.tif
+/data/deltap_final/scaled_arable_%{CURVE}.tif
 ```

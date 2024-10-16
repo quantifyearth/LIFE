@@ -14,30 +14,27 @@ def species_generator(
 
     res = []
     for taxa in taxas:
-        for scenario in ['current', 'restore', 'arable', 'pnv']:
-            source = 'historic' if scenario == 'pnv' else 'current'
-            taxa_path = os.path.join(input_dir, taxa, source)
-            speciess = os.listdir(taxa_path)
+        taxa_path = os.path.join(input_dir, taxa, 'current')
+        speciess = os.listdir(taxa_path)
+        for scenario in ['arable', 'restore']:
             for species in speciess:
                 res.append([
-                    os.path.join('/home/mwd24/lifetest/habitat_maps', scenario),
-                    '/home/mwd24/lifetest/elevation-max-1k.tif',
-                    '/home/mwd24/lifetest/elevation-min-1k.tif',
-                    '/home/mwd24/lifetest/area-per-pixel.tif',
-                    '/home/mwd24/lifetest/crosswalk.csv',
-                    os.path.join('/home/mwd24/lifetest/species-info/', taxa, source, species),
-                    os.path.join('/home/mwd24/lifetest/aohs/', scenario, taxa)
+                    os.path.join('/home/mwd24/lifetest/species-info/', taxa, 'current', species),
+                    os.path.join('/home/mwd24/lifetest/aohs/', 'current', taxa),
+                    os.path.join('/home/mwd24/lifetest/aohs/', scenario, taxa),
+                    os.path.join('/home/mwd24/lifetest/aohs/', 'pnv', taxa),
+                    '0.25',
+                    os.path.join('/home/mwd24/lifetest/deltap/', scenario, '0.25', taxa),
                 ])
 
 
     df = pd.DataFrame(res, columns=[
-        '--habitats',
-        '--elevation-max',
-        '--elevation-min',
-        '--area',
-        '--crosswalk',
         '--speciesdata',
-        '--output'
+        '--current_path',
+        '--scenario_path',
+        '--historic_path',
+        '--z',
+        '--output_path',
     ])
     df.to_csv(output_csv_path, index=False)
 

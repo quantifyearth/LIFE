@@ -36,7 +36,7 @@ FROM
 WHERE
     assessments.latest = true
     AND taxons.class_name = %s
-    AND red_list_category_lookup.code NOT IN ('DD', 'NE', 'EX')
+    AND red_list_category_lookup.code NOT IN ('EX')
 """
 
 HABITATS_STATEMENT = """
@@ -200,6 +200,7 @@ def process_row(
 
 
 def extract_data_per_species(
+    classname: str,
     output_directory_path: str,
     target_projection: Optional[str],
 ) -> None:
@@ -208,20 +209,26 @@ def extract_data_per_species(
     cursor = connection.cursor()
 
     for era, presence in [("current", (1, 2)), ("historic", (1, 2, 4, 5))]:
-        for classname in ['AMPHIBIA', 'AVES', 'MAMMALIA', 'REPTILIA']:
-            era_output_directory_path = os.path.join(output_directory_path, era, classname)
+        era_output_directory_path = os.path.join(output_directory_path, era)
 
-            cursor.execute(MAIN_STATEMENT, (classname,))
-            # This can be quite big (tens of thousands), but in modern computer term is quite small
-            # and I need to make a follow on DB query per result.
-            results = cursor.fetchall()
+        cursor.execute(MAIN_STATEMENT, (classname,))
+        # This can be quite big (tens of thousands), but in modern computer term is quite small
+        # and I need to make a follow on DB query per result.
+        results = cursor.fetchall()
 
-            # The limiting amount here is how many concurrent connections the database can take
-            with Pool(processes=20) as pool:
-                pool.map(partial(process_row, era_output_directory_path, presence), results)
+        # The limiting amount here is how many concurrent connections the database can take
+        with Pool(processes=20) as pool:
+            pool.map(partial(process_row, era_output_directory_path, presence), results)
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Process agregate species data to per-species-file.")
+    parser.add_argument(
+        '--class',
+        type=str,
+        help="Species class name",
+        required=True,
+        dest="classname",
+    )
     parser.add_argument(
         '--output',
         type=str,
@@ -240,6 +247,7 @@ def main() -> None:
     args = parser.parse_args()
 
     extract_data_per_species(
+        args.classname,
         args.output_directory_path,
         args.target_projection
     )

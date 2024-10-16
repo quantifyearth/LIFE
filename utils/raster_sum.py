@@ -50,6 +50,8 @@ def build_k(
     output_filename: str,
     processes_count: int
 ) -> None:
+    result_dir, filename = os.path.split(output_filename)
+    os.makedirs(result_dir, exist_ok=True)
 
     files = [os.path.join(images_dir, x) for x in glob.glob("*.tif", root_dir=images_dir)]
     if not files:
@@ -86,7 +88,6 @@ def build_k(
                 time.sleep(1)
 
             # here we should have now a set of images in tempdir to merge
-            result_dir, filename = os.path.split(output_filename)
             single_worker = Process(target=worker, args=(
                 filename,
                 result_dir,
