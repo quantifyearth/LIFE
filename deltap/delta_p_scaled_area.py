@@ -22,7 +22,10 @@ def delta_p_scaled_area(
     area_restore = RasterLayer.layer_from_file(diff_area_map_path)
 
     for layer in per_taxa:
-        layer.set_window_for_union(area_restore.area)
+        try:
+            layer.set_window_for_union(area_restore.area)
+        except ValueError:
+            layer.set_window_for_intersection(area_restore.area)
 
     area_restore_filter = area_restore.numpy_apply(lambda c: np.where(c < SCALE, float('nan'), c)) / SCALE
 

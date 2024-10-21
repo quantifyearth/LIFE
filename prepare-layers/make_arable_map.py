@@ -19,7 +19,7 @@ IUCN_CODE_NATURAL = [
     "4", "4.1", "4.2", "4.3", "4.4", "4.5", "4.6", "4.7",
     "6",
     "8", "8.1", "8.2", "8.3",
-    "14.1", "14.2", "14.3", "14.4", "14.6", # urban removed
+    "14.1", "14.2", "14.3", "14.4", "14.6", # urban (14.5) removed
     #"16", # Not in crosswalk due to iucn_modlib
     "17",
     #"18", # Not in crosswalk due to iucn_modlib

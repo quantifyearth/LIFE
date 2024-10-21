@@ -91,11 +91,13 @@ def global_code_residents_pixel_ae(
             except FileNotFoundError:
                 print(f"Failed to open current layer {os.path.join(current_aohs_path, filename)}")
                 sys.exit()
+
             try:
                 scenario = open_layer_as_float64(os.path.join(scenario_aohs_path, filename))
             except FileNotFoundError:
-                print(f"Failed to open scenario layer {os.path.join(scenario_aohs_path, filename)}")
-                sys.exit()
+                # If there is a current but now scenario file it's because the species went extinct under the scenario
+                scenario = ConstantLayer(0.0)
+
             try:
                 historic_AOH = RasterLayer.layer_from_file(os.path.join(historic_aohs_path, filename)).sum()
             except FileNotFoundError as fnf:
@@ -106,7 +108,7 @@ def global_code_residents_pixel_ae(
                 print(f"Historic AoH for {taxid} is zero, aborting")
                 sys.exit()
 
-            print(f"current: {current.sum()}\nscenario: {scenario.sum()}\nhistoric: {historic_AOH.sum()}")
+            # print(f"current: {current.sum()}\nscenario: {scenario.sum()}\nhistoric: {historic_AOH.sum()}")
 
             layers = [current, scenario]
             union = RasterLayer.find_union(layers)
@@ -169,13 +171,13 @@ def global_code_residents_pixel_ae(
             try:
                 scenario_breeding = open_layer_as_float64(breeding_scenario_path)
             except FileNotFoundError as fnf:
-                print(f"Failed to open scenario breeding {breeding_scenario_path}")
-                sys.exit()
+                # If there is a current but now scenario file it's because the species went extinct under the scenario
+                scenario_breeding = ConstantLayer(0.0)
             try:
                 scenario_non_breeding = open_layer_as_float64(non_breeding_scenario_path)
             except FileNotFoundError as fnf:
-                print(f"Failed to open sceario non breeding{fnf.filename}")
-                sys.exit()
+                # If there is a current but now scenario file it's because the species went extinct under the scenario
+                scenario_non_breeding = ConstantLayer(0.0)
 
             layers = [current_breeding, current_non_breeding, scenario_breeding, scenario_non_breeding]
             union = RasterLayer.find_union(layers)

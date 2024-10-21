@@ -15,6 +15,8 @@ from postgis.psycopg import register
 from cleaning import tidy_data
 
 logger = logging.getLogger(__name__)
+logging.basicConfig()
+logger.setLevel(logging.DEBUG)
 
 SEASON_NAME = {
     1: "RESIDENT",
@@ -41,6 +43,7 @@ WHERE
 
 HABITATS_STATEMENT = """
 SELECT
+    assessment_habitats.supplementary_fields->>'season',
     STRING_AGG(habitat_lookup.code, '|') AS full_habitat_code,
     STRING_AGG(system_lookup.description->>'en', '|') AS systems
 FROM
@@ -56,6 +59,7 @@ WHERE
         assessment_habitats.supplementary_fields->>'suitability' IS NULL
         OR assessment_habitats.supplementary_fields->>'suitability' IN ('Suitable', 'Unknown')
     )
+GROUP BY (assessment_habitats.supplementary_fields->>'season')
 """
 
 GEOMETRY_STATEMENT = """
@@ -112,86 +116,133 @@ def process_row(
     id_no, assessment_id, elevation_lower, elevation_upper = row
 
     cursor.execute(HABITATS_STATEMENT, (assessment_id,))
-    habitats = cursor.fetchall()
+    raw_habitats = cursor.fetchall()
 
-    if len(habitats) == 0:
-        # No matching habitats
+    if len(raw_habitats) == 0:
+        logger.debug("Dropping %s as no habitats found", id_no)
         return
-    elif len(habitats) > 1:
-        raise ValueError("expected just one habitat value")
 
     # Clean up habitats to ensure they're unique (the system agg in the SQL statement might duplicate them)
-    raw_habitats, systems = habitats[0]
+    # In the database there are the following seasons:
+    #    breeding
+    #    Breeding Season
+    #    non-breeding
+    #    Non-Breeding Season
+    #    passage
+    #    Passage
+    #    resident
+    #    Resident
+    #    Seasonal Occurrence Unknown
+    #    unknown
+    #    null
 
-    if systems is None:
-        logging.warning("Skipping %s: no systems in DB", id_no)
-        return
-    if "Marine" in systems:
-        logging.info("Skipping %s: marine in systems", id_no)
-        return
+    habitats = {}
+    for season, habitat_values, systems in raw_habitats:
 
-    if raw_habitats is None:
-        logging.warning("Skipping %s: no habitats in DB", id_no)
-        return
-    habitats = list(set([x for x in raw_habitats.split('|')]))
+        if season in ['passage', 'Passage']:
+            continue
+        elif season in ['resident', 'Resident', 'Seasonal Occurrence Unknown', 'unknown', None]:
+            season_code = 1
+        elif season in ['breeding', 'Breeding Season']:
+            season_code = 2
+        elif season in ['non-breeding', 'Non-Breeding Season']:
+            season_code = 3
+        else:
+            raise ValueError(f"Unexpected season {season} for {id_no}")
+
+        if systems is None:
+            logger.debug("Dropping %s: no systems in DB", id_no)
+            continue
+        if "Marine" in systems:
+            logger.debug("Dropping %s: marine in systems", id_no)
+            return
+
+        if habitat_values is None:
+            logger.debug("Dropping %s: no habitats in DB", id_no)
+            continue
+        habitat_set = set([x for x in habitat_values.split('|')])
+        if len(habitat_set) == 0:
+            logger.debug("Dropping %s: No habitats", id_no)
+            continue
+        if any([x.startswith('7') for x in habitat_set]):
+            logger.debug("Dropping %s: Habitat 7 in habitat list", id_no)
+            return
+
+        try:
+            habitats[season_code] |= habitat_set
+        except KeyError:
+            habitats[season_code] = habitat_set
+
     if len(habitats) == 0:
-        logging.info("Skipping %s: No habitats", id_no)
         return
-    if any([x.startswith('7') for x in habitats]):
-        logging.info("Skipping %s: Habitat 7 in habitat list", id_no)
-        return
-
-    full_habitat_code = '|'.join(habitats)
 
     cursor.execute(GEOMETRY_STATEMENT, (assessment_id, presence))
     geometries_data = cursor.fetchall()
     if len(geometries_data) == 0:
-        logging.info("Skipping %s: no habitats", id_no)
+        logger.info("Dropping %s: no habitats", id_no)
         return
     geometries = {}
     for season, geometry in geometries_data:
         geometries[season] = shapely.normalize(shapely.from_wkb(geometry.to_ewkb()))
 
-    seasons = list(geometries.keys())
-    if seasons == [1]:
+    seasons = set(geometries.keys()) | set(habitats.keys())
+
+    if seasons == {1}:
         # Resident only
         gdf = gpd.GeoDataFrame(
-            [[id_no, SEASON_NAME[1], int(elevation_lower) if elevation_lower else None, int(elevation_upper) if elevation_upper else None, full_habitat_code, geometries[1]]],
+            [[id_no, SEASON_NAME[1], int(elevation_lower) if elevation_lower else None, int(elevation_upper) if elevation_upper else None, '|'.join(list(habitats[1])), geometries[1]]],
             columns=["id_no", "season", "elevation_lower", "elevation_upper", "full_habitat_code", "geometry"],
             crs='epsg:4326'
         )
         tidy_reproject_save(gdf, output_directory_path)
     else:
         # Breeding and non-breeding
-        if 1 in seasons and 2 in seasons:
-            season_2 = shapely.union(geometries[2], geometries[1])
-        elif 2 in seasons:
-            season_2 = geometries[2]
-        elif 1 in seasons:
-            season_2 = geometries[1]
-        else:
-            logging.info("Skipping %s: no geometries for breeding", id_no)
+        # Sometimes in the IUCN database there's only data on one season (e.g., AVES 103838515), and so
+        # we need to do another sanity check to make sure both have useful data before we write out
+
+        geometries_seasons_breeding = set(geometries.keys())
+        geometries_seasons_breeding.discard(3)
+        geometries_breeding = [geometries[x] for x in geometries_seasons_breeding]
+        if len(geometries_breeding) == 0:
+            logger.debug("Dropping %s as no breeding geometries", id_no)
+            return
+        geometry_breeding = shapely.union_all(geometries_breeding)
+
+        geometries_seasons_non_breeding = set(geometries.keys())
+        geometries_seasons_non_breeding.discard(2)
+        geometries_non_breeding = [geometries[x] for x in geometries_seasons_non_breeding]
+        if len(geometries_non_breeding) == 0:
+            logger.debug("Dropping %s as no non-breeding geometries", id_no)
+            return
+        geometry_non_breeding = shapely.union_all(geometries_non_breeding)
+
+        habitats_seasons_breeding = set(habitats.keys())
+        habitats_seasons_breeding.discard(3)
+        habitats_breeding = set()
+        for season in habitats_seasons_breeding:
+            habitats_breeding |= habitats[season]
+        if len(habitats_breeding) == 0:
+            logger.debug("Dropping %s as no breeding habitats", id_no)
             return
 
-        if 1 in seasons and 3 in seasons:
-            season_3 = shapely.union(geometries[3], geometries[1])
-        elif 3 in seasons:
-            season_3 = geometries[3]
-        elif 1 in seasons:
-            season_3 = geometries[1]
-        else:
-            logging.info("Skipping %s: no geometries for non-breeding", id_no)
+        habitats_seasons_non_breeding = set(habitats.keys())
+        habitats_seasons_non_breeding.discard(2)
+        habitats_non_breeding = set()
+        for season in habitats_seasons_non_breeding:
+            habitats_non_breeding |= habitats[season]
+        if len(habitats_non_breeding) == 0:
+            logger.debug("Dropping %s as no non-breeding habitats", id_no)
             return
 
         gdf = gpd.GeoDataFrame(
-            [[id_no, SEASON_NAME[2], int(elevation_lower) if elevation_lower else None, int(elevation_upper) if elevation_upper else None, full_habitat_code, season_2]],
+            [[id_no, SEASON_NAME[2], int(elevation_lower) if elevation_lower else None, int(elevation_upper) if elevation_upper else None, '|'.join(list(habitats_breeding)), geometry_breeding]],
             columns=["id_no", "season", "elevation_lower", "elevation_upper", "full_habitat_code", "geometry"],
             crs='epsg:4326'
         )
         tidy_reproject_save(gdf, output_directory_path)
 
         gdf = gpd.GeoDataFrame(
-            [[id_no, SEASON_NAME[3], int(elevation_lower) if elevation_lower else None, int(elevation_upper) if elevation_upper else None, full_habitat_code, season_3]],
+            [[id_no, SEASON_NAME[3], int(elevation_lower) if elevation_lower else None, int(elevation_upper) if elevation_upper else None, '|'.join(list(habitats_non_breeding)), geometry_non_breeding]],
             columns=["id_no", "season", "elevation_lower", "elevation_upper", "full_habitat_code", "geometry"],
             crs='epsg:4326',
         )
@@ -215,6 +266,8 @@ def extract_data_per_species(
         # This can be quite big (tens of thousands), but in modern computer term is quite small
         # and I need to make a follow on DB query per result.
         results = cursor.fetchall()
+
+        logger.info("Found %d species in class %s in scenarion %s", len(results), classname, era)
 
         # The limiting amount here is how many concurrent connections the database can take
         with Pool(processes=20) as pool:
