@@ -8,6 +8,7 @@ import pandas as pd
 
 def species_generator(
     input_dir: str,
+    data_dir: str,
     output_csv_path: str
 ):
     taxas = os.listdir(input_dir)
@@ -19,12 +20,12 @@ def species_generator(
         for scenario in ['arable', 'restore']:
             for species in speciess:
                 res.append([
-                    os.path.join('/home/mwd24/lifetest/species-info/', taxa, 'current', species),
-                    os.path.join('/home/mwd24/lifetest/aohs/', 'current', taxa),
-                    os.path.join('/home/mwd24/lifetest/aohs/', scenario, taxa),
-                    os.path.join('/home/mwd24/lifetest/aohs/', 'pnv', taxa),
+                    os.path.join(data_dir, 'species-info', taxa, 'current', species),
+                    os.path.join(data_dir, 'aohs', 'current', taxa),
+                    os.path.join(data_dir, 'aohs', scenario, taxa),
+                    os.path.join(data_dir, 'aohs', 'pnv', taxa),
                     '0.25',
-                    os.path.join('/home/mwd24/lifetest/deltap/', scenario, '0.25', taxa),
+                    os.path.join(data_dir, 'deltap', scenario, '0.25', taxa),
                 ])
 
 
@@ -49,15 +50,22 @@ def main() -> None:
         dest="input_dir"
     )
     parser.add_argument(
+        '--datadir',
+        type=str,
+        help="directory for results",
+        required=True,
+        dest="data_dir",
+    )
+    parser.add_argument(
         '--output',
         type=str,
         help="name of output file for csv",
-        required=False,
+        required=True,
         dest="output"
     )
     args = parser.parse_args()
 
-    species_generator(args.input_dir, args.output)
+    species_generator(args.input_dir, args.data_dir, args.output)
 
 if __name__ == "__main__":
     main()

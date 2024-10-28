@@ -8,6 +8,7 @@ import pandas as pd
 
 def species_generator(
     input_dir: str,
+    data_dir: str,
     output_csv_path: str
 ):
     taxas = os.listdir(input_dir)
@@ -20,13 +21,13 @@ def species_generator(
             speciess = os.listdir(taxa_path)
             for species in speciess:
                 res.append([
-                    os.path.join('/home/mwd24/lifetest/habitat_maps', scenario),
-                    '/home/mwd24/lifetest/elevation-max-1k.tif',
-                    '/home/mwd24/lifetest/elevation-min-1k.tif',
-                    '/home/mwd24/lifetest/area-per-pixel.tif',
-                    '/home/mwd24/lifetest/crosswalk.csv',
-                    os.path.join('/home/mwd24/lifetest/species-info/', taxa, source, species),
-                    os.path.join('/home/mwd24/lifetest/aohs/', scenario, taxa)
+                    os.path.join(os.path.join(data_dir, "habitat_maps"), scenario),
+                    os.path.join(data_dir, "elevation-max-1k.tif"),
+                    os.path.join(data_dir, "elevation-min-1k.tif"),
+                    os.path.join(data_dir, "area-per-pixel.tif"),
+                    os.path.join(data_dir, "crosswalk.csv"),
+                    os.path.join(os.path.join(data_dir, "species-info/"), taxa, source, species),
+                    os.path.join(os.path.join(data_dir, "aohs/"), scenario, taxa)
                 ])
 
 
@@ -52,15 +53,22 @@ def main() -> None:
         dest="input_dir"
     )
     parser.add_argument(
+        '--datadir',
+        type=str,
+        help="directory for results",
+        required=True,
+        dest="data_dir",
+    )
+    parser.add_argument(
         '--output',
         type=str,
         help="name of output file for csv",
-        required=False,
+        required=True,
         dest="output"
     )
     args = parser.parse_args()
 
-    species_generator(args.input_dir, args.output)
+    species_generator(args.input_dir, args.data_dir, args.output)
 
 if __name__ == "__main__":
     main()

@@ -24,6 +24,15 @@ SEASON_NAME = {
     3: "NONBREEDING",
 }
 
+COLUMNS = [
+    "id_no",
+    "season",
+    "elevation_lower",
+    "elevation_upper",
+    "full_habitat_code",
+    "geometry"
+]
+
 MAIN_STATEMENT = """
 SELECT
     assessments.sis_taxon_id as id_no,
@@ -70,10 +79,11 @@ FROM
     assessments
     LEFT JOIN assessment_ranges On assessment_ranges.assessment_id = assessments.id
 WHERE
+    -- LIFE doesn't use passage (season 4), and treats unknown (season 5) as resident.
     assessments.id = %s
     AND assessment_ranges.presence IN %s
     AND assessment_ranges.origin IN (1, 2, 6)
-    AND assessment_ranges.seasonal IN (1, 2, 3)
+    AND assessment_ranges.seasonal IN (1, 2, 3, 5)
 """
 
 DB_HOST = os.getenv("DB_HOST")
@@ -183,7 +193,20 @@ def process_row(
         return
     geometries = {}
     for season, geometry in geometries_data:
-        geometries[season] = shapely.normalize(shapely.from_wkb(geometry.to_ewkb()))
+        grange = shapely.normalize(shapely.from_wkb(geometry.to_ewkb()))
+
+        match season:
+            case 1 | 5:
+                season_code = 1
+            case 2 | 3:
+                season_code = season
+            case _:
+                raise ValueError(f"Unexpected season: {season}")
+
+        try:
+            geometries[season_code] = shapely.union(geometries[season_code], grange)
+        except KeyError:
+            geometries[season_code] = grange
 
     seasons = set(geometries.keys()) | set(habitats.keys())
 
@@ -191,7 +214,7 @@ def process_row(
         # Resident only
         gdf = gpd.GeoDataFrame(
             [[id_no, SEASON_NAME[1], int(elevation_lower) if elevation_lower else None, int(elevation_upper) if elevation_upper else None, '|'.join(list(habitats[1])), geometries[1]]],
-            columns=["id_no", "season", "elevation_lower", "elevation_upper", "full_habitat_code", "geometry"],
+            columns=COLUMNS,
             crs='epsg:4326'
         )
         tidy_reproject_save(gdf, output_directory_path)
@@ -236,18 +259,17 @@ def process_row(
 
         gdf = gpd.GeoDataFrame(
             [[id_no, SEASON_NAME[2], int(elevation_lower) if elevation_lower else None, int(elevation_upper) if elevation_upper else None, '|'.join(list(habitats_breeding)), geometry_breeding]],
-            columns=["id_no", "season", "elevation_lower", "elevation_upper", "full_habitat_code", "geometry"],
+            columns=COLUMNS,
             crs='epsg:4326'
         )
         tidy_reproject_save(gdf, output_directory_path)
 
         gdf = gpd.GeoDataFrame(
             [[id_no, SEASON_NAME[3], int(elevation_lower) if elevation_lower else None, int(elevation_upper) if elevation_upper else None, '|'.join(list(habitats_non_breeding)), geometry_non_breeding]],
-            columns=["id_no", "season", "elevation_lower", "elevation_upper", "full_habitat_code", "geometry"],
+            columns=COLUMNS,
             crs='epsg:4326',
         )
         tidy_reproject_save(gdf, output_directory_path)
-
 
 
 def extract_data_per_species(

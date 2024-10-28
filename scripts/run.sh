@@ -76,14 +76,14 @@ python3 ./prepare-species/extract_species_psql.py --class MAMMALIA --output ${DA
 python3 ./prepare-species/extract_species_psql.py --class REPTILIA --output ${DATADIR}/species-info/REPTILIA/ --projection "EPSG:4326"
 
 # Generate the batch job input CSVs
-python3 ./utils/speciesgenerator.py --input ${DATADIR}/species-info --output ${DATADIR}/aohbatch.csv
-python3 ./utils/persistencegenerator.py --input ${DATADIR}/species-info --output ${DATADIR}/persistencebatch.csv
+python3 ./utils/speciesgenerator.py --input ${DATADIR}/species-info --datadir ${DATADIR} --output ${DATADIR}/aohbatch.csv
+python3 ./utils/persistencegenerator.py --input ${DATADIR}/species-info --datadir ${DATADIR} --output ${DATADIR}/persistencebatch.csv
 
 # Calculate all the AoHs
-littlejohn -j 200 -c ${DATADIR}/arable_aohbatch.csv ${PWD}/venv/bin/python3 -- ./aoh-calculator/aohcalc.py
+littlejohn -j 200 -c ${DATADIR}/aohbatch.csv ${PWD}/venv/bin/python3 -- ./aoh-calculator/aohcalc.py --force-habitat
 
 # Calculate the per species Delta P values
-littlejohn -j 150 -c ${DATADIR}/arable_persistencebatch.csv ${PWD}/venv/bin/python3 --  ./deltap/global_code_residents_pixel_AE_128.py
+littlejohn -j 200 -c ${DATADIR}/persistencebatch.csv ${PWD}/venv/bin/python3 --  ./deltap/global_code_residents_pixel_AE_128.py
 
 # Per scenario per taxa sum the delta Ps
 python3 ./utils/raster_sum.py --rasters_directory ${DATADIR}/deltap/arable/0.25/REPTILIA/ --output ${DATADIR}/deltap_sum/arable/0.25/REPTILIA.tif
