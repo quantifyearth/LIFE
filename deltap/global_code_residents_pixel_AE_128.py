@@ -1,8 +1,10 @@
 import argparse
 import math
 import os
+import shutil
 import sys
 from enum import Enum
+from tempfile import TemporaryDirectory
 
 import geopandas as gpd
 import numpy as np
@@ -126,8 +128,12 @@ def global_code_residents_pixel_ae(
             old_persistence = calc_persistence_value(current_AOH, historic_AOH, z_exponent_func_float)
             print(old_persistence)
             calc = new_p_layer - ConstantLayer(old_persistence)
-            delta_p = RasterLayer.empty_raster_layer_like(new_p_layer, filename=os.path.join(output_folder, filename))
-            calc.save(delta_p)
+
+            with TemporaryDirectory() as tmpdir:
+                tmpfile = os.path.join(tmpdir, filename)
+                with RasterLayer.empty_raster_layer_like(new_p_layer, filename=tmpfile) as delta_p:
+                    calc.save(delta_p)
+                shutil.move(tmpfile, os.path.join(output_folder, filename))
 
         case Season.NONBREEDING:
             nonbreeding_filename = f"{taxid}_{Season.NONBREEDING.name}.tif"
@@ -202,8 +208,11 @@ def global_code_residents_pixel_ae(
 
             delta_p_layer = new_p_layer - ConstantLayer(old_persistence)
 
-            output = RasterLayer.empty_raster_layer_like(new_p_breeding, filename=os.path.join(output_folder, nonbreeding_filename))
-            delta_p_layer.save(output)
+            with TemporaryDirectory() as tmpdir:
+                tmpfile = os.path.join(tmpdir, nonbreeding_filename)
+                with RasterLayer.empty_raster_layer_like(new_p_breeding, filename=tmpfile) as output:
+                    delta_p_layer.save(output)
+                shutil.move(tmpfile, os.path.join(output_folder, nonbreeding_filename))
 
         case Season.BREEDING:
             pass # covered by the nonbreeding case

@@ -172,7 +172,6 @@ def process_row(
             continue
         habitat_set = set([x for x in habitat_values.split('|')])
         if len(habitat_set) == 0:
-            logger.debug("Dropping %s: No habitats", id_no)
             continue
         if any([x.startswith('7') for x in habitat_set]):
             logger.debug("Dropping %s: Habitat 7 in habitat list", id_no)
@@ -184,12 +183,13 @@ def process_row(
             habitats[season_code] = habitat_set
 
     if len(habitats) == 0:
+        logger.debug("Dropping %s: No habitats", id_no)
         return
 
     cursor.execute(GEOMETRY_STATEMENT, (assessment_id, presence))
     geometries_data = cursor.fetchall()
     if len(geometries_data) == 0:
-        logger.info("Dropping %s: no habitats", id_no)
+        logger.info("Dropping %s: no geometries", id_no)
         return
     geometries = {}
     for season, geometry in geometries_data:

@@ -19,14 +19,15 @@ def species_generator(
         speciess = os.listdir(taxa_path)
         for scenario in ['arable', 'restore']:
             for species in speciess:
-                res.append([
-                    os.path.join(data_dir, 'species-info', taxa, 'current', species),
-                    os.path.join(data_dir, 'aohs', 'current', taxa),
-                    os.path.join(data_dir, 'aohs', scenario, taxa),
-                    os.path.join(data_dir, 'aohs', 'pnv', taxa),
-                    '0.25',
-                    os.path.join(data_dir, 'deltap', scenario, '0.25', taxa),
-                ])
+                for curve in ["0.1", "0.25", "0.5", "1.0", "gompertz"]:
+                    res.append([
+                        os.path.join(data_dir, 'species-info', taxa, 'current', species),
+                        os.path.join(data_dir, 'aohs', 'current', taxa),
+                        os.path.join(data_dir, 'aohs', scenario, taxa),
+                        os.path.join(data_dir, 'aohs', 'pnv', taxa),
+                        curve,
+                        os.path.join(data_dir, 'deltap', scenario, curve, taxa),
+                    ])
 
 
     df = pd.DataFrame(res, columns=[

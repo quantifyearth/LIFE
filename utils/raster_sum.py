@@ -55,8 +55,7 @@ def build_k(
 
     files = [os.path.join(images_dir, x) for x in glob.glob("*.tif", root_dir=images_dir)]
     if not files:
-        print(f"No files in {images_dir}, aborting", file=sys.stderr)
-        sys.exit(-1)
+        sys.exit(f"No files in {images_dir}, aborting")
 
     with tempfile.TemporaryDirectory() as tempdir:
         with Manager() as manager:

@@ -7,8 +7,21 @@
 # https://github.com/quantifyearth/reclaimer - used to download inputs from Zenodo directly
 # https://github.com/quantifyearth/littlejohn - used to run batch jobs in parallel
 
-
 set -e
+
+if [ -z "${DATADIR}" ]; then
+    echo "Please specify $DATADIR"
+    exit 1
+fi
+
+
+if [ -z "${VIRTUAL_ENV}" ]; then
+    echo "Please specify run in a virtualenv"
+    exit 1
+fi
+
+# declare -a CURVES=("0.1" "0.25" "0.5" "1.0" "gompertz")
+declare -a CURVES=("1.0" "gompertz")
 
 # Get habitat layer and prepare for use
 reclaimer zenodo --zenodo_id 4058819 \
@@ -35,7 +48,6 @@ python3 ./prepare-layers/make_area_map.py --scale 0.016666666666667 --output ${D
 
 # Generate the arable scenario map
 python3 ./prepare-layers/make_arable_map.py --current ${DATADIR}/habitat/current_raw.tif \
-                                  --crosswalk ${DATADIR}/crosswalk.csv \
                                   --output ${DATADIR}/habitat/arable.tif
 
 python3 ./aoh-calculator/habitat_process.py --habitat ${DATADIR}/habitat/arable.tif \
@@ -43,10 +55,10 @@ python3 ./aoh-calculator/habitat_process.py --habitat ${DATADIR}/habitat/arable.
                                             --output ${DATADIR}/habitat_maps/arable/
 
 python3 ./prepare-layers/make_diff_map.py --current ${DATADIR}/habitat/current_raw.tif \
-                                          --scenario ${DATADIR}/habitat/restore.tif \
+                                          --scenario ${DATADIR}/habitat/arable.tif \
                                           --area ${DATADIR}/area-per-pixel.tif \
                                           --scale 0.016666666666667 \
-                                          --output ${DATADIR}/habitat/restore_diff_area.tif
+                                          --output ${DATADIR}/habitat/arable_diff_area.tif
 
 # Generate the restore map
 python3 ./prepare-layers/make_restore_map.py --pnv ${DATADIR}/habitat/pnv_raw.tif \
@@ -59,10 +71,10 @@ python3 ./aoh-calculator/habitat_process.py --habitat ${DATADIR}/habitat/restore
                                              --output ${DATADIR}/habitat_maps/restore/
 
 python3 ./prepare-layers/make_diff_map.py --current ${DATADIR}/habitat/current_raw.tif \
-                                          --scenario ${DATADIR}/habitat/arable.tif \
+                                          --scenario ${DATADIR}/habitat/restore.tif \
                                           --area ${DATADIR}/area-per-pixel.tif \
                                           --scale 0.016666666666667 \
-                                          --output ${DATADIR}/habitat/arable_diff_area.tif
+                                          --output ${DATADIR}/habitat/restore_diff_area.tif
 
 # Fetch and prepare the elevation layers
 reclaimer zenodo --zenodo_id 5719984  --filename dem-100m-esri54017.tif --output ${DATADIR}/elevation.tif
@@ -80,27 +92,30 @@ python3 ./utils/speciesgenerator.py --input ${DATADIR}/species-info --datadir ${
 python3 ./utils/persistencegenerator.py --input ${DATADIR}/species-info --datadir ${DATADIR} --output ${DATADIR}/persistencebatch.csv
 
 # Calculate all the AoHs
-littlejohn -j 200 -c ${DATADIR}/aohbatch.csv ${PWD}/venv/bin/python3 -- ./aoh-calculator/aohcalc.py --force-habitat
+littlejohn -j 200 -o ${DATADIR}/aohbatch.log -c ${DATADIR}/aohbatch.csv ${VIRTUAL_ENV}/bin/python3 -- ./aoh-calculator/aohcalc.py --force-habitat
 
 # Calculate the per species Delta P values
-littlejohn -j 200 -c ${DATADIR}/persistencebatch.csv ${PWD}/venv/bin/python3 --  ./deltap/global_code_residents_pixel_AE_128.py
+littlejohn -j 200 -o ${DATADIR}/persistencebatch.log -c ${DATADIR}/persistencebatch.csv ${VIRTUAL_ENV}/bin/python3 --  ./deltap/global_code_residents_pixel_AE_128.py
 
-# Per scenario per taxa sum the delta Ps
-python3 ./utils/raster_sum.py --rasters_directory ${DATADIR}/deltap/arable/0.25/REPTILIA/ --output ${DATADIR}/deltap_sum/arable/0.25/REPTILIA.tif
-python3 ./utils/raster_sum.py --rasters_directory ${DATADIR}/deltap/arable/0.25/AVES/ --output ${DATADIR}/deltap_sum/arable/0.25/AVES.tif
-python3 ./utils/raster_sum.py --rasters_directory ${DATADIR}/deltap/arable/0.25/MAMMALIA/ --output ${DATADIR}/deltap_sum/arable/0.25/MAMMALIA.tif
-python3 ./utils/raster_sum.py --rasters_directory ${DATADIR}/deltap/arable/0.25/AMPHIBIA/ --output ${DATADIR}/deltap_sum/arable/0.25/AMPHIBIA.tif
+for CURVE in "${CURVES[@]}"
+do
+    # Per scenario per taxa sum the delta Ps
+    python3 ./utils/raster_sum.py --rasters_directory ${DATADIR}/deltap/arable/${CURVE}/REPTILIA/ --output ${DATADIR}/deltap_sum/arable/${CURVE}/REPTILIA.tif
+    python3 ./utils/raster_sum.py --rasters_directory ${DATADIR}/deltap/arable/${CURVE}/AVES/ --output ${DATADIR}/deltap_sum/arable/${CURVE}/AVES.tif
+    python3 ./utils/raster_sum.py --rasters_directory ${DATADIR}/deltap/arable/${CURVE}/MAMMALIA/ --output ${DATADIR}/deltap_sum/arable/${CURVE}/MAMMALIA.tif
+    python3 ./utils/raster_sum.py --rasters_directory ${DATADIR}/deltap/arable/${CURVE}/AMPHIBIA/ --output ${DATADIR}/deltap_sum/arable/${CURVE}/AMPHIBIA.tif
 
-python3 ./utils/raster_sum.py --rasters_directory ${DATADIR}/deltap/restore/0.25/MAMMALIA/ --output ${DATADIR}/deltap_sum/restore/0.25/MAMMALIA.tif
-python3 ./utils/raster_sum.py --rasters_directory ${DATADIR}/deltap/restore/0.25/AMPHIBIA/ --output ${DATADIR}/deltap_sum/restore/0.25/AMPHIBIA.tif
-python3 ./utils/raster_sum.py --rasters_directory ${DATADIR}/deltap/restore/0.25/REPTILIA/ --output ${DATADIR}/deltap_sum/restore/0.25/REPTILIA.tif
-python3 ./utils/raster_sum.py --rasters_directory ${DATADIR}/deltap/restore/0.25/AVES/ --output ${DATADIR}/deltap_sum/restore/0.25/AVES.tif
+    python3 ./utils/raster_sum.py --rasters_directory ${DATADIR}/deltap/restore/${CURVE}/MAMMALIA/ --output ${DATADIR}/deltap_sum/restore/${CURVE}/MAMMALIA.tif
+    python3 ./utils/raster_sum.py --rasters_directory ${DATADIR}/deltap/restore/${CURVE}/AMPHIBIA/ --output ${DATADIR}/deltap_sum/restore/${CURVE}/AMPHIBIA.tif
+    python3 ./utils/raster_sum.py --rasters_directory ${DATADIR}/deltap/restore/${CURVE}/REPTILIA/ --output ${DATADIR}/deltap_sum/restore/${CURVE}/REPTILIA.tif
+    python3 ./utils/raster_sum.py --rasters_directory ${DATADIR}/deltap/restore/${CURVE}/AVES/ --output ${DATADIR}/deltap_sum/restore/${CURVE}/AVES.tif
 
-# Generate final map
-python3 ./deltap/delta_p_scaled_area.py --input ${DATADIR}/deltap_sum/restore/0.25/ \
-                                    --diffmap ${DATADIR}/habitat/restore_diff_area.tif \
-                                    --output ${DATADIR}/deltap_final/scaled_restore_0.25.tif
+    # Generate final map
+    python3 ./deltap/delta_p_scaled_area.py --input ${DATADIR}/deltap_sum/restore/${CURVE}/ \
+                                        --diffmap ${DATADIR}/habitat/restore_diff_area.tif \
+                                        --output ${DATADIR}/deltap_final/scaled_restore_${CURVE}.tif
 
-python3 ./deltap/delta_p_scaled_area.py --input ${DATADIR}/deltap_sum/arable/0.25/ \
-                                    --diffmap ${DATADIR}/habitat/arable_diff_area.tif \
-                                    --output ${DATADIR}/deltap_final/scaled_arable_0.25.tif
+    python3 ./deltap/delta_p_scaled_area.py --input ${DATADIR}/deltap_sum/arable/${CURVE}/ \
+                                        --diffmap ${DATADIR}/habitat/arable_diff_area.tif \
+                                        --output ${DATADIR}/deltap_final/scaled_arable_${CURVE}.tif
+done

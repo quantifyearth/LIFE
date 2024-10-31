@@ -1,5 +1,6 @@
 import argparse
 import os
+import sys
 from glob import glob
 
 import numpy as np
@@ -19,6 +20,9 @@ def delta_p_scaled_area(
         RasterLayer.layer_from_file(os.path.join(input_path, x))
         for x in sorted(glob("*.tif", root_dir=input_path))
     ]
+    if not per_taxa:
+        sys.exit(f"Failed to find any per-taxa maps in {input_path}")
+
     area_restore = RasterLayer.layer_from_file(diff_area_map_path)
 
     for layer in per_taxa:
