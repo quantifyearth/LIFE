@@ -24,7 +24,11 @@ def filter(chunks):
 def regression_plot(
     a_path: str,
     b_path: str,
+    output_path: str,
 ) -> None:
+    output_dir, _ = os.path.split(output_path)
+    os.makedirs(output_dir, exist_ok=True)
+
     with RasterLayer.layer_from_file(a_path) as a_layer:
         with RasterLayer.layer_from_file(b_path) as b_layer:
             if a_layer.pixel_scale != b_layer.pixel_scale:
@@ -47,10 +51,9 @@ def regression_plot(
 
     fig, ax = plt.subplots()
     ax.scatter(x=a_filtered, y=b_filtered, marker=",")
-    # ax.plot(a_data, m * a_data + b)
     plt.xlabel(os.path.basename(a_path))
     plt.ylabel(os.path.basename(b_path))
-    plt.savefig("test.png")
+    plt.savefig(output_path)
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generates a scatter plot comparing two GeoTIFFs.")
@@ -68,11 +71,19 @@ def main() -> None:
         dest="b",
         help="Second GeoTIFF"
     )
+    parser.add_argument(
+        "--output",
+        type=str,
+        required=True,
+        dest="output",
+        help="Destination png file for results."
+    )
     args = parser.parse_args()
 
     regression_plot(
         args.a,
         args.b,
+        args.output,
     )
 
 if __name__ == "__main__":

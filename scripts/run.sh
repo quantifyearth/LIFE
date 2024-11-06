@@ -20,8 +20,7 @@ if [ -z "${VIRTUAL_ENV}" ]; then
     exit 1
 fi
 
-# declare -a CURVES=("0.1" "0.25" "0.5" "1.0" "gompertz")
-declare -a CURVES=("1.0" "gompertz")
+declare -a CURVES=("0.1" "0.25" "0.5" "1.0" "gompertz")
 
 # Get habitat layer and prepare for use
 reclaimer zenodo --zenodo_id 4058819 \
@@ -118,4 +117,18 @@ do
     python3 ./deltap/delta_p_scaled_area.py --input ${DATADIR}/deltap_sum/arable/${CURVE}/ \
                                         --diffmap ${DATADIR}/habitat/arable_diff_area.tif \
                                         --output ${DATADIR}/deltap_final/scaled_arable_${CURVE}.tif
+done
+
+for CURVE in "${CURVES[@]}"
+do
+    if [ "${CURVE}" == "0.25" ]; then
+        continue
+    fi
+    python3 ./utils/regression_plot.py --a ${DATADIR}/deltap_final/summed_scaled_arable_${CURVE}.tif \
+                                    --b ${DATADIR}/deltap_final/summed_scaled_arable_0.25.tif \
+                                    --output {$DATADIR}/analysis/arable_0.25_vs_${CURVE}.png
+
+    python3 ./utils/regression_plot.py --a ${DATADIR}/deltap_final/summed_scaled_restore_${CURVE}.tif \
+                                    --b ${DATADIR}/deltap_final/summed_scaled_restore_0.25.tif \
+                                    --output {$DATADIR}/analysis/restore_0.25_vs_${CURVE}.png
 done
