@@ -132,3 +132,5 @@ do
                                     --b ${DATADIR}/deltap_final/summed_scaled_restore_0.25.tif \
                                     --output {$DATADIR}/analysis/restore_0.25_vs_${CURVE}.png
 done
+
+python3 ./predictors/species-richness.py --aohs_folder ${DATADIR}/aohs/current/ --output ${DATADIR}/predictors/species_richness.tif
