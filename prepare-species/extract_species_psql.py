@@ -53,6 +53,7 @@ WHERE
 HABITATS_STATEMENT = """
 SELECT
     assessment_habitats.supplementary_fields->>'season',
+    assessment_habitats.supplementary_fields->>'majorImportance',
     STRING_AGG(habitat_lookup.code, '|') AS full_habitat_code,
     STRING_AGG(system_lookup.description->>'en', '|') AS systems
 FROM
@@ -68,7 +69,7 @@ WHERE
         assessment_habitats.supplementary_fields->>'suitability' IS NULL
         OR assessment_habitats.supplementary_fields->>'suitability' IN ('Suitable', 'Unknown')
     )
-GROUP BY (assessment_habitats.supplementary_fields->>'season')
+GROUP BY (assessment_habitats.supplementary_fields->>'season', assessment_habitats.supplementary_fields->>'majorImportance')
 """
 
 GEOMETRY_STATEMENT = """
@@ -147,7 +148,7 @@ def process_row(
     #    null
 
     habitats = {}
-    for season, habitat_values, systems in raw_habitats:
+    for season, major_importance, habitat_values, systems in raw_habitats:
 
         if season in ['passage', 'Passage']:
             continue
@@ -173,7 +174,7 @@ def process_row(
         habitat_set = set([x for x in habitat_values.split('|')])
         if len(habitat_set) == 0:
             continue
-        if any([x.startswith('7') for x in habitat_set]):
+        if any([x.startswith('7') for x in habitat_set]) and major_importance == 'Yes':
             logger.debug("Dropping %s: Habitat 7 in habitat list", id_no)
             return
 
@@ -213,7 +214,13 @@ def process_row(
     if seasons == {1}:
         # Resident only
         gdf = gpd.GeoDataFrame(
-            [[id_no, SEASON_NAME[1], int(elevation_lower) if elevation_lower else None, int(elevation_upper) if elevation_upper else None, '|'.join(list(habitats[1])), geometries[1]]],
+            [[
+                id_no,
+                SEASON_NAME[1],
+                int(elevation_lower) if elevation_lower else None, int(elevation_upper) if elevation_upper else None,
+                '|'.join(list(habitats[1])),
+                geometries[1]
+            ]],
             columns=COLUMNS,
             crs='epsg:4326'
         )
@@ -258,14 +265,25 @@ def process_row(
             return
 
         gdf = gpd.GeoDataFrame(
-            [[id_no, SEASON_NAME[2], int(elevation_lower) if elevation_lower else None, int(elevation_upper) if elevation_upper else None, '|'.join(list(habitats_breeding)), geometry_breeding]],
+            [[
+                id_no,
+                SEASON_NAME[2],
+                int(elevation_lower) if elevation_lower else None, int(elevation_upper) if elevation_upper else None,
+                '|'.join(list(habitats_breeding)),
+                geometry_breeding
+            ]],
             columns=COLUMNS,
             crs='epsg:4326'
         )
         tidy_reproject_save(gdf, output_directory_path)
 
         gdf = gpd.GeoDataFrame(
-            [[id_no, SEASON_NAME[3], int(elevation_lower) if elevation_lower else None, int(elevation_upper) if elevation_upper else None, '|'.join(list(habitats_non_breeding)), geometry_non_breeding]],
+            [[
+                id_no, SEASON_NAME[3],
+                int(elevation_lower) if elevation_lower else None, int(elevation_upper) if elevation_upper else None,
+                '|'.join(list(habitats_non_breeding)),
+                geometry_non_breeding
+            ]],
             columns=COLUMNS,
             crs='epsg:4326',
         )
