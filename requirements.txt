@@ -5,12 +5,14 @@ pandas
 psutil
 scipy
 pyproj
+psycopg2
+postgis
 scikit-image
 rasterio
 requests
 alive-progress
 
-gdal[numpy]
+gdal[numpy]==3.9.3
 
 git+https://github.com/carboncredits/iucn_modlib.git
 git+https://github.com/carboncredits/yirgacheffe
