@@ -133,4 +133,4 @@ do
                                     --output {$DATADIR}/analysis/restore_0.25_vs_${CURVE}.png
 done
 
-python3 ./predictors/species-richness.py --aohs_folder ${DATADIR}/aohs/current/ --output ${DATADIR}/predictors/species_richness.tif
+python3 ./predictors/species_richness.py --aohs_folder ${DATADIR}/aohs/current/ --output ${DATADIR}/predictors/species_richness.tif
