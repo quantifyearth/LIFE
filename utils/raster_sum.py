@@ -24,36 +24,40 @@ def worker(
         if path is None:
             break
 
-        partial_raster = RasterLayer.layer_from_file(path)
+        with RasterLayer.layer_from_file(path) as partial_raster:
+            if merged_result is None:
+                merged_result = RasterLayer.empty_raster_layer_like(partial_raster, datatype=gdal.GDT_Float64)
+                cleaned_raster = partial_raster.numpy_apply(lambda chunk: np.nan_to_num(chunk, copy=False, nan=0.0))
+                cleaned_raster.save(merged_result)
+            else:
+                merged_result.reset_window()
 
-        if merged_result is None:
-            merged_result = RasterLayer.empty_raster_layer_like(partial_raster, datatype=gdal.GDT_Float64)
-            cleaned_raster = partial_raster.numpy_apply(lambda chunk: np.nan_to_num(chunk, copy=False, nan=0.0))
-            cleaned_raster.save(merged_result)
-        else:
-            merged_result.reset_window()
+                union = YirgacheffeLayer.find_union([merged_result, partial_raster])
+                merged_result.set_window_for_union(union)
+                partial_raster.set_window_for_union(union)
 
-            union = YirgacheffeLayer.find_union([merged_result, partial_raster])
-            merged_result.set_window_for_union(union)
-            partial_raster.set_window_for_union(union)
+                calc = merged_result + (
+                    partial_raster.numpy_apply(lambda chunk: np.nan_to_num(chunk, copy=False, nan=0.0))
+                )
+                temp = RasterLayer.empty_raster_layer_like(merged_result, datatype=gdal.GDT_Float64)
+                calc.save(temp)
+                merged_result = temp
 
-            calc = merged_result + (partial_raster.numpy_apply(lambda chunk: np.nan_to_num(chunk, copy=False, nan=0.0)))
-            temp = RasterLayer.empty_raster_layer_like(merged_result, datatype=gdal.GDT_Float64)
-            calc.save(temp)
-            merged_result = temp
-
-    final = RasterLayer.empty_raster_layer_like(merged_result, filename=output_tif)
-    assert merged_result is not None
-    merged_result.save(final)
-    del merged_result
+    if merged_result:
+        final = RasterLayer.empty_raster_layer_like(merged_result, filename=output_tif)
+        merged_result.save(final)
 
 def build_k(
     images_dir: str,
     output_filename: str,
     processes_count: int
 ) -> None:
+    result_dir, filename = os.path.split(output_filename)
+    os.makedirs(result_dir, exist_ok=True)
 
     files = [os.path.join(images_dir, x) for x in glob.glob("*.tif", root_dir=images_dir)]
+    if not files:
+        sys.exit(f"No files in {images_dir}, aborting")
 
     with tempfile.TemporaryDirectory() as tempdir:
         with Manager() as manager:
@@ -85,7 +89,6 @@ def build_k(
                 time.sleep(1)
 
             # here we should have now a set of images in tempdir to merge
-            result_dir, filename = os.path.split(output_filename)
             single_worker = Process(target=worker, args=(
                 filename,
                 result_dir,
