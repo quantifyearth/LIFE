@@ -16,9 +16,9 @@ GOMPERTZ_B = -14.5
 GOMPERTZ_ALPHA = 1
 
 class Season(Enum):
-   RESIDENT = 1
-   BREEDING = 2
-   NONBREEDING = 3
+    RESIDENT = 1
+    BREEDING = 2
+    NONBREEDING = 3
 
 def gen_gompertz(x: float) -> float:
     return math.exp(-math.exp(GOMPERTZ_A + (GOMPERTZ_B * (x ** GOMPERTZ_ALPHA))))
@@ -36,22 +36,28 @@ def open_layer_as_float64(filename: str) -> RasterLayer:
     layer.save(layer64)
     return layer64
 
-def calc_persistence_value(current_AOH: float, historic_AOH: float, exponent_func) -> float:
-    sp_P = exponent_func(current_AOH / historic_AOH)
-    sp_P_fix = np.where(sp_P > 1, 1, sp_P)
-    return sp_P_fix
+def calc_persistence_value(current_aoh: float, historic_aoh: float, exponent_func) -> float:
+    sp_p = exponent_func(current_aoh / historic_aoh)
+    sp_p_fix = np.where(sp_p > 1, 1, sp_p)
+    return sp_p_fix
 
-def process_delta_p(current: RasterLayer, scenario: RasterLayer, current_AOH: float, historic_AOH: float, exponent_func_raster) -> RasterLayer:
-    # In theory we could recalc current_AOH, but given we already have it don't duplicate work
+def process_delta_p(
+    current: RasterLayer,
+    scenario: RasterLayer,
+    current_aoh: float,
+    historic_aoh: float,
+    exponent_func_raster
+) -> RasterLayer:
+    # In theory we could recalc current_aoh, but given we already have it don't duplicate work
     # New section added in: Calculating for rasters rather than csv's
-    const_layer = ConstantLayer(current_AOH) # MAKE A LAYER WITH THE SAME PROPERTIES AS CURRENT AOH RASTER BUT FILLED WITH THE CURRENT AOH
-    calc_1 = (const_layer - current) + scenario # FIRST CALCULATION : NEW AOH
-    new_AOH = RasterLayer.empty_raster_layer_like(current)
-    calc_1.save(new_AOH)
+    const_layer = ConstantLayer(current_aoh)
+    calc_1 = (const_layer - current) + scenario
+    new_aoh = RasterLayer.empty_raster_layer_like(current)
+    calc_1.save(new_aoh)
 
-    calc_2 = (new_AOH / historic_AOH).numpy_apply(exponent_func_raster)
+    calc_2 = (new_aoh / historic_aoh).numpy_apply(exponent_func_raster)
     calc_2 = calc_2.numpy_apply(lambda chunk: np.where(chunk > 1, 1, chunk))
-    new_p = RasterLayer.empty_raster_layer_like(new_AOH)
+    new_p = RasterLayer.empty_raster_layer_like(new_aoh)
     calc_2.save(new_p)
 
     return new_p
@@ -101,16 +107,16 @@ def global_code_residents_pixel_ae(
                 scenario = ConstantLayer(0.0)
 
             try:
-                historic_AOH = RasterLayer.layer_from_file(os.path.join(historic_aohs_path, filename)).sum()
-            except FileNotFoundError as fnf:
+                historic_aoh = RasterLayer.layer_from_file(os.path.join(historic_aohs_path, filename)).sum()
+            except FileNotFoundError:
                 print(f"Failed to open historic layer {os.path.join(historic_aohs_path, filename)}")
                 sys.exit()
 
-            if historic_AOH == 0.0:
+            if historic_aoh == 0.0:
                 print(f"Historic AoH for {taxid} is zero, aborting")
                 sys.exit()
 
-            # print(f"current: {current.sum()}\nscenario: {scenario.sum()}\nhistoric: {historic_AOH.sum()}")
+            # print(f"current: {current.sum()}\nscenario: {scenario.sum()}\nhistoric: {historic_aoh.sum()}")
 
             layers = [current, scenario]
             union = RasterLayer.find_union(layers)
@@ -120,12 +126,12 @@ def global_code_residents_pixel_ae(
                 except ValueError:
                     pass
 
-            current_AOH = current.sum()
+            current_aoh = current.sum()
 
-            new_p_layer = process_delta_p(current, scenario, current_AOH, historic_AOH, z_exponent_func_raster)
+            new_p_layer = process_delta_p(current, scenario, current_aoh, historic_aoh, z_exponent_func_raster)
             print(new_p_layer.sum())
 
-            old_persistence = calc_persistence_value(current_AOH, historic_AOH, z_exponent_func_float)
+            old_persistence = calc_persistence_value(current_aoh, historic_aoh, z_exponent_func_float)
             print(old_persistence)
             calc = new_p_layer - ConstantLayer(old_persistence)
 
@@ -140,16 +146,18 @@ def global_code_residents_pixel_ae(
             breeding_filename = f"{taxid}_{Season.BREEDING.name}.tif"
 
             try:
-                historic_AOH_breeding = RasterLayer.layer_from_file(os.path.join(historic_aohs_path, breeding_filename)).sum()
-                if historic_AOH_breeding == 0.0:
+                with RasterLayer.layer_from_file(os.path.join(historic_aohs_path, breeding_filename)) as aoh:
+                    historic_aoh_breeding = aoh.sum()
+                if historic_aoh_breeding == 0.0:
                     print(f"Historic AoH breeding for {taxid} is zero, aborting")
                     sys.exit()
             except FileNotFoundError:
                 print(f"Historic AoH for breeding {taxid} not found, aborting")
                 sys.exit()
             try:
-                historic_AOH_non_breeding = RasterLayer.layer_from_file(os.path.join(historic_aohs_path, nonbreeding_filename)).sum()
-                if historic_AOH_non_breeding == 0.0:
+                with RasterLayer.layer_from_file(os.path.join(historic_aohs_path, nonbreeding_filename)) as aoh:
+                    historic_aoh_non_breeding = aoh.sum()
+                if historic_aoh_non_breeding == 0.0:
                     print(f"Historic AoH for non breeding {taxid} is zero, aborting")
                     sys.exit()
             except FileNotFoundError:
@@ -166,22 +174,22 @@ def global_code_residents_pixel_ae(
 
             try:
                 current_breeding = open_layer_as_float64(os.path.join(current_aohs_path, breeding_filename))
-            except FileNotFoundError as fnf:
+            except FileNotFoundError:
                 print(f"Failed to open current breeding {os.path.join(current_aohs_path, breeding_filename)}")
                 sys.exit()
             try:
                 current_non_breeding = open_layer_as_float64(os.path.join(current_aohs_path, nonbreeding_filename))
-            except FileNotFoundError as fnf:
+            except FileNotFoundError:
                 print(f"Failed to open current non breeding {os.path.join(current_aohs_path, nonbreeding_filename)}")
                 sys.exit()
             try:
                 scenario_breeding = open_layer_as_float64(breeding_scenario_path)
-            except FileNotFoundError as fnf:
+            except FileNotFoundError:
                 # If there is a current but now scenario file it's because the species went extinct under the scenario
                 scenario_breeding = ConstantLayer(0.0)
             try:
                 scenario_non_breeding = open_layer_as_float64(non_breeding_scenario_path)
-            except FileNotFoundError as fnf:
+            except FileNotFoundError:
                 # If there is a current but now scenario file it's because the species went extinct under the scenario
                 scenario_non_breeding = ConstantLayer(0.0)
 
@@ -193,17 +201,36 @@ def global_code_residents_pixel_ae(
                 except ValueError:
                     pass
 
-            current_AOH_breeding = current_breeding.sum()
-            persistence_breeding = calc_persistence_value(current_AOH_breeding, historic_AOH_breeding, z_exponent_func_float)
+            current_aoh_breeding = current_breeding.sum()
+            persistence_breeding = calc_persistence_value(
+                current_aoh_breeding,
+                historic_aoh_breeding,
+                z_exponent_func_float
+            )
 
-            current_AOH_non_breeding = current_non_breeding.sum()
-            persistence_non_breeding = calc_persistence_value(current_AOH_non_breeding, historic_AOH_non_breeding, z_exponent_func_float)
+            current_aoh_non_breeding = current_non_breeding.sum()
+            persistence_non_breeding = calc_persistence_value(
+                current_aoh_non_breeding,
+                historic_aoh_non_breeding,
+                z_exponent_func_float
+            )
 
             old_persistence = (persistence_breeding ** 0.5) * (persistence_non_breeding ** 0.5)
 
-            new_p_breeding = process_delta_p(current_breeding, scenario_breeding, current_AOH_breeding, historic_AOH_breeding, z_exponent_func_raster)
-            new_p_non_breeding = process_delta_p(current_non_breeding, scenario_non_breeding, current_AOH_non_breeding, historic_AOH_non_breeding, z_exponent_func_raster)
-
+            new_p_breeding = process_delta_p(
+                current_breeding,
+                scenario_breeding,
+                current_aoh_breeding,
+                historic_aoh_breeding,
+                z_exponent_func_raster
+            )
+            new_p_non_breeding = process_delta_p(
+                current_non_breeding,
+                scenario_non_breeding,
+                current_aoh_non_breeding,
+                historic_aoh_non_breeding,
+                z_exponent_func_raster
+            )
             new_p_layer = (new_p_breeding ** 0.5) * (new_p_non_breeding ** 0.5)
 
             delta_p_layer = new_p_layer - ConstantLayer(old_persistence)

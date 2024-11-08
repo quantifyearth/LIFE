@@ -1,4 +1,4 @@
-import argparse 
+import argparse
 import itertools
 import sys
 from typing import Dict, Optional

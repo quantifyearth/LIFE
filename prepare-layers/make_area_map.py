@@ -41,7 +41,7 @@ def make_area_map(
     output_path: str
 ) -> None:
     pixels = [0,] * math.floor(90.0 / pixel_scale)
-    for i in range(len(pixels)):
+    for i in range(len(pixels)):  # pylint: disable=C0200
         y = (i + 0.5) * pixel_scale
         area = area_of_pixel(pixel_scale, y)
         pixels[i] = area
@@ -60,7 +60,7 @@ def make_area_map(
         gdal.GDT_Float32,
         filename=output_path
     ) as res:
-        res._dataset.WriteArray(allpixels, 0, 0)
+        res._dataset.WriteArray(allpixels, 0, 0)  # pylint: disable=W0212
 
 
 def main() -> None:

@@ -94,7 +94,7 @@ python3 ./utils/persistencegenerator.py --input ${DATADIR}/species-info --datadi
 littlejohn -j 200 -o ${DATADIR}/aohbatch.log -c ${DATADIR}/aohbatch.csv ${VIRTUAL_ENV}/bin/python3 -- ./aoh-calculator/aohcalc.py --force-habitat
 
 # Calculate the per species Delta P values
-littlejohn -j 200 -o ${DATADIR}/persistencebatch.log -c ${DATADIR}/persistencebatch.csv ${VIRTUAL_ENV}/bin/python3 --  ./deltap/global_code_residents_pixel_AE_128.py
+littlejohn -j 200 -o ${DATADIR}/persistencebatch.log -c ${DATADIR}/persistencebatch.csv ${VIRTUAL_ENV}/bin/python3 --  ./deltap/global_code_residents_pixel.py
 
 for CURVE in "${CURVES[@]}"
 do

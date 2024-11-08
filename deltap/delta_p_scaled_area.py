@@ -40,10 +40,9 @@ def delta_p_scaled_area(
         nodata=float('nan'),
         bands=len(per_taxa)
     ) as result:
-        for idx in range(len(per_taxa)):
-            inlayer = per_taxa[idx]
+        for idx, inlayer in enumerate(per_taxa):
             _, name = os.path.split(inlayer.name)
-            result._dataset.GetRasterBand(idx+1).SetDescription(name[:-4])
+            result._dataset.GetRasterBand(idx+1).SetDescription(name[:-4])  # pylint: disable=W0212
             scaled_filtered_layer = inlayer.numpy_apply(
                 lambda il, af: np.where(af != 0, (il / af) * -1.0, float('nan')),
                 area_restore_filter

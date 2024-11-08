@@ -313,21 +313,21 @@ For each species we use the AoH data to calculate the likelihood of extinction u
 
 
 ```shark-run:deltap
-python3 ./deltap/global_code_residents_pixel_AE_128.py --speciesdata /data/species-info/%{TAXA}/current/* \
-                                                       --current_path /data/aohs/current/%{TAXA}/ \
-                                                       --scenario_path /data/aohs/restore/%{TAXA}/ \
-                                                       --historic_path /data/aohs/pnv/%{TAXA}/ \
-                                                       --z %{CURVE} \
-                                                       --output_path /data/deltap/restore/%{CURVE}/%{TAXA}/
+python3 ./deltap/global_code_residents_pixel.py --speciesdata /data/species-info/%{TAXA}/current/* \
+                                                --current_path /data/aohs/current/%{TAXA}/ \
+                                                --scenario_path /data/aohs/restore/%{TAXA}/ \
+                                                --historic_path /data/aohs/pnv/%{TAXA}/ \
+                                                --z %{CURVE} \
+                                                --output_path /data/deltap/restore/%{CURVE}/%{TAXA}/
 
 python3 ./utils/raster_sum.py --rasters_directory /data/deltap/restore/%{CURVE}/%{TAXA}/ --output /data/deltap_sum/restore/%{CURVE}/%{TAXA}.tif
 
-python3 ./deltap/global_code_residents_pixel_AE_128.py --speciesdata /data/species-info/%{TAXA}/current/* \
-                                                       --current_path /data/aohs/current/%{TAXA}/ \
-                                                       --scenario_path /data/aohs/arable/%{TAXA}/ \
-                                                       --historic_path /data/aohs/pnv/%{TAXA}/ \
-                                                       --z %{CURVE} \
-                                                       --output_path /data/deltap/arable/%{CURVE}/%{TAXA}/
+python3 ./deltap/global_code_residents_pixel --speciesdata /data/species-info/%{TAXA}/current/* \
+                                             --current_path /data/aohs/current/%{TAXA}/ \
+                                             --scenario_path /data/aohs/arable/%{TAXA}/ \
+                                             --historic_path /data/aohs/pnv/%{TAXA}/ \
+                                             --z %{CURVE} \
+                                             --output_path /data/deltap/arable/%{CURVE}/%{TAXA}/
 
 python3 ./utils/raster_sum.py --rasters_directory /data/deltap/arable/%{CURVE}/%{TAXA}/ --output /data/deltap_sum/arable/%{CURVE}/%{TAXA}.tif
 ```

@@ -9,7 +9,6 @@ import tempfile
 import time
 from glob import glob
 from multiprocessing import Manager, Process, Queue, cpu_count
-from typing import Set
 
 import numpy as np
 from osgeo import gdal
@@ -39,12 +38,16 @@ def stage_1_worker(
 
                 aoh1 = rasters[0].sum()
                 if aoh1 > 0.0:
-                    season1 = rasters[0].numpy_apply(lambda a: np.nan_to_num(np.log(np.where(a == 0, np.nan, a) / aoh1)))
+                    season1 = rasters[0].numpy_apply(
+                        lambda a: np.nan_to_num(np.log(np.where(a == 0, np.nan, a) / aoh1))
+                    )
                 else:
                     season1 = None
                 aoh2 = rasters[1].sum()
                 if aoh2 > 0.0:
-                    season2 = rasters[1].numpy_apply(lambda a: np.nan_to_num(np.log(np.where(a == 0, np.nan, a) / aoh2)))
+                    season2 = rasters[1].numpy_apply(
+                        lambda a: np.nan_to_num(np.log(np.where(a == 0, np.nan, a) / aoh2))
+                    )
                 else:
                     season2 = None
 
@@ -63,7 +66,9 @@ def stage_1_worker(
             case 1:
                 aoh = rasters[0].sum()
                 if aoh > 0.0:
-                    partial = rasters[0].numpy_apply(lambda a: np.nan_to_num(np.log(np.where(a == 0, np.nan, a) / aoh)))
+                    partial = rasters[0].numpy_apply(
+                        lambda a: np.nan_to_num(np.log(np.where(a == 0, np.nan, a) / aoh))
+                    )
                 else:
                     continue
             case _:
@@ -111,7 +116,9 @@ def stage_2_worker(
         with RasterLayer.layer_from_file(path) as partial_raster:
             if merged_result is None:
                 merged_result = RasterLayer.empty_raster_layer_like(partial_raster)
-                cleaned_raster = partial_raster.numpy_apply(lambda chunk: np.nan_to_num(chunk, copy=False, nan=0.0))
+                cleaned_raster = partial_raster.numpy_apply(
+                    lambda chunk: np.nan_to_num(chunk, copy=False, nan=0.0)
+                )
                 cleaned_raster.save(merged_result)
             else:
                 merged_result.reset_window()
@@ -129,7 +136,7 @@ def stage_2_worker(
         final = RasterLayer.empty_raster_layer_like(merged_result, filename=output_tif)
         merged_result.save(final)
 
-def species_richness(
+def endemism(
     aohs_dir: str,
     species_richness_path: str,
     output_path: str,
@@ -162,8 +169,8 @@ def species_richness(
             for worker_process in workers:
                 worker_process.start()
 
-            for species in species_rasters:
-                source_queue.put(species_rasters[species])
+            for raster in species_rasters.items():
+                source_queue.put(raster)
             for _ in range(len(workers)):
                 source_queue.put(None)
 
@@ -212,7 +219,11 @@ def species_richness(
 
                 cleaned_species_richness = species_richness.numpy_apply(lambda a: np.where(a > 0, a, np.nan))
 
-                with RasterLayer.empty_raster_layer_like(summed_proportion, filename=output_path, nodata=np.nan) as result:
+                with RasterLayer.empty_raster_layer_like(
+                    summed_proportion,
+                    filename=output_path,
+                    nodata=np.nan
+                ) as result:
                     calc = summed_proportion.numpy_apply(lambda a, b: np.exp(a / b), cleaned_species_richness)
                     calc.parallel_save(result)
 
@@ -250,7 +261,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    species_richness(
+    endemism(
         args.aohs,
         args.species_richness,
         args.output,

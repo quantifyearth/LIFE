@@ -1,7 +1,7 @@
-import argparse 
+import argparse
 import itertools
 from typing import Dict, Optional
-from multiprocessing import Pool, cpu_count, set_start_method
+from multiprocessing import set_start_method
 
 import pandas as pd
 from alive_progress import alive_bar
@@ -37,11 +37,11 @@ def make_current_map(
 
         map_preserve_code = list(itertools.chain.from_iterable([crosswalk[x] for x in IUCN_CODE_ARTIFICAL]))
 
-        def filter(a):
-            import numpy as np
+        def filter_data(a):
+            import numpy as np  # pylint: disable=C0415
             return np.where(np.isin(a, map_preserve_code), a, (np.floor(a / 100) * 100).astype(int))
 
-        calc = current.numpy_apply(filter)
+        calc = current.numpy_apply(filter_data)
 
         with RasterLayer.empty_raster_layer_like(
             current,

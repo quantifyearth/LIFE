@@ -5,7 +5,6 @@ import tempfile
 import time
 from glob import glob
 from multiprocessing import Manager, Process, Queue, cpu_count
-from typing import Set
 
 import numpy as np
 from osgeo import gdal
@@ -92,7 +91,9 @@ def stage_2_worker(
                 merged_result.set_window_for_union(union)
                 partial_raster.set_window_for_union(union)
 
-                calc = merged_result + (partial_raster.numpy_apply(lambda chunk: np.nan_to_num(chunk, copy=False, nan=0.0)))
+                calc = merged_result + (partial_raster.numpy_apply(
+                    lambda chunk: np.nan_to_num(chunk, copy=False, nan=0.0))
+                )
                 temp = RasterLayer.empty_raster_layer_like(merged_result)
                 calc.save(temp)
                 merged_result = temp
@@ -133,8 +134,8 @@ def species_richness(
             for worker_process in workers:
                 worker_process.start()
 
-            for species in species_rasters:
-                source_queue.put(species_rasters[species])
+            for raster in species_rasters.items():
+                source_queue.put(raster)
             for _ in range(len(workers)):
                 source_queue.put(None)
 

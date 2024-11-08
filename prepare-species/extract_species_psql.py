@@ -1,4 +1,5 @@
 import argparse
+import importlib
 import logging
 import os
 from functools import partial
@@ -12,7 +13,7 @@ import psycopg2
 import shapely
 from postgis.psycopg import register
 
-from cleaning import tidy_data
+aoh_cleaning = importlib.import_module("aoh-calculator.cleaning")
 
 logger = logging.getLogger(__name__)
 logging.basicConfig()
@@ -105,7 +106,7 @@ def tidy_reproject_save(
     target_crs = src_crs #pyproj.CRS.from_string(target_projection)
 
     graw = gdf.loc[0].copy()
-    grow = tidy_data(graw)
+    grow = aoh_cleaning.tidy_data(graw)
     os.makedirs(output_directory_path, exist_ok=True)
     output_path = os.path.join(output_directory_path, f"{grow.id_no}_{grow.season}.geojson")
     res = gpd.GeoDataFrame(grow.to_frame().transpose(), crs=src_crs, geometry="geometry")
@@ -150,16 +151,17 @@ def process_row(
     habitats = {}
     for season, major_importance, habitat_values, systems in raw_habitats:
 
-        if season in ['passage', 'Passage']:
-            continue
-        elif season in ['resident', 'Resident', 'Seasonal Occurrence Unknown', 'unknown', None]:
-            season_code = 1
-        elif season in ['breeding', 'Breeding Season']:
-            season_code = 2
-        elif season in ['non-breeding', 'Non-Breeding Season']:
-            season_code = 3
-        else:
-            raise ValueError(f"Unexpected season {season} for {id_no}")
+        match season:
+            case 'passage', 'Passage':
+                continue
+            case 'resident', 'Resident', 'Seasonal Occurrence Unknown', 'unknown', None:
+                season_code = 1
+            case 'breeding', 'Breeding Season':
+                season_code = 2
+            case 'non-breeding', 'Non-Breeding Season':
+                season_code = 3
+            case _:
+                raise ValueError(f"Unexpected season {season} for {id_no}")
 
         if systems is None:
             logger.debug("Dropping %s: no systems in DB", id_no)
@@ -171,10 +173,10 @@ def process_row(
         if habitat_values is None:
             logger.debug("Dropping %s: no habitats in DB", id_no)
             continue
-        habitat_set = set([x for x in habitat_values.split('|')])
+        habitat_set = set(habitat_values.split('|'))
         if len(habitat_set) == 0:
             continue
-        if any([x.startswith('7') for x in habitat_set]) and major_importance == 'Yes':
+        if any(x.startswith('7') for x in habitat_set) and major_importance == 'Yes':
             logger.debug("Dropping %s: Habitat 7 in habitat list", id_no)
             return
 
@@ -293,7 +295,7 @@ def process_row(
 def extract_data_per_species(
     classname: str,
     output_directory_path: str,
-    target_projection: Optional[str],
+    _target_projection: Optional[str],
 ) -> None:
 
     connection = psycopg2.connect(DB_CONFIG)
