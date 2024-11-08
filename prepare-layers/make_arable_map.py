@@ -1,5 +1,5 @@
-import argparse 
-from typing import Dict, List, Optional
+import argparse
+from typing import Optional
 
 import numpy as np
 from alive_progress import alive_bar

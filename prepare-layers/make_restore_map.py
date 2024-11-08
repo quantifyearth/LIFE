@@ -42,7 +42,7 @@ def make_restore_map(
             try:
                 intersection = RasterLayer.find_intersection([pnv, current])
             except ValueError:
-                print(f"Layers do not match in pixel scale or projection:\n", file=sys.stderr)
+                print("Layers do not match in pixel scale or projection:\n", file=sys.stderr)
                 print(f"\t{pnv_path}: {pnv.pixel_scale}, {pnv.projection}")
                 print(f"\t{current_path}: {current.pixel_scale}, {current.projection}")
                 sys.exit(-1)

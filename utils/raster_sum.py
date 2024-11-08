@@ -36,7 +36,9 @@ def worker(
                 merged_result.set_window_for_union(union)
                 partial_raster.set_window_for_union(union)
 
-                calc = merged_result + (partial_raster.numpy_apply(lambda chunk: np.nan_to_num(chunk, copy=False, nan=0.0)))
+                calc = merged_result + (
+                    partial_raster.numpy_apply(lambda chunk: np.nan_to_num(chunk, copy=False, nan=0.0))
+                )
                 temp = RasterLayer.empty_raster_layer_like(merged_result, datatype=gdal.GDT_Float64)
                 calc.save(temp)
                 merged_result = temp

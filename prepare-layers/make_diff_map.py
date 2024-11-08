@@ -2,7 +2,7 @@ import argparse
 import os
 import shutil
 import tempfile
-from typing import Dict, List, Optional
+from typing import Optional
 
 from osgeo import gdal
 from alive_progress import alive_bar

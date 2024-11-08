@@ -34,12 +34,20 @@ def delta_p_scaled_area(
     area_restore_filter = area_restore.numpy_apply(lambda c: np.where(c < SCALE, float('nan'), c)) / SCALE
 
     per_taxa_path = os.path.join(dirname, f"per_taxa_{basename}")
-    with RasterLayer.empty_raster_layer_like(area_restore, filename=per_taxa_path, nodata=float('nan'), bands=len(per_taxa)) as result:
+    with RasterLayer.empty_raster_layer_like(
+        area_restore,
+        filename=per_taxa_path,
+        nodata=float('nan'),
+        bands=len(per_taxa)
+    ) as result:
         for idx in range(len(per_taxa)):
             inlayer = per_taxa[idx]
             _, name = os.path.split(inlayer.name)
             result._dataset.GetRasterBand(idx+1).SetDescription(name[:-4])
-            scaled_filtered_layer = inlayer.numpy_apply(lambda il, af: np.where(af != 0, (il / af) * -1.0, float('nan')), area_restore_filter)
+            scaled_filtered_layer = inlayer.numpy_apply(
+                lambda il, af: np.where(af != 0, (il / af) * -1.0, float('nan')),
+                area_restore_filter
+            )
             scaled_filtered_layer.parallel_save(result, band=idx + 1)
 
     summed_output_path = os.path.join(dirname, f"summed_{basename}")
@@ -47,7 +55,10 @@ def delta_p_scaled_area(
         summed_layer = per_taxa[0]
         for layer in per_taxa[1:]:
             summed_layer = summed_layer + layer
-        scaled_filtered_layer = summed_layer.numpy_apply(lambda il, af: np.where(af != 0, (il / af) * -1.0, float('nan')), area_restore_filter)
+        scaled_filtered_layer = summed_layer.numpy_apply(
+            lambda il, af: np.where(af != 0, (il / af) * -1.0, float('nan')),
+            area_restore_filter
+        )
         scaled_filtered_layer.parallel_save(result)
 
 def main() -> None:

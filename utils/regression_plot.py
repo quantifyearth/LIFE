@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from yirgacheffe.layers import RasterLayer
 
-def filter(chunks):
+def filter_data(chunks):
     a_chunk, b_chunk = chunks
     res = []
     for a, b in zip(a_chunk, b_chunk):
@@ -42,14 +42,14 @@ def regression_plot(
             b_pixels = b_layer.read_array(0, 0, b_layer.window.xsize, b_layer.window.ysize)
 
     with Pool(processes=cpu_count() // 2) as pool:
-        filtered_chunk_pairs = pool.map(filter, zip(a_pixels, b_pixels))
+        filtered_chunk_pairs = pool.map(filter_data, zip(a_pixels, b_pixels))
         filtered_pairs = functools.reduce(operator.iconcat, filtered_chunk_pairs, [])
         sampled_pairs = random.sample(filtered_pairs, len(filtered_pairs) // 10)
         a_filtered, b_filtered = zip(*sampled_pairs)
 
     # m, b = np.polyfit(a_filtered, b_filtered, 1)
 
-    fig, ax = plt.subplots()
+    _fig, ax = plt.subplots()
     ax.scatter(x=a_filtered, y=b_filtered, marker=",")
     plt.xlabel(os.path.basename(a_path))
     plt.ylabel(os.path.basename(b_path))

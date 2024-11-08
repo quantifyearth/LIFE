@@ -54,7 +54,6 @@ def stage_1_worker(
             else:
                 union = RasterLayer.find_union([merged_result, rasters[0]])
                 rasters[0].set_window_for_union(union)
-                partial = rasters[0].numpy_apply(lambda chunk: np.where(chunk == 0.0, 0, 1))
             merged_result.set_window_for_union(union)
 
 

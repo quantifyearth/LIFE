@@ -2,7 +2,6 @@
 
 import argparse
 import os
-from typing import List, Set
 
 import pandas as pd
 
