@@ -150,7 +150,7 @@ def endemism(
 
     species_rasters = {}
     for raster_path in aohs:
-        speciesid = os.path.splitext(os.path.basename(raster_path))[0]
+        speciesid = os.path.basename(raster_path).split('_')[0]
         full_path = os.path.join(aohs_dir, raster_path)
         try:
             species_rasters[speciesid].add(full_path)

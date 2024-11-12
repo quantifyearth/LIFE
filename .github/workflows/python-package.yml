@@ -36,4 +36,7 @@ jobs:
           python -m pip install -r requirements.txt
       - name: Lint with pylint
         run: |
-          python3 -m pylint deltap predictors prepare-layers prepare-species
+          python3 -m pylint deltap predictors prepare_layers prepare_species
+      - name: Tests
+        run: |
+          python3 -m pytest ./tests

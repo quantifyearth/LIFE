@@ -4,7 +4,7 @@ import logging
 import os
 from functools import partial
 from multiprocessing import Pool
-from typing import Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 # import pyshark # pylint: disable=W0611
 import geopandas as gpd
@@ -113,26 +113,12 @@ def tidy_reproject_save(
     res_projected = res.to_crs(target_crs)
     res_projected.to_file(output_path, driver="GeoJSON")
 
+def process_habitats(
+    habitats_data: List,
+) -> Dict:
 
-def process_row(
-    output_directory_path: str,
-    presence: Tuple[int],
-    row: Tuple,
-) -> None:
-
-    connection = psycopg2.connect(DB_CONFIG)
-    register(connection)
-    cursor = connection.cursor()
-
-
-    id_no, assessment_id, elevation_lower, elevation_upper = row
-
-    cursor.execute(HABITATS_STATEMENT, (assessment_id,))
-    raw_habitats = cursor.fetchall()
-
-    if len(raw_habitats) == 0:
-        logger.debug("Dropping %s as no habitats found", id_no)
-        return
+    if len(habitats_data) == 0:
+        raise ValueError("No habitats found")
 
     # Clean up habitats to ensure they're unique (the system agg in the SQL statement might duplicate them)
     # In the database there are the following seasons:
@@ -148,52 +134,53 @@ def process_row(
     #    unknown
     #    null
 
-    habitats = {}
-    for season, major_importance, habitat_values, systems in raw_habitats:
+    habitats : Dict[Set[str]] = {}
+    major_habitats_lvl_1 : Dict[Set[int]] = {}
+    for season, major_importance, habitat_values, systems in habitats_data:
 
         match season:
-            case 'passage', 'Passage':
+            case 'passage' | 'Passage':
                 continue
-            case 'resident', 'Resident', 'Seasonal Occurrence Unknown', 'unknown', None:
+            case 'resident' | 'Resident' | 'Seasonal Occurrence Unknown' | 'unknown' | None:
                 season_code = 1
-            case 'breeding', 'Breeding Season':
+            case 'breeding' | 'Breeding Season':
                 season_code = 2
-            case 'non-breeding', 'Non-Breeding Season':
+            case 'non-breeding' | 'Non-Breeding Season':
                 season_code = 3
             case _:
-                raise ValueError(f"Unexpected season {season} for {id_no}")
+                raise ValueError(f"Unexpected season {season}")
 
         if systems is None:
-            logger.debug("Dropping %s: no systems in DB", id_no)
             continue
         if "Marine" in systems:
-            logger.debug("Dropping %s: marine in systems", id_no)
-            return
+            raise ValueError("Marine in systems")
 
         if habitat_values is None:
-            logger.debug("Dropping %s: no habitats in DB", id_no)
             continue
         habitat_set = set(habitat_values.split('|'))
         if len(habitat_set) == 0:
             continue
-        if any(x.startswith('7') for x in habitat_set) and major_importance == 'Yes':
-            logger.debug("Dropping %s: Habitat 7 in habitat list", id_no)
-            return
 
-        try:
-            habitats[season_code] |= habitat_set
-        except KeyError:
-            habitats[season_code] = habitat_set
+        habitats[season_code] = habitat_set | habitats.get(season_code, set())
 
+        if major_importance == 'Yes':
+            major_habitats_lvl_1[season_code] = \
+                {int(float(x)) for x in habitat_set} | major_habitats_lvl_1.get(season_code, set())
+
+    # habitat based filtering
     if len(habitats) == 0:
-        logger.debug("Dropping %s: No habitats", id_no)
-        return
+        raise ValueError("No filtered habitats")
 
-    cursor.execute(GEOMETRY_STATEMENT, (assessment_id, presence))
-    geometries_data = cursor.fetchall()
+    for _, major_habitats in major_habitats_lvl_1.items():
+        if any((x == 7) for x in major_habitats):
+            raise ValueError("Habitat 7 in major importance habitat list")
+
+    return habitats
+
+def process_geometries(geometries_data: List[Tuple[int,shapely.Geometry]]) -> Dict[int,shapely.Geometry]:
     if len(geometries_data) == 0:
-        logger.info("Dropping %s: no geometries", id_no)
-        return
+        raise ValueError("No geometries")
+
     geometries = {}
     for season, geometry in geometries_data:
         grange = shapely.normalize(shapely.from_wkb(geometry.to_ewkb()))
@@ -210,6 +197,36 @@ def process_row(
             geometries[season_code] = shapely.union(geometries[season_code], grange)
         except KeyError:
             geometries[season_code] = grange
+
+    return geometries
+
+def process_row(
+    output_directory_path: str,
+    presence: Tuple[int],
+    row: Tuple,
+) -> None:
+
+    connection = psycopg2.connect(DB_CONFIG)
+    register(connection)
+    cursor = connection.cursor()
+
+    id_no, assessment_id, elevation_lower, elevation_upper = row
+
+    cursor.execute(HABITATS_STATEMENT, (assessment_id,))
+    habitats_data = cursor.fetchall()
+    try:
+        habitats = process_habitats(habitats_data)
+    except ValueError as exc:
+        logging.info("Dropping %s: %s", id_no, str(exc))
+        return
+
+    cursor.execute(GEOMETRY_STATEMENT, (assessment_id, presence))
+    geometries_data = cursor.fetchall()
+    try:
+        geometries = process_geometries(geometries_data)
+    except ValueError as exc:
+        logging.info("Dropping %s: %s", id_no, str(exc))
+        return
 
     seasons = set(geometries.keys()) | set(habitats.keys())
 

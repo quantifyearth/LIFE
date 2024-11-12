@@ -43,24 +43,24 @@ python3 ./aoh-calculator/habitat_process.py --habitat ${DATADIR}/habitat/pnv_raw
                                             --output ${DATADIR}/habitat_maps/pnv/
 
 # Generate an area scaling map
-python3 ./prepare-layers/make_area_map.py --scale 0.016666666666667 --output ${DATADIR}/habitat/area-per-pixel.tif
+python3 ./prepare_layers/make_area_map.py --scale 0.016666666666667 --output ${DATADIR}/habitat/area-per-pixel.tif
 
 # Generate the arable scenario map
-python3 ./prepare-layers/make_arable_map.py --current ${DATADIR}/habitat/current_raw.tif \
+python3 ./prepare_layers/make_arable_map.py --current ${DATADIR}/habitat/current_raw.tif \
                                   --output ${DATADIR}/habitat/arable.tif
 
 python3 ./aoh-calculator/habitat_process.py --habitat ${DATADIR}/habitat/arable.tif \
                                             --scale 0.016666666666667 \
                                             --output ${DATADIR}/habitat_maps/arable/
 
-python3 ./prepare-layers/make_diff_map.py --current ${DATADIR}/habitat/current_raw.tif \
+python3 ./prepare_layers/make_diff_map.py --current ${DATADIR}/habitat/current_raw.tif \
                                           --scenario ${DATADIR}/habitat/arable.tif \
                                           --area ${DATADIR}/area-per-pixel.tif \
                                           --scale 0.016666666666667 \
                                           --output ${DATADIR}/habitat/arable_diff_area.tif
 
 # Generate the restore map
-python3 ./prepare-layers/make_restore_map.py --pnv ${DATADIR}/habitat/pnv_raw.tif \
+python3 ./prepare_layers/make_restore_map.py --pnv ${DATADIR}/habitat/pnv_raw.tif \
                                    --current ${DATADIR}/habitat/current_raw.tif \
                                    --crosswalk ${DATADIR}/crosswalk.csv \
                                    --output ${DATADIR}/habitat/restore.tif
@@ -69,7 +69,7 @@ python3 ./aoh-calculator/habitat_process.py --habitat ${DATADIR}/habitat/restore
                                              --scale 0.016666666666667 \
                                              --output ${DATADIR}/habitat_maps/restore/
 
-python3 ./prepare-layers/make_diff_map.py --current ${DATADIR}/habitat/current_raw.tif \
+python3 ./prepare_layers/make_diff_map.py --current ${DATADIR}/habitat/current_raw.tif \
                                           --scenario ${DATADIR}/habitat/restore.tif \
                                           --area ${DATADIR}/area-per-pixel.tif \
                                           --scale 0.016666666666667 \
@@ -81,10 +81,10 @@ gdalwarp -t_srs EPSG:4326 -tr 0.016666666666667 -0.016666666666667 -r max -co CO
 gdalwarp -t_srs EPSG:4326 -tr 0.016666666666667 -0.016666666666667 -r min -co COMPRESS=LZW -wo NUM_THREADS=40 ${DATADIR}/elevation.tif ${DATADIR}/elevation-min-1k.tif
 
 # Get species data per taxa from IUCN data
-python3 ./prepare-species/extract_species_psql.py --class AVES --output ${DATADIR}/species-info/AVES/ --projection "EPSG:4326"
-python3 ./prepare-species/extract_species_psql.py --class AMPHIBIA --output ${DATADIR}/species-info/AMPHIBIA/ --projection "EPSG:4326"
-python3 ./prepare-species/extract_species_psql.py --class MAMMALIA --output ${DATADIR}/species-info/MAMMALIA/ --projection "EPSG:4326"
-python3 ./prepare-species/extract_species_psql.py --class REPTILIA --output ${DATADIR}/species-info/REPTILIA/ --projection "EPSG:4326"
+python3 ./prepare_species/extract_species_psql.py --class AVES --output ${DATADIR}/species-info/AVES/ --projection "EPSG:4326"
+python3 ./prepare_species/extract_species_psql.py --class AMPHIBIA --output ${DATADIR}/species-info/AMPHIBIA/ --projection "EPSG:4326"
+python3 ./prepare_species/extract_species_psql.py --class MAMMALIA --output ${DATADIR}/species-info/MAMMALIA/ --projection "EPSG:4326"
+python3 ./prepare_species/extract_species_psql.py --class REPTILIA --output ${DATADIR}/species-info/REPTILIA/ --projection "EPSG:4326"
 
 # Generate the batch job input CSVs
 python3 ./utils/speciesgenerator.py --input ${DATADIR}/species-info --datadir ${DATADIR} --output ${DATADIR}/aohbatch.csv
@@ -134,3 +134,6 @@ do
 done
 
 python3 ./predictors/species_richness.py --aohs_folder ${DATADIR}/aohs/current/ --output ${DATADIR}/predictors/species_richness.tif
+python3 ./predictors/endemism.py --aohs_folder ${DATADIR}/aohs/current/ \
+                                 --species_richness ${DATADIR}/predictors/species_richness.tif \
+                                 --output ${DATADIR}/predictors/
