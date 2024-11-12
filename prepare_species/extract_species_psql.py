@@ -177,7 +177,7 @@ def process_habitats(
 
     return habitats
 
-def process_geometries(geometries_data: List) -> Dict:
+def process_geometries(geometries_data: List[Tuple[int,shapely.Geometry]]) -> Dict[int,shapely.Geometry]:
     if len(geometries_data) == 0:
         raise ValueError("No geometries")
 
