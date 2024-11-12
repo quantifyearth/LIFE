@@ -4,7 +4,7 @@ import logging
 import os
 from functools import partial
 from multiprocessing import Pool
-from typing import Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 # import pyshark # pylint: disable=W0611
 import geopandas as gpd
@@ -113,17 +113,12 @@ def tidy_reproject_save(
     res_projected = res.to_crs(target_crs)
     res_projected.to_file(output_path, driver="GeoJSON")
 
-def process_row_inner(
-    row: Tuple,
-    habitats_data: Tuple,
-    geometries_data: Tuple,
-) -> Tuple:
-
-    id_no, _, _, _ = row
+def process_habitats(
+    habitats_data: List,
+) -> Dict:
 
     if len(habitats_data) == 0:
-        logger.debug("Dropping %s as no habitats found", id_no)
-        return
+        raise ValueError("No habitats found")
 
     # Clean up habitats to ensure they're unique (the system agg in the SQL statement might duplicate them)
     # In the database there are the following seasons:
@@ -139,8 +134,8 @@ def process_row_inner(
     #    unknown
     #    null
 
-    habitats = {}
-    major_habitats_lvl_1 = {}
+    habitats : Dict[Set[str]] = {}
+    major_habitats_lvl_1 : Dict[Set[int]] = {}
     for season, major_importance, habitat_values, systems in habitats_data:
 
         match season:
@@ -153,17 +148,14 @@ def process_row_inner(
             case 'non-breeding' | 'Non-Breeding Season':
                 season_code = 3
             case _:
-                raise ValueError(f"Unexpected season {season} for {id_no}")
+                raise ValueError(f"Unexpected season {season}")
 
         if systems is None:
-            logger.debug("Dropping %s: no systems in DB", id_no)
             continue
         if "Marine" in systems:
-            logger.debug("Dropping %s: marine in systems", id_no)
-            return
+            raise ValueError("Marine in systems")
 
         if habitat_values is None:
-            logger.debug("Dropping %s: no habitats in DB", id_no)
             continue
         habitat_set = set(habitat_values.split('|'))
         if len(habitat_set) == 0:
@@ -172,22 +164,22 @@ def process_row_inner(
         habitats[season_code] = habitat_set | habitats.get(season_code, set())
 
         if major_importance == 'Yes':
-            major_habitats_lvl_1[season_code] = {int(float(x)) for x in habitat_set} | major_habitats_lvl_1.get(season_code, {})
+            major_habitats_lvl_1[season_code] = \
+                {int(float(x)) for x in habitat_set} | major_habitats_lvl_1.get(season_code, set())
 
     # habitat based filtering
     if len(habitats) == 0:
-        logger.debug("Dropping %s: No habitats", id_no)
-        return
+        raise ValueError("No filtered habitats")
 
-    for season in major_habitats_lvl_1:
-        major_habitats = major_habitats_lvl_1[season_code]
+    for _, major_habitats in major_habitats_lvl_1.items():
         if any((x == 7) for x in major_habitats):
-            logger.debug("Dropping %s: Habitat 7 in major importance habitat list", id_no)
-            return
+            raise ValueError("Habitat 7 in major importance habitat list")
 
+    return habitats
+
+def process_geometries(geometries_data: List) -> Dict:
     if len(geometries_data) == 0:
-        logger.info("Dropping %s: no geometries", id_no)
-        return
+        raise ValueError("No geometries")
 
     geometries = {}
     for season, geometry in geometries_data:
@@ -206,7 +198,7 @@ def process_row_inner(
         except KeyError:
             geometries[season_code] = grange
 
-    return habitats, geometries
+    return geometries
 
 def process_row(
     output_directory_path: str,
@@ -222,11 +214,19 @@ def process_row(
 
     cursor.execute(HABITATS_STATEMENT, (assessment_id,))
     habitats_data = cursor.fetchall()
+    try:
+        habitats = process_habitats(habitats_data)
+    except ValueError as exc:
+        logging.info("Dropping %s: %s", id_no, str(exc))
+        return
 
     cursor.execute(GEOMETRY_STATEMENT, (assessment_id, presence))
     geometries_data = cursor.fetchall()
-
-    habitats, geometries = process_row_inner(row, habitats_data, geometries_data)
+    try:
+        geometries = process_geometries(geometries_data)
+    except ValueError as exc:
+        logging.info("Dropping %s: %s", id_no, str(exc))
+        return
 
     seasons = set(geometries.keys()) | set(habitats.keys())
 
