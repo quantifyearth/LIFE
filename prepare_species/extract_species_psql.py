@@ -31,7 +31,9 @@ COLUMNS = [
     "elevation_lower",
     "elevation_upper",
     "full_habitat_code",
-    "geometry"
+    "family_name",
+    "class_name",
+    "geometry",
 ]
 
 MAIN_STATEMENT = """
@@ -39,7 +41,8 @@ SELECT
     assessments.sis_taxon_id as id_no,
     assessments.id as assessment_id,
     (assessment_supplementary_infos.supplementary_fields->>'ElevationLower.limit')::numeric AS elevation_lower,
-    (assessment_supplementary_infos.supplementary_fields->>'ElevationUpper.limit')::numeric AS elevation_upper
+    (assessment_supplementary_infos.supplementary_fields->>'ElevationUpper.limit')::numeric AS elevation_upper,
+    taxons.family_name
 FROM
     assessments
     LEFT JOIN taxons ON taxons.id = assessments.taxon_id
@@ -135,7 +138,7 @@ def process_habitats(
     #    null
 
     habitats : Dict[Set[str]] = {}
-    major_habitats_lvl_1 : Dict[Set[int]] = {}
+    major_habitats : Dict[Set[int]] = {}
     for season, major_importance, habitat_values, systems in habitats_data:
 
         match season:
@@ -164,16 +167,21 @@ def process_habitats(
         habitats[season_code] = habitat_set | habitats.get(season_code, set())
 
         if major_importance == 'Yes':
-            major_habitats_lvl_1[season_code] = \
-                {int(float(x)) for x in habitat_set} | major_habitats_lvl_1.get(season_code, set())
+            major_habitats[season_code] = \
+                {float(x) for x in habitat_set} | major_habitats.get(season_code, set())
 
     # habitat based filtering
     if len(habitats) == 0:
         raise ValueError("No filtered habitats")
 
-    for _, major_habitats in major_habitats_lvl_1.items():
-        if any((x == 7) for x in major_habitats):
+    major_habitats_lvl_1 = {k: {int(v) for v in x} for k, x in major_habitats.items()}
+
+    for _, season_major_habitats in major_habitats_lvl_1.items():
+        if 7 in season_major_habitats:
             raise ValueError("Habitat 7 in major importance habitat list")
+    for _, season_major_habitats in major_habitats.items():
+        if not season_major_habitats - set([5.1, 5.5, 5.6, 5.14, 5.16]):
+            raise ValueError("Freshwater lakes are major habitat")
 
     return habitats
 
@@ -201,6 +209,7 @@ def process_geometries(geometries_data: List[Tuple[int,shapely.Geometry]]) -> Di
     return geometries
 
 def process_row(
+    class_name: str,
     output_directory_path: str,
     presence: Tuple[int],
     row: Tuple,
@@ -210,7 +219,7 @@ def process_row(
     register(connection)
     cursor = connection.cursor()
 
-    id_no, assessment_id, elevation_lower, elevation_upper = row
+    id_no, assessment_id, elevation_lower, elevation_upper, family_name = row
 
     cursor.execute(HABITATS_STATEMENT, (assessment_id,))
     habitats_data = cursor.fetchall()
@@ -236,8 +245,11 @@ def process_row(
             [[
                 id_no,
                 SEASON_NAME[1],
-                int(elevation_lower) if elevation_lower else None, int(elevation_upper) if elevation_upper else None,
+                int(elevation_lower) if elevation_lower is not None else None,
+                int(elevation_upper) if elevation_upper is not None else None,
                 '|'.join(list(habitats[1])),
+                family_name,
+                class_name,
                 geometries[1]
             ]],
             columns=COLUMNS,
@@ -287,8 +299,11 @@ def process_row(
             [[
                 id_no,
                 SEASON_NAME[2],
-                int(elevation_lower) if elevation_lower else None, int(elevation_upper) if elevation_upper else None,
+                int(elevation_lower) if elevation_lower is not None else None,
+                int(elevation_upper) if elevation_upper is not None else None,
                 '|'.join(list(habitats_breeding)),
+                family_name,
+                class_name,
                 geometry_breeding
             ]],
             columns=COLUMNS,
@@ -298,9 +313,13 @@ def process_row(
 
         gdf = gpd.GeoDataFrame(
             [[
-                id_no, SEASON_NAME[3],
-                int(elevation_lower) if elevation_lower else None, int(elevation_upper) if elevation_upper else None,
+                id_no,
+                SEASON_NAME[3],
+                int(elevation_lower) if elevation_lower is not None else None,
+                int(elevation_upper) if elevation_upper is not None else None,
                 '|'.join(list(habitats_non_breeding)),
+                family_name,
+                class_name,
                 geometry_non_breeding
             ]],
             columns=COLUMNS,
@@ -310,7 +329,7 @@ def process_row(
 
 
 def extract_data_per_species(
-    classname: str,
+    class_name: str,
     output_directory_path: str,
     _target_projection: Optional[str],
 ) -> None:
@@ -321,16 +340,16 @@ def extract_data_per_species(
     for era, presence in [("current", (1, 2)), ("historic", (1, 2, 4, 5))]:
         era_output_directory_path = os.path.join(output_directory_path, era)
 
-        cursor.execute(MAIN_STATEMENT, (classname,))
+        cursor.execute(MAIN_STATEMENT, (class_name,))
         # This can be quite big (tens of thousands), but in modern computer term is quite small
         # and I need to make a follow on DB query per result.
         results = cursor.fetchall()
 
-        logger.info("Found %d species in class %s in scenarion %s", len(results), classname, era)
+        logger.info("Found %d species in class %s in scenarion %s", len(results), class_name, era)
 
         # The limiting amount here is how many concurrent connections the database can take
         with Pool(processes=20) as pool:
-            pool.map(partial(process_row, era_output_directory_path, presence), results)
+            pool.map(partial(process_row, class_name, era_output_directory_path, presence), results)
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Process agregate species data to per-species-file.")

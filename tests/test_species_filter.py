@@ -125,3 +125,33 @@ def test_simple_migratory_species_geometry_filter():
     res = process_geometries(habitat_data)
 
     assert list(res.keys()) == [2, 3]
+
+def test_13394_habitat_filter():
+    habitat_data = [
+        ("resident", "Yes", "5.1", "Terrestrial"),
+        ("resident", "No", "1.6|1.9", "Terrestrial"),
+    ]
+    with pytest.raises(ValueError):
+        _ = process_habitats(habitat_data)
+
+def test_similar_13394_habitat_filter():
+    habitat_data = [
+        ("resident", "Yes", "5.1|1.7", "Terrestrial"),
+        ("resident", "No", "1.6|1.9", "Terrestrial"),
+    ]
+    res = process_habitats(habitat_data)
+
+    # Just resident
+    assert list(res.keys()) == [1]
+    assert res[1] == set(["5.1", "1.7", "1.6", "1.9"])
+
+def test_inverted_13394_habitat_filter():
+    habitat_data = [
+        ("resident", "No", "5.1", "Terrestrial"),
+        ("resident", "Yes", "1.6|1.9", "Terrestrial"),
+    ]
+    res = process_habitats(habitat_data)
+
+    # Just resident
+    assert list(res.keys()) == [1]
+    assert res[1] == set(["5.1", "1.6", "1.9"])
