@@ -174,7 +174,7 @@ def endemism(
             # here we should have now a set of images in tempdir to merge
             single_worker = Process(target=stage_2_worker, args=(
                 "summed_proportion.tif",
-                output_dir,
+                tempdir,
                 source_queue
             ))
             single_worker.start()
@@ -196,7 +196,7 @@ def endemism(
                 time.sleep(1)
 
         with RasterLayer.layer_from_file(species_richness_path) as species_richness:
-            with RasterLayer.layer_from_file(os.path.join(output_dir, "summed_proportion.tif")) as summed_proportion:
+            with RasterLayer.layer_from_file(os.path.join(tempdir, "summed_proportion.tif")) as summed_proportion:
 
                 intersection = RasterLayer.find_intersection([summed_proportion, species_richness])
                 summed_proportion.set_window_for_intersection(intersection)
