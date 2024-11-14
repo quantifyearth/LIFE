@@ -14,6 +14,14 @@ import numpy as np
 from osgeo import gdal
 from yirgacheffe.layers import RasterLayer
 
+def geometric_sum(raster: RasterLayer):
+    aoh = raster.sum()
+    if aoh > 0.0:
+        return raster.numpy_apply(
+            lambda a: np.log(np.where(a == 0.0, np.nan, a) / aoh)
+        )
+    return None
+
 def stage_1_worker(
     filename: str,
     result_dir: str,
@@ -36,58 +44,40 @@ def stage_1_worker(
                 for r in rasters:
                     r.set_window_for_union(union)
 
-                aoh1 = rasters[0].sum()
-                if aoh1 > 0.0:
-                    season1 = rasters[0].numpy_apply(
-                        lambda a: np.nan_to_num(np.log(np.where(a == 0, np.nan, a) / aoh1))
-                    )
-                else:
-                    season1 = None
-                aoh2 = rasters[1].sum()
-                if aoh2 > 0.0:
-                    season2 = rasters[1].numpy_apply(
-                        lambda a: np.nan_to_num(np.log(np.where(a == 0, np.nan, a) / aoh2))
-                    )
-                else:
-                    season2 = None
+                sums = tuple(geometric_sum(r) for r in rasters)
 
-                match season1, season2:
+                match sums:
                     case None, None:
                         continue
                     case a, None:
-                        combined = a
+                        combined = a.numpy_apply(np.nan_to_num)
                     case None, b:
-                        combined = b
-                    case _, _:
-                        combined = season1.numpy_apply(lambda a, b: np.where(a > b, a, b), season2)
+                        combined = b.numpy_apply(np.nan_to_num)
+                    case s1, s2:
+                        levelled_s1 = s1.numpy_apply(lambda a: np.nan_to_num(a, nan=np.inf * -1))
+                        levelled_s2 = s2.numpy_apply(lambda a: np.nan_to_num(a, nan=np.inf * -1))
+                        levelled_combined = levelled_s1.numpy_apply(lambda a, b: np.where(a > b, a, b), levelled_s2)
+                        combined = levelled_combined.numpy_apply(lambda a: np.nan_to_num(a, neginf=0.0))
 
                 partial = RasterLayer.empty_raster_layer_like(rasters[0], datatype=gdal.GDT_Float64)
                 combined.save(partial)
             case 1:
-                aoh = rasters[0].sum()
-                if aoh > 0.0:
-                    partial = rasters[0].numpy_apply(
-                        lambda a: np.nan_to_num(np.log(np.where(a == 0, np.nan, a) / aoh))
-                    )
+                summed = geometric_sum(rasters[0])
+                if summed is not None:
+                    partial = RasterLayer.empty_raster_layer_like(rasters[0], datatype=gdal.GDT_Float64)
+                    summed.numpy_apply(np.nan_to_num).save(partial)
                 else:
                     continue
             case _:
                 raise ValueError("too many seasons")
 
         if merged_result is None:
-            if len(rasters) > 1:
-                merged_result = partial
-            else:
-                merged_result = RasterLayer.empty_raster_layer_like(rasters[0], datatype=gdal.GDT_Float64)
-                partial.save(merged_result)
+            merged_result = partial
         else:
             merged_result.reset_window()
-            if len(rasters) > 1:
-                union = RasterLayer.find_union([merged_result, partial])
-                partial.set_window_for_union(union)
-            else:
-                union = RasterLayer.find_union([merged_result, rasters[0]])
-                rasters[0].set_window_for_union(union)
+
+            union = RasterLayer.find_union([merged_result, partial])
+            partial.set_window_for_union(union)
             merged_result.set_window_for_union(union)
 
             merged = partial + merged_result
@@ -116,10 +106,7 @@ def stage_2_worker(
         with RasterLayer.layer_from_file(path) as partial_raster:
             if merged_result is None:
                 merged_result = RasterLayer.empty_raster_layer_like(partial_raster)
-                cleaned_raster = partial_raster.numpy_apply(
-                    lambda chunk: np.nan_to_num(chunk, copy=False, nan=0.0)
-                )
-                cleaned_raster.save(merged_result)
+                partial_raster.save(merged_result)
             else:
                 merged_result.reset_window()
 
@@ -146,16 +133,14 @@ def endemism(
     os.makedirs(output_dir, exist_ok=True)
 
     aohs = glob("**/*.tif", root_dir=aohs_dir)
-    print(f"We fould {len(aohs)} AoH rasters")
+    print(f"We found {len(aohs)} AoH rasters")
 
     species_rasters = {}
     for raster_path in aohs:
         speciesid = os.path.basename(raster_path).split('_')[0]
         full_path = os.path.join(aohs_dir, raster_path)
-        try:
-            species_rasters[speciesid].add(full_path)
-        except KeyError:
-            species_rasters[speciesid] = set([full_path])
+        species_rasters[speciesid] = species_rasters.get(speciesid, set()).union({full_path})
+    print(f"Species detected: {len(species_rasters)} ")
 
     with tempfile.TemporaryDirectory() as tempdir:
         with Manager() as manager:
@@ -169,8 +154,8 @@ def endemism(
             for worker_process in workers:
                 worker_process.start()
 
-            for raster in species_rasters.items():
-                source_queue.put(raster)
+            for _, raster_set in species_rasters.items():
+                source_queue.put(raster_set)
             for _ in range(len(workers)):
                 source_queue.put(None)
 

@@ -31,34 +31,25 @@ def stage_1_worker(
             for r in rasters:
                 r.set_window_for_union(union)
             calc = rasters[0].numpy_apply(lambda chunk: np.where(chunk == 0.0, 0, 1))
-            for r in rasters[:1]:
+            for r in rasters[1:]:
                 calc = calc | r.numpy_apply(lambda chunk: np.where(chunk == 0.0, 0, 1))
-
-            partial = RasterLayer.empty_raster_layer_like(rasters[0], datatype=gdal.GDT_Int16)
-            calc.save(partial)
         else:
-            partial = rasters[0].numpy_apply(lambda chunk: np.where(chunk == 0.0, 0, 1))
+            calc = rasters[0].numpy_apply(lambda chunk: np.where(chunk == 0.0, 0, 1))
+        partial = RasterLayer.empty_raster_layer_like(rasters[0], datatype=gdal.GDT_Int16)
+        calc.save(partial)
 
         if merged_result is None:
-            if len(rasters) > 1:
-                merged_result = partial
-            else:
-                merged_result = RasterLayer.empty_raster_layer_like(rasters[0], datatype=gdal.GDT_Int16)
-                partial.save(merged_result)
+            merged_result = partial
         else:
             merged_result.reset_window()
-            if len(rasters) > 1:
-                union = RasterLayer.find_union([merged_result, partial])
-                partial.set_window_for_union(union)
-            else:
-                union = RasterLayer.find_union([merged_result, rasters[0]])
-                rasters[0].set_window_for_union(union)
+
+            union = RasterLayer.find_union([merged_result, partial])
+            partial.set_window_for_union(union)
             merged_result.set_window_for_union(union)
 
-
-            merged = partial + merged_result
+            merged_calc = partial + merged_result
             temp = RasterLayer.empty_raster_layer_like(merged_result)
-            merged.save(temp)
+            merged_calc.save(temp)
             merged_result = temp
 
     if merged_result is not None:
@@ -82,8 +73,7 @@ def stage_2_worker(
         with RasterLayer.layer_from_file(path) as partial_raster:
             if merged_result is None:
                 merged_result = RasterLayer.empty_raster_layer_like(partial_raster)
-                cleaned_raster = partial_raster.numpy_apply(lambda chunk: np.nan_to_num(chunk, copy=False, nan=0.0))
-                cleaned_raster.save(merged_result)
+                partial_raster.save(merged_result)
             else:
                 merged_result.reset_window()
 
@@ -91,9 +81,7 @@ def stage_2_worker(
                 merged_result.set_window_for_union(union)
                 partial_raster.set_window_for_union(union)
 
-                calc = merged_result + (partial_raster.numpy_apply(
-                    lambda chunk: np.nan_to_num(chunk, copy=False, nan=0.0))
-                )
+                calc = merged_result + partial_raster
                 temp = RasterLayer.empty_raster_layer_like(merged_result)
                 calc.save(temp)
                 merged_result = temp
@@ -111,16 +99,14 @@ def species_richness(
     os.makedirs(output_dir, exist_ok=True)
 
     aohs = glob("**/*.tif", root_dir=aohs_dir)
-    print(f"We fould {len(aohs)} AoH rasters")
+    print(f"We found {len(aohs)} AoH rasters")
 
     species_rasters = {}
     for raster_path in aohs:
         speciesid = os.path.basename(raster_path).split('_')[0]
         full_path = os.path.join(aohs_dir, raster_path)
-        try:
-            species_rasters[speciesid].add(full_path)
-        except KeyError:
-            species_rasters[speciesid] = set([full_path])
+        species_rasters[speciesid] = species_rasters.get(speciesid, set()).union({full_path})
+    print(f"Species detected: {len(species_rasters)} ")
 
     with tempfile.TemporaryDirectory() as tempdir:
         with Manager() as manager:
@@ -134,8 +120,8 @@ def species_richness(
             for worker_process in workers:
                 worker_process.start()
 
-            for raster in species_rasters.items():
-                source_queue.put(raster)
+            for _, raster_set in species_rasters.items():
+                source_queue.put(raster_set)
             for _ in range(len(workers)):
                 source_queue.put(None)
 
