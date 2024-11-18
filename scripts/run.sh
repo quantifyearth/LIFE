@@ -93,6 +93,13 @@ python3 ./utils/persistencegenerator.py --input ${DATADIR}/species-info --datadi
 # Calculate all the AoHs
 littlejohn -j 200 -o ${DATADIR}/aohbatch.log -c ${DATADIR}/aohbatch.csv ${VIRTUAL_ENV}/bin/python3 -- ./aoh-calculator/aohcalc.py --force-habitat
 
+# Calculate predictors from AoHs
+python3 ./aoh-calculator/summaries/species_richness.py --aohs_folder ${DATADIR}/aohs/current/ \
+                                                       --output ${DATADIR}/predictors/species_richness.tif
+python3 ./aoh-calculator/summaries/endemism.py --aohs_folder ${DATADIR}/aohs/current/ \
+                                               --species_richness ${DATADIR}/predictors/species_richness.tif \
+                                               --output ${DATADIR}/predictors/\
+
 # Calculate the per species Delta P values
 littlejohn -j 200 -o ${DATADIR}/persistencebatch.log -c ${DATADIR}/persistencebatch.csv ${VIRTUAL_ENV}/bin/python3 --  ./deltap/global_code_residents_pixel.py
 
@@ -132,8 +139,3 @@ do
                                     --b ${DATADIR}/deltap_final/summed_scaled_restore_0.25.tif \
                                     --output {$DATADIR}/analysis/restore_0.25_vs_${CURVE}.png
 done
-
-python3 ./predictors/species_richness.py --aohs_folder ${DATADIR}/aohs/current/ --output ${DATADIR}/predictors/species_richness.tif
-python3 ./predictors/endemism.py --aohs_folder ${DATADIR}/aohs/current/ \
-                                 --species_richness ${DATADIR}/predictors/species_richness.tif \
-                                 --output ${DATADIR}/predictors/
