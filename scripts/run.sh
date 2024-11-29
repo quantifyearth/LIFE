@@ -26,7 +26,7 @@ declare -a CURVES=("0.1" "0.25" "0.5" "1.0" "gompertz")
 reclaimer zenodo --zenodo_id 4058819 \
                  --filename iucn_habitatclassification_composite_lvl2_ver004.zip \
                  --extract \
-                 --output ${DATADIR}/habitat/jung_l2_raw.tif
+                 --output ${DATADIR}/habitat/current_raw.tif
 
 python3 ./aoh-calculator/habitat_process.py --habitat ${DATADIR}/habitat/current_raw.tif \
                                             --scale 0.016666666666667 \
@@ -42,8 +42,10 @@ python3 ./aoh-calculator/habitat_process.py --habitat ${DATADIR}/habitat/pnv_raw
                                             --scale 0.016666666666667 \
                                             --output ${DATADIR}/habitat_maps/pnv/
 
+python3 ./prepare_layers/generate_crosswalk.py --output ${DATADIR}/crosswalk.csv
+
 # Generate an area scaling map
-python3 ./prepare_layers/make_area_map.py --scale 0.016666666666667 --output ${DATADIR}/habitat/area-per-pixel.tif
+python3 ./prepare_layers/make_area_map.py --scale 0.016666666666667 --output ${DATADIR}/area-per-pixel.tif
 
 # Generate the arable scenario map
 python3 ./prepare_layers/make_arable_map.py --current ${DATADIR}/habitat/current_raw.tif \
@@ -77,8 +79,8 @@ python3 ./prepare_layers/make_diff_map.py --current ${DATADIR}/habitat/current_r
 
 # Fetch and prepare the elevation layers
 reclaimer zenodo --zenodo_id 5719984  --filename dem-100m-esri54017.tif --output ${DATADIR}/elevation.tif
-gdalwarp -t_srs EPSG:4326 -tr 0.016666666666667 -0.016666666666667 -r max -co COMPRESS=LZW -wo NUM_THREADS=40 ${DATADIR}/elevation.tif ${DATADIR}/elevation-max-1k.tif
-gdalwarp -t_srs EPSG:4326 -tr 0.016666666666667 -0.016666666666667 -r min -co COMPRESS=LZW -wo NUM_THREADS=40 ${DATADIR}/elevation.tif ${DATADIR}/elevation-min-1k.tif
+gdalwarp -t_srs EPSG:4326 -tr 0.016666666666667 -0.016666666666667 -r max -co COMPRESS=LZW -wo NUM_THREADS=40 ${DATADIR}/elevation.tif ${DATADIR}/elevation-max.tif
+gdalwarp -t_srs EPSG:4326 -tr 0.016666666666667 -0.016666666666667 -r min -co COMPRESS=LZW -wo NUM_THREADS=40 ${DATADIR}/elevation.tif ${DATADIR}/elevation-min.tif
 
 # Get species data per taxa from IUCN data
 python3 ./prepare_species/extract_species_psql.py --class AVES --output ${DATADIR}/species-info/AVES/ --projection "EPSG:4326"
@@ -98,7 +100,7 @@ python3 ./aoh-calculator/summaries/species_richness.py --aohs_folder ${DATADIR}/
                                                        --output ${DATADIR}/predictors/species_richness.tif
 python3 ./aoh-calculator/summaries/endemism.py --aohs_folder ${DATADIR}/aohs/current/ \
                                                --species_richness ${DATADIR}/predictors/species_richness.tif \
-                                               --output ${DATADIR}/predictors/\
+                                               --output ${DATADIR}/predictors/endemism.tif
 
 # Calculate the per species Delta P values
 littlejohn -j 200 -o ${DATADIR}/persistencebatch.log -c ${DATADIR}/persistencebatch.csv ${VIRTUAL_ENV}/bin/python3 --  ./deltap/global_code_residents_pixel.py

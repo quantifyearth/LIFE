@@ -14,9 +14,9 @@ alive-progress
 
 gdal[numpy]==3.9.3
 
-git+https://github.com/carboncredits/iucn_modlib.git
-git+https://github.com/carboncredits/yirgacheffe
-git+https://github.com/carboncredits/seasonality
+git+https://github.com/quantifyearth/iucn_modlib.git
+git+https://github.com/quantifyearth/yirgacheffe
+git+https://github.com/quantifyearth/seasonality
 
 pytest
 pylint
