@@ -33,24 +33,15 @@ def delta_p_scaled_area(
 
     area_restore_filter = area_restore.numpy_apply(lambda c: np.where(c < SCALE, float('nan'), c)) / SCALE
 
-    per_taxa_path = os.path.join(dirname, f"per_taxa_{basename}")
+    per_taxa_path = os.path.join(dirname, f"{basename}")
     with RasterLayer.empty_raster_layer_like(
         area_restore,
         filename=per_taxa_path,
         nodata=float('nan'),
-        bands=len(per_taxa)
+        bands=len(per_taxa) + 1
     ) as result:
-        for idx, inlayer in enumerate(per_taxa):
-            _, name = os.path.split(inlayer.name)
-            result._dataset.GetRasterBand(idx+1).SetDescription(name[:-4])  # pylint: disable=W0212
-            scaled_filtered_layer = inlayer.numpy_apply(
-                lambda il, af: np.where(af != 0, (il / af) * -1.0, float('nan')),
-                area_restore_filter
-            )
-            scaled_filtered_layer.parallel_save(result, band=idx + 1)
 
-    summed_output_path = os.path.join(dirname, f"summed_{basename}")
-    with RasterLayer.empty_raster_layer_like(area_restore, filename=summed_output_path, nodata=float('nan')) as result:
+        result._dataset.GetRasterBand(1).SetDescription("all")  # pylint: disable=W0212
         summed_layer = per_taxa[0]
         for layer in per_taxa[1:]:
             summed_layer = summed_layer + layer
@@ -58,7 +49,17 @@ def delta_p_scaled_area(
             lambda il, af: np.where(af != 0, (il / af) * -1.0, float('nan')),
             area_restore_filter
         )
-        scaled_filtered_layer.parallel_save(result)
+        scaled_filtered_layer.parallel_save(result, band=1)
+
+        for idx, inlayer in enumerate(per_taxa):
+            _, name = os.path.split(inlayer.name)
+            result._dataset.GetRasterBand(idx + 2).SetDescription(name[:-4])  # pylint: disable=W0212
+            scaled_filtered_layer = inlayer.numpy_apply(
+                lambda il, af: np.where(af != 0, (il / af) * -1.0, float('nan')),
+                area_restore_filter
+            )
+            scaled_filtered_layer.parallel_save(result, band=idx + 2)
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Scale final .")
