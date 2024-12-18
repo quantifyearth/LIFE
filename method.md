@@ -59,7 +59,7 @@ pip install -r requirements.txt
 
 ### The PostGIS container
 
-For querying the IUCN data held in the PostGIS database we use a seperate container, based on the standard PostGIS image.
+For querying the IUCN data held in the PostGIS database we use a seperate container, based on the standard PostGIS image. This does not run the database, rather is a place to run python scripts that will talk to the database.
 
 ```shark-build:postgis
 ((from python:3.12-slim)
@@ -93,7 +93,7 @@ To calculate the AoH we need various basemaps:
 - Habitat maps for four scenarios:
   - Current day, in both L1 and L2 IUCN habitat classification
   - Potential Natural Vegetation (PNV) showing the habitats predicted without human intevention
-  - Restore scenario - a map derived from the PNV and current maps showing certain lands restored to their pre-human
+  - Restore scenario - a map derived from the PNV and current maps showing certain lands restored to their pre-human type
   - Conserve scenario - a map derived form current indicating the impact of placement of arable lands
 - The Digital Elevation Map (DEM) which has the height per pixel in meters
 
@@ -135,7 +135,7 @@ python3 ./prepare-layers/make_current_map.py --jung /data/habitat/jung_l2_raw.ti
                                              -j 16
 ```
 
-The habitat map by Jung et al is at 100m resolution in World Berhman projection, and for IUCN compatible AoH maps we use Molleide at 1KM resolution, so we use GDAL to do the resampling for this:
+The habitat maps by Jung et al is at 100m per pixel at the equator resolution in WGS84 projection, which we covert to a series of downsampled proportional-coverage layers, one layer per habitat class, at our target result scale. This is done with `habtiat_process.py`:
 
 ```shark-run:layer-prep
 python3 ./aoh-calculator/habitat_process.py --habitat /data/habitat/pnv_raw.tif \
@@ -148,6 +148,8 @@ python3 ./aoh-calculator/habitat_process.py --habitat /data/habitat/current_raw.
                                             --scale 0.016666666666667 \
                                             --output /data/habitat_maps/current/
 ```
+
+This process to generate a proprotional layer per habitat class will be repereated for the additional layers generated below.
 
 ### Generating additional habitat maps
 
@@ -184,13 +186,14 @@ python3 ./aoh-calculator/habitat_process.py --habitat /data/habitat/arable.tif \
 
 ### Generate area map
 
-For LIFE we need to know the actual area, not just pixel count. For this we generate a map that contains the area per pixel for a given latitude which is one pixel wide, and then we sweep that across for a given longitude.
+For LIFE we need to know the actual area, not just pixel count. For this we generate a raster map that contains the area per pixel in meters for a given latitude. As a performance optimisation, this map is generated as a one pixel wide raster, as the values at all latitudes are the same.
 
 ```shark-run:layer-prep
 python3 ./prepare-layers/make_area_map.py --scale 0.016666666666667 --output /data/area-per-pixel.tif
 ```
 
 ### Differences maps
+
 In the algorithm we use need to account for map projection distortions, so all values in the AoHs are based on the area per pixel. To get the final extinction risk values we must remove that scaling. To do that we generate a map of area difference from current for the given scenario.
 
 ```shark-run:layer-prep
@@ -211,13 +214,13 @@ python3 ./prepare-layers/make_diff_map.py --current /data/habitat/current_raw.ti
 
 ### Fetching the elevation map
 
-To assist with provenance, we download the data from the Zenodo ID.
+To calculate AoH we need a digital elevation map. We use [this map](https://zenodo.org/records/5719984) map compiled by Jeffrey Hanson.
 
 ```shark-run:reclaimer
 reclaimer zenodo --zenodo_id 5719984  --filename dem-100m-esri54017.tif --output /data/elevation.tif
 ```
 
-Similarly to the habitat map we need to resample to 1km, however rather than picking the mean elevation, we select both the min and max elevation for each pixel, and then check whether the species is in that range when we calculate AoH.
+Similarly to the habitat map we need to downsample to the target projection, however rather than picking the mean elevation, we select both the min and max elevation for each pixel, and then check whether the species is in that range when we calculate AoH.
 
 ```shark-run:gdalonly
 gdalwarp -t_srs EPSG:4326 -tr 0.016666666666667 -0.016666666666667 -r min -co COMPRESS=LZW -wo NUM_THREADS=40 /data/elevation.tif /data/elevation-min-1k.tif
