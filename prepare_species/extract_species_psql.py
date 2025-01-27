@@ -50,11 +50,13 @@ SELECT
     red_list_category_lookup.code
 FROM
     assessments
+    LEFT JOIN assessment_scopes ON assessment_scopes.assessment_id = assessments.id
     LEFT JOIN taxons ON taxons.id = assessments.taxon_id
     LEFT JOIN assessment_supplementary_infos ON assessment_supplementary_infos.assessment_id = assessments.id
     LEFT JOIN red_list_category_lookup ON red_list_category_lookup.id = assessments.red_list_category_id
 WHERE
     assessments.latest = true
+    AND assessment_scopes.scope_lookup_id = 15 -- global assessments only
     AND taxons.class_name = %s
     AND red_list_category_lookup.code NOT IN ('EX')
 """
