@@ -27,12 +27,15 @@ SEASON_NAME = {
 
 COLUMNS = [
     "id_no",
+    "assessment_id",
     "season",
     "elevation_lower",
     "elevation_upper",
     "full_habitat_code",
+    "scientific_name",
     "family_name",
     "class_name",
+    "category",
     "geometry",
 ]
 
@@ -42,14 +45,18 @@ SELECT
     assessments.id as assessment_id,
     (assessment_supplementary_infos.supplementary_fields->>'ElevationLower.limit')::numeric AS elevation_lower,
     (assessment_supplementary_infos.supplementary_fields->>'ElevationUpper.limit')::numeric AS elevation_upper,
-    taxons.family_name
+    taxons.scientific_name,
+    taxons.family_name,
+    red_list_category_lookup.code
 FROM
     assessments
+    LEFT JOIN assessment_scopes ON assessment_scopes.assessment_id = assessments.id
     LEFT JOIN taxons ON taxons.id = assessments.taxon_id
     LEFT JOIN assessment_supplementary_infos ON assessment_supplementary_infos.assessment_id = assessments.id
     LEFT JOIN red_list_category_lookup ON red_list_category_lookup.id = assessments.red_list_category_id
 WHERE
     assessments.latest = true
+    AND assessment_scopes.scope_lookup_id = 15 -- global assessments only
     AND taxons.class_name = %s
     AND red_list_category_lookup.code NOT IN ('EX')
 """
@@ -219,7 +226,7 @@ def process_row(
     register(connection)
     cursor = connection.cursor()
 
-    id_no, assessment_id, elevation_lower, elevation_upper, family_name = row
+    id_no, assessment_id, elevation_lower, elevation_upper, scientific_name, family_name, threat_code = row
 
     cursor.execute(HABITATS_STATEMENT, (assessment_id,))
     habitats_data = cursor.fetchall()
@@ -244,12 +251,15 @@ def process_row(
         gdf = gpd.GeoDataFrame(
             [[
                 id_no,
+                assessment_id,
                 SEASON_NAME[1],
                 int(elevation_lower) if elevation_lower is not None else None,
                 int(elevation_upper) if elevation_upper is not None else None,
                 '|'.join(list(habitats[1])),
+                scientific_name,
                 family_name,
                 class_name,
+                threat_code,
                 geometries[1]
             ]],
             columns=COLUMNS,
@@ -298,12 +308,15 @@ def process_row(
         gdf = gpd.GeoDataFrame(
             [[
                 id_no,
+                assessment_id,
                 SEASON_NAME[2],
                 int(elevation_lower) if elevation_lower is not None else None,
                 int(elevation_upper) if elevation_upper is not None else None,
                 '|'.join(list(habitats_breeding)),
+                scientific_name,
                 family_name,
                 class_name,
+                threat_code,
                 geometry_breeding
             ]],
             columns=COLUMNS,
@@ -314,12 +327,15 @@ def process_row(
         gdf = gpd.GeoDataFrame(
             [[
                 id_no,
+                assessment_id,
                 SEASON_NAME[3],
                 int(elevation_lower) if elevation_lower is not None else None,
                 int(elevation_upper) if elevation_upper is not None else None,
                 '|'.join(list(habitats_non_breeding)),
+                scientific_name,
                 family_name,
                 class_name,
+                threat_code,
                 geometry_non_breeding
             ]],
             columns=COLUMNS,

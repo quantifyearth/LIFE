@@ -12,11 +12,11 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container: ghcr.io/osgeo/gdal:ubuntu-small-3.9.3
+    container: ghcr.io/osgeo/gdal:ubuntu-small-3.10.1
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10"]
+        python-version: ["3.12"]
 
     steps:
       - name: Install system

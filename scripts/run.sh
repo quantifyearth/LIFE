@@ -22,11 +22,18 @@ fi
 
 declare -a CURVES=("0.1" "0.25" "0.5" "1.0" "gompertz")
 
+python3 ./prepare_layers/generate_crosswalk.py --output ${DATADIR}/crosswalk.csv
+
 # Get habitat layer and prepare for use
 reclaimer zenodo --zenodo_id 4058819 \
                  --filename iucn_habitatclassification_composite_lvl2_ver004.zip \
                  --extract \
-                 --output ${DATADIR}/habitat/current_raw.tif
+                 --output ${DATADIR}/habitat/jung_l2_raw.tif
+
+python3 ./prepare-layers/make_current_map.py --jung /data/habitat/jung_l2_raw.tif \
+                  --crosswalk /data/crosswalk.csv \
+                  --output /data/habitat/current_raw.tif \
+                  -j 16
 
 python3 ./aoh-calculator/habitat_process.py --habitat ${DATADIR}/habitat/current_raw.tif \
                                             --scale 0.016666666666667 \
@@ -42,7 +49,6 @@ python3 ./aoh-calculator/habitat_process.py --habitat ${DATADIR}/habitat/pnv_raw
                                             --scale 0.016666666666667 \
                                             --output ${DATADIR}/habitat_maps/pnv/
 
-python3 ./prepare_layers/generate_crosswalk.py --output ${DATADIR}/crosswalk.csv
 
 # Generate an area scaling map
 python3 ./prepare_layers/make_area_map.py --scale 0.016666666666667 --output ${DATADIR}/area-per-pixel.tif
