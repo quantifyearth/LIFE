@@ -58,6 +58,8 @@ WHERE
     assessments.latest = true
     AND assessment_scopes.scope_lookup_id = 15 -- global assessments only
     AND taxons.class_name = %s
+    AND taxons.infra_type is NULL -- no subspecies
+    AND taxons.metadata->>'taxon_level' = 'Species'  -- no subpopulations
     AND red_list_category_lookup.code NOT IN ('EX')
 """
 
