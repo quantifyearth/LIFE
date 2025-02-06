@@ -11,7 +11,10 @@ from yirgacheffe.layers import RasterLayer, RescaledRasterLayer
 # From Eyres et al: In the restoration scenario all areas classified as arable or pasture were restored to their PNV
 IUCN_CODE_REPLACEMENTS = [
     "14.1",
-    "14.2"
+    "14.2",
+    "14.3",
+    "14.4",
+    "14.6"
 ]
 
 def load_crosswalk_table(table_file_name: str) -> Dict[str,int]:
