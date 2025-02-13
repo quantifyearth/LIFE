@@ -1,43 +1,21 @@
 import argparse
-import importlib
 import logging
 import os
 from functools import partial
 from multiprocessing import Pool
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Optional, Tuple
 
 # import pyshark # pylint: disable=W0611
 import geopandas as gpd
-import pyproj
 import psycopg2
 import shapely
 from postgis.psycopg import register
 
-aoh_cleaning = importlib.import_module("aoh-calculator.cleaning")
+from common import process_geometries, process_habitats, process_systems, process_and_save
 
 logger = logging.getLogger(__name__)
 logging.basicConfig()
 logger.setLevel(logging.DEBUG)
-
-SEASON_NAME = {
-    1: "RESIDENT",
-    2: "BREEDING",
-    3: "NONBREEDING",
-}
-
-COLUMNS = [
-    "id_no",
-    "assessment_id",
-    "season",
-    "elevation_lower",
-    "elevation_upper",
-    "full_habitat_code",
-    "scientific_name",
-    "family_name",
-    "class_name",
-    "category",
-    "geometry",
-]
 
 MAIN_STATEMENT = """
 SELECT
@@ -63,18 +41,28 @@ WHERE
     AND red_list_category_lookup.code NOT IN ('EX')
 """
 
+SYSTEMS_STATEMENT = """
+SELECT
+    STRING_AGG(system_lookup.description->>'en', '|') AS systems
+FROM
+    assessments
+    LEFT JOIN assessment_systems ON assessment_systems.assessment_id = assessments.id
+    LEFT JOIN system_lookup ON assessment_systems.system_lookup_id = system_lookup.id
+WHERE
+    assessments.id = %s
+GROUP BY
+    assessments.id
+"""
+
 HABITATS_STATEMENT = """
 SELECT
     assessment_habitats.supplementary_fields->>'season',
     assessment_habitats.supplementary_fields->>'majorImportance',
-    STRING_AGG(habitat_lookup.code, '|') AS full_habitat_code,
-    STRING_AGG(system_lookup.description->>'en', '|') AS systems
+    STRING_AGG(habitat_lookup.code, '|') AS full_habitat_code
 FROM
     assessments
     LEFT JOIN assessment_habitats ON assessment_habitats.assessment_id = assessments.id
     LEFT JOIN habitat_lookup on habitat_lookup.id = assessment_habitats.habitat_id
-    LEFT JOIN assessment_systems ON assessment_systems.assessment_id = assessments.id
-    LEFT JOIN system_lookup ON assessment_systems.system_lookup_id = system_lookup.id
 WHERE
     assessments.id = %s
     AND (
@@ -82,7 +70,8 @@ WHERE
         assessment_habitats.supplementary_fields->>'suitability' IS NULL
         OR assessment_habitats.supplementary_fields->>'suitability' IN ('Suitable', 'Unknown')
     )
-GROUP BY (assessment_habitats.supplementary_fields->>'season', assessment_habitats.supplementary_fields->>'majorImportance')
+GROUP BY
+    (assessment_habitats.supplementary_fields->>'season', assessment_habitats.supplementary_fields->>'majorImportance')
 """
 
 GEOMETRY_STATEMENT = """
@@ -109,114 +98,6 @@ DB_CONFIG = (
 	f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 )
 
-def tidy_reproject_save(
-    gdf: gpd.GeoDataFrame,
-    output_directory_path: str
-) -> None:
-    # The geometry is in CRS 4326, but the AoH work is done in World_Behrmann, aka Projected CRS: ESRI:54017
-    src_crs = pyproj.CRS.from_epsg(4326)
-    target_crs = src_crs #pyproj.CRS.from_string(target_projection)
-
-    graw = gdf.loc[0].copy()
-    grow = aoh_cleaning.tidy_data(graw)
-    os.makedirs(output_directory_path, exist_ok=True)
-    output_path = os.path.join(output_directory_path, f"{grow.id_no}_{grow.season}.geojson")
-    res = gpd.GeoDataFrame(grow.to_frame().transpose(), crs=src_crs, geometry="geometry")
-    res_projected = res.to_crs(target_crs)
-    res_projected.to_file(output_path, driver="GeoJSON")
-
-def process_habitats(
-    habitats_data: List,
-) -> Dict:
-
-    if len(habitats_data) == 0:
-        raise ValueError("No habitats found")
-
-    # Clean up habitats to ensure they're unique (the system agg in the SQL statement might duplicate them)
-    # In the database there are the following seasons:
-    #    breeding
-    #    Breeding Season
-    #    non-breeding
-    #    Non-Breeding Season
-    #    passage
-    #    Passage
-    #    resident
-    #    Resident
-    #    Seasonal Occurrence Unknown
-    #    unknown
-    #    null
-
-    habitats : Dict[Set[str]] = {}
-    major_habitats : Dict[Set[int]] = {}
-    for season, major_importance, habitat_values, systems in habitats_data:
-
-        match season:
-            case 'passage' | 'Passage':
-                continue
-            case 'resident' | 'Resident' | 'Seasonal Occurrence Unknown' | 'unknown' | None:
-                season_code = 1
-            case 'breeding' | 'Breeding Season':
-                season_code = 2
-            case 'non-breeding' | 'Non-Breeding Season':
-                season_code = 3
-            case _:
-                raise ValueError(f"Unexpected season {season}")
-
-        if systems is None:
-            continue
-        if "Marine" in systems:
-            raise ValueError("Marine in systems")
-
-        if habitat_values is None:
-            continue
-        habitat_set = set(habitat_values.split('|'))
-        if len(habitat_set) == 0:
-            continue
-
-        habitats[season_code] = habitat_set | habitats.get(season_code, set())
-
-        if major_importance == 'Yes':
-            major_habitats[season_code] = \
-                {float(x) for x in habitat_set} | major_habitats.get(season_code, set())
-
-    # habitat based filtering
-    if len(habitats) == 0:
-        raise ValueError("No filtered habitats")
-
-    major_habitats_lvl_1 = {k: {int(v) for v in x} for k, x in major_habitats.items()}
-
-    for _, season_major_habitats in major_habitats_lvl_1.items():
-        if 7 in season_major_habitats:
-            raise ValueError("Habitat 7 in major importance habitat list")
-    for _, season_major_habitats in major_habitats.items():
-        if not season_major_habitats - set([5.1, 5.5, 5.6, 5.14, 5.16]):
-            raise ValueError("Freshwater lakes are major habitat")
-
-    return habitats
-
-def process_geometries(geometries_data: List[Tuple[int,shapely.Geometry]]) -> Dict[int,shapely.Geometry]:
-    if len(geometries_data) == 0:
-        raise ValueError("No geometries")
-
-    geometries = {}
-    for season, geometry in geometries_data:
-        grange = shapely.normalize(shapely.from_wkb(geometry.to_ewkb()))
-
-        match season:
-            case 1 | 5:
-                season_code = 1
-            case 2 | 3:
-                season_code = season
-            case _:
-                raise ValueError(f"Unexpected season: {season}")
-
-        try:
-            geometries[season_code] = shapely.union(geometries[season_code], grange)
-        except KeyError:
-            geometries[season_code] = grange
-
-    return geometries
-
 def process_row(
     class_name: str,
     output_directory_path: str,
@@ -228,14 +109,22 @@ def process_row(
     register(connection)
     cursor = connection.cursor()
 
-    id_no, assessment_id, elevation_lower, elevation_upper, scientific_name, family_name, threat_code = row
+    (id_no, assessment_id, _elevation_lower, _elevation_upper, _scientific_name, _family_name, _threat_code) = row
+
+    cursor.execute(SYSTEMS_STATEMENT, (assessment_id,))
+    systems_data = cursor.fetchall()
+    try:
+        process_systems(systems_data)
+    except ValueError as exc:
+        logger.info("Dropping %s: %s", id_no, str(exc))
+        return
 
     cursor.execute(HABITATS_STATEMENT, (assessment_id,))
     habitats_data = cursor.fetchall()
     try:
         habitats = process_habitats(habitats_data)
     except ValueError as exc:
-        logging.info("Dropping %s: %s", id_no, str(exc))
+        logger.info("Dropping %s: %s", id_no, str(exc))
         return
 
     cursor.execute(GEOMETRY_STATEMENT, (assessment_id, presence))
@@ -243,108 +132,16 @@ def process_row(
     try:
         geometries = process_geometries(geometries_data)
     except ValueError as exc:
-        logging.info("Dropping %s: %s", id_no, str(exc))
+        logger.info("Dropping %s: %s", id_no, str(exc))
         return
 
-    seasons = set(geometries.keys()) | set(habitats.keys())
-
-    if seasons == {1}:
-        # Resident only
-        gdf = gpd.GeoDataFrame(
-            [[
-                id_no,
-                assessment_id,
-                SEASON_NAME[1],
-                int(elevation_lower) if elevation_lower is not None else None,
-                int(elevation_upper) if elevation_upper is not None else None,
-                '|'.join(list(habitats[1])),
-                scientific_name,
-                family_name,
-                class_name,
-                threat_code,
-                geometries[1]
-            ]],
-            columns=COLUMNS,
-            crs='epsg:4326'
-        )
-        tidy_reproject_save(gdf, output_directory_path)
-    else:
-        # Breeding and non-breeding
-        # Sometimes in the IUCN database there's only data on one season (e.g., AVES 103838515), and so
-        # we need to do another sanity check to make sure both have useful data before we write out
-
-        geometries_seasons_breeding = set(geometries.keys())
-        geometries_seasons_breeding.discard(3)
-        geometries_breeding = [geometries[x] for x in geometries_seasons_breeding]
-        if len(geometries_breeding) == 0:
-            logger.debug("Dropping %s as no breeding geometries", id_no)
-            return
-        geometry_breeding = shapely.union_all(geometries_breeding)
-
-        geometries_seasons_non_breeding = set(geometries.keys())
-        geometries_seasons_non_breeding.discard(2)
-        geometries_non_breeding = [geometries[x] for x in geometries_seasons_non_breeding]
-        if len(geometries_non_breeding) == 0:
-            logger.debug("Dropping %s as no non-breeding geometries", id_no)
-            return
-        geometry_non_breeding = shapely.union_all(geometries_non_breeding)
-
-        habitats_seasons_breeding = set(habitats.keys())
-        habitats_seasons_breeding.discard(3)
-        habitats_breeding = set()
-        for season in habitats_seasons_breeding:
-            habitats_breeding |= habitats[season]
-        if len(habitats_breeding) == 0:
-            logger.debug("Dropping %s as no breeding habitats", id_no)
-            return
-
-        habitats_seasons_non_breeding = set(habitats.keys())
-        habitats_seasons_non_breeding.discard(2)
-        habitats_non_breeding = set()
-        for season in habitats_seasons_non_breeding:
-            habitats_non_breeding |= habitats[season]
-        if len(habitats_non_breeding) == 0:
-            logger.debug("Dropping %s as no non-breeding habitats", id_no)
-            return
-
-        gdf = gpd.GeoDataFrame(
-            [[
-                id_no,
-                assessment_id,
-                SEASON_NAME[2],
-                int(elevation_lower) if elevation_lower is not None else None,
-                int(elevation_upper) if elevation_upper is not None else None,
-                '|'.join(list(habitats_breeding)),
-                scientific_name,
-                family_name,
-                class_name,
-                threat_code,
-                geometry_breeding
-            ]],
-            columns=COLUMNS,
-            crs='epsg:4326'
-        )
-        tidy_reproject_save(gdf, output_directory_path)
-
-        gdf = gpd.GeoDataFrame(
-            [[
-                id_no,
-                assessment_id,
-                SEASON_NAME[3],
-                int(elevation_lower) if elevation_lower is not None else None,
-                int(elevation_upper) if elevation_upper is not None else None,
-                '|'.join(list(habitats_non_breeding)),
-                scientific_name,
-                family_name,
-                class_name,
-                threat_code,
-                geometry_non_breeding
-            ]],
-            columns=COLUMNS,
-            crs='epsg:4326',
-        )
-        tidy_reproject_save(gdf, output_directory_path)
-
+    process_and_save(
+        row,
+        class_name,
+        habitats,
+        geometries,
+        output_directory_path
+    )
 
 def extract_data_per_species(
     class_name: str,
@@ -355,15 +152,15 @@ def extract_data_per_species(
     connection = psycopg2.connect(DB_CONFIG)
     cursor = connection.cursor()
 
+    cursor.execute(MAIN_STATEMENT, (class_name,))
+    # This can be quite big (tens of thousands), but in modern computer term is quite small
+    # and I need to make a follow on DB query per result.
+    results = cursor.fetchall()
+
+    logger.info("Found %d species in class %s", len(results), class_name)
+
     for era, presence in [("current", (1, 2)), ("historic", (1, 2, 4, 5))]:
         era_output_directory_path = os.path.join(output_directory_path, era)
-
-        cursor.execute(MAIN_STATEMENT, (class_name,))
-        # This can be quite big (tens of thousands), but in modern computer term is quite small
-        # and I need to make a follow on DB query per result.
-        results = cursor.fetchall()
-
-        logger.info("Found %d species in class %s in scenarion %s", len(results), class_name, era)
 
         # The limiting amount here is how many concurrent connections the database can take
         with Pool(processes=20) as pool:

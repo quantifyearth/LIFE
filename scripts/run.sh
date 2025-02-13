@@ -132,6 +132,13 @@ do
     python3 ./deltap/delta_p_scaled_area.py --input ${DATADIR}/deltap_sum/arable/${CURVE}/ \
                                         --diffmap ${DATADIR}/habitat/arable_diff_area.tif \
                                         --output ${DATADIR}/deltap_final/scaled_arable_${CURVE}.tif
+
+    # Generate binary summaries for review
+    python3 ./utils/binary_maps.py --input ${DATADIR}/deltap_final/scaled_restore_${CURVE}.tif \
+                                    --output ${DATADIR}/binary/scaled_restore_${CURVE}.tif
+
+    python3 ./utils/binary_maps.py --input ${DATADIR}/deltap_final/scaled_arable_${CURVE}.tif \
+                                    --output ${DATADIR}/binary/scaled_arable_${CURVE}.tif
 done
 
 for CURVE in "${CURVES[@]}"
