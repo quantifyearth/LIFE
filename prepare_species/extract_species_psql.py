@@ -7,11 +7,12 @@ from typing import Optional, Tuple
 
 # import pyshark # pylint: disable=W0611
 import geopandas as gpd
+import pandas as pd
 import psycopg2
 import shapely
 from postgis.psycopg import register
 
-from common import process_geometries, process_habitats, process_systems, process_and_save
+from common import process_geometries, process_habitats, process_systems, process_and_save, SpeciesReport
 
 logger = logging.getLogger(__name__)
 logging.basicConfig()
@@ -103,45 +104,53 @@ def process_row(
     output_directory_path: str,
     presence: Tuple[int],
     row: Tuple,
-) -> None:
+) -> SpeciesReport:
 
     connection = psycopg2.connect(DB_CONFIG)
     register(connection)
     cursor = connection.cursor()
 
-    (id_no, assessment_id, _elevation_lower, _elevation_upper, _scientific_name, _family_name, _threat_code) = row
+    (id_no, assessment_id, _elevation_lower, _elevation_upper, scientific_name, _family_name, _threat_code) = row
+
+    report = SpeciesReport(id_no, assessment_id, scientific_name)
 
     cursor.execute(SYSTEMS_STATEMENT, (assessment_id,))
     systems_data = cursor.fetchall()
     try:
-        process_systems(systems_data)
+        process_systems(systems_data, report)
     except ValueError as exc:
-        logger.info("Dropping %s: %s", id_no, str(exc))
-        return
+        logger.debug("Dropping %s: %s", id_no, str(exc))
+        return report
 
     cursor.execute(HABITATS_STATEMENT, (assessment_id,))
     habitats_data = cursor.fetchall()
     try:
-        habitats = process_habitats(habitats_data)
+        habitats = process_habitats(habitats_data, report)
     except ValueError as exc:
-        logger.info("Dropping %s: %s", id_no, str(exc))
-        return
+        logger.debug("Dropping %s: %s", id_no, str(exc))
+        return report
 
     cursor.execute(GEOMETRY_STATEMENT, (assessment_id, presence))
     geometries_data = cursor.fetchall()
+    geometries_data = [
+        (season, geom.to_ewkb()) for (season, geom) in geometries_data
+    ]
     try:
-        geometries = process_geometries(geometries_data)
+        geometries = process_geometries(geometries_data, report)
     except ValueError as exc:
-        logger.info("Dropping %s: %s", id_no, str(exc))
-        return
+        logger.debug("Dropping %s: %s", id_no, str(exc))
+        return report
 
     process_and_save(
         row,
+        report,
         class_name,
         habitats,
         geometries,
         output_directory_path
     )
+
+    return report
 
 def extract_data_per_species(
     class_name: str,
@@ -161,10 +170,17 @@ def extract_data_per_species(
 
     for era, presence in [("current", (1, 2)), ("historic", (1, 2, 4, 5))]:
         era_output_directory_path = os.path.join(output_directory_path, era)
+        os.makedirs(era_output_directory_path, exist_ok=True)
 
         # The limiting amount here is how many concurrent connections the database can take
         with Pool(processes=20) as pool:
-            pool.map(partial(process_row, class_name, era_output_directory_path, presence), results)
+            reports = pool.map(partial(process_row, class_name, era_output_directory_path, presence), results)
+
+        reports_df = pd.DataFrame(
+            [x.as_row() for x in reports],
+            columns=SpeciesReport.REPORT_COLUMNS
+        ).sort_values('id_no')
+        reports_df.to_csv(os.path.join(era_output_directory_path, "report.csv"), index=False)
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Process agregate species data to per-species-file.")
