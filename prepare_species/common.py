@@ -68,6 +68,11 @@ class SpeciesReport:
             self.info[name] = value
         super().__setattr__(name, value)
 
+    def __getattr__(self, name: str) -> Any:
+        if name in self.REPORT_COLUMNS:
+            return self.info[name]
+        return None
+
     def as_row(self) -> List:
         return [self.info[k] for k in self.REPORT_COLUMNS]
 
