@@ -1,5 +1,6 @@
 geopandas
 numpy
+duckdb
 pyarrow
 pandas
 psutil
@@ -13,7 +14,7 @@ requests
 alive-progress
 matplotlib
 
-gdal[numpy]==3.10.1
+gdal[numpy]
 
 git+https://github.com/quantifyearth/iucn_modlib.git
 git+https://github.com/quantifyearth/yirgacheffe

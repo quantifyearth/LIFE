@@ -7,8 +7,7 @@ from osgeo import gdal
 from yirgacheffe.layers import RasterLayer
 
 layers = ["all", "AMPHIBIANS", "AVES", "MAMMALIA", "REPTILES"]
-layers = ["AMPHIBIANS", "AVES", "MAMMALIA", "REPTILES"]
-
+# layers = ["AMPHIBIANS", "AVES", "MAMMALIA", "REPTILES"]
 
 def binary_maps(
     map_path: str,

@@ -1,5 +1,7 @@
 # Species selection for LIFE
 
+## Methodology
+
 LIFE is currently based on the following species selection criteria from the IUCN Redlist list of endangered species. In general we align with the guidelines set out in [Recent developments in the production of Area of Habitat (AOH) maps for terrestrial vertebrates.]() by Busana et al.
 
 * We select from the classes AMPHIBIA, AVES, MAMMALIA, and REPTILIA.
@@ -23,3 +25,24 @@ LIFE is currently based on the following species selection criteria from the IUC
     * If the elevation lower is greater than the upper, we invert the two values
     * If the difference between the two values is less than 50m then each value is equally adjusted out from centre to ensure that they are 50m apart.
 
+## Implementations
+
+There are two implementations of the species extraction code, one that works with a download from the IUCN website, and one for those partnered/internal to the IUCN that works from the redlist website database directly.
+
+### Downloads
+
+From the IUCN redlist website you will need to download the species categories you are interested in, which will result in a ZIP file containing the following files:
+
+* `all_other_fields.csv`
+* `asessments.csv`
+* `common_names.csv`
+* `habitats.csv`
+* `taxonomy.csv`
+
+LIFE uses all of them except the `common_names.csv` file. You will provide to `extract_species_batch.py` the path of the folder containing these CSV files.
+
+In addition, you need to provide the range files downloaded from the IUCN and optionally BirdLife also. At the time of writing these come as a set of ZIP files containing shape files split per taxa, so for convenience we first unify those into a single GPKG file by passing the zip files to `merge_range_downloads.py`, and that GPKG file is what we pass also to `extract_species_batch.py`.
+
+### Database
+
+If you are working inside the IUCN or as a close partner with access to a database containing the IUCN redlist data, you can use `extract_species_psql.py`. For this you will need to set the environmental variables `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, and `DB_PASSWORD` to point to the instance of your PostGIS database.
