@@ -59,7 +59,7 @@ def make_diff_map(
                 yRes=0.0 - pixel_scale,
                 resampleAlg="average",
                 workingType=gdal.GDT_Float32,
-                callback=lambda a, _b, _c: bar(a),
+                callback=lambda a, _b, _c: bar(a), # pylint: disable=E1102
             ))
 
         print("scaling result:")
