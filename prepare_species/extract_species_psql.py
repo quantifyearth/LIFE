@@ -6,10 +6,8 @@ from multiprocessing import Pool
 from typing import Optional, Tuple
 
 # import pyshark # pylint: disable=W0611
-import geopandas as gpd
 import pandas as pd
 import psycopg2
-import shapely
 from postgis.psycopg import register
 
 from common import process_geometries, process_habitats, process_systems, process_and_save, SpeciesReport
