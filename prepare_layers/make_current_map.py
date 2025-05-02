@@ -7,6 +7,9 @@ import pandas as pd
 from alive_progress import alive_bar
 from yirgacheffe.layers import RasterLayer
 
+from osgeo import gdal
+gdal.SetCacheMax(1 * 1024 * 1024 * 1024)
+
 # From Eyres et al: The current layer maps IUCN level 1 and 2 habitats, but habitats in the PNV layer are mapped
 # only at IUCN level 1, so to estimate species’ proportion of original AOH now remaining we could only use natural
 # habitats mapped at level 1 and artificial habitats at level 2.

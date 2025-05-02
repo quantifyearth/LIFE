@@ -8,6 +8,8 @@ from osgeo import gdal
 from alive_progress import alive_bar
 from yirgacheffe.layers import RasterLayer, UniformAreaLayer
 
+gdal.SetCacheMax(512 * 1024 * 1024)
+
 def make_diff_map(
     current_path: str,
     scenario_path: str,
@@ -20,6 +22,7 @@ def make_diff_map(
 ) -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         raw_map_filename = os.path.join(tmpdir, "raw.tif")
+        print("comparing:")
         with RasterLayer.layer_from_file(current_path) as current:
             with RasterLayer.layer_from_file(scenario_path) as scenario:
 
@@ -30,6 +33,7 @@ def make_diff_map(
 
                 calc = current.numpy_apply(lambda a, b: a != b, scenario)
 
+                gdal.SetCacheMax(512 * 1024 * 1024)
                 with RasterLayer.empty_raster_layer_like(
                     current,
                     filename=raw_map_filename,
@@ -42,18 +46,23 @@ def make_diff_map(
                     else:
                         calc.parallel_save(result, parallelism=concurrency)
 
+        gdal.SetCacheMax(256 * 1024 * 1024 * 1024)
         rescaled_map_filename = os.path.join(tmpdir, "rescaled.tif")
-        gdal.Warp(rescaled_map_filename, raw_map_filename, options=gdal.WarpOptions(
-            creationOptions=['COMPRESS=LZW', 'NUM_THREADS=16'],
-            multithread=True,
-            dstSRS=target_projection,
-            outputType=gdal.GDT_Float32,
-            xRes=pixel_scale,
-            yRes=0.0 - pixel_scale,
-            resampleAlg="average",
-            workingType=gdal.GDT_Float32
-        ))
+        print("reprojecting:")
+        with alive_bar(manual=True) as bar:
+            gdal.Warp(rescaled_map_filename, raw_map_filename, options=gdal.WarpOptions(
+                creationOptions=['COMPRESS=LZW', 'NUM_THREADS=16'],
+                multithread=True,
+                dstSRS=target_projection,
+                outputType=gdal.GDT_Float32,
+                xRes=pixel_scale,
+                yRes=0.0 - pixel_scale,
+                resampleAlg="average",
+                workingType=gdal.GDT_Float32,
+                callback=lambda a, _b, _c: bar(a),
+            ))
 
+        print("scaling result:")
         with UniformAreaLayer.layer_from_file(area_path) as area_map:
             with RasterLayer.layer_from_file(rescaled_map_filename) as diff_map:
                 layers = [area_map, diff_map]
@@ -63,6 +72,7 @@ def make_diff_map(
 
                 area_adjusted_map_filename = os.path.join(tmpdir, "final.tif")
                 calc = area_map * diff_map
+                gdal.SetCacheMax(512 * 1024 * 1024)
 
                 with RasterLayer.empty_raster_layer_like(
                     diff_map,

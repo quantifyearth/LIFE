@@ -5,6 +5,9 @@ import numpy as np
 from alive_progress import alive_bar
 from yirgacheffe.layers import RasterLayer
 
+from osgeo import gdal
+gdal.SetCacheMax(1 * 1024 * 1024 * 1024)
+
 JUNG_ARABLE_CODE = 1401
 JUNG_URBAN_CODE = 1405
 
