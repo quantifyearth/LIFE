@@ -14,7 +14,8 @@ def species_generator(
 
     res = []
     for taxa in taxas:
-        for scenario in ['current', 'restore', 'arable', 'pnv']:
+        # for scenario in ['current', 'restore', 'arable', 'pnv']:
+        for scenario in ['restore_all', 'urban']:
             source = 'historic' if scenario == 'pnv' else 'current'
             taxa_path = os.path.join(input_dir, taxa, source)
             speciess = os.listdir(taxa_path)
