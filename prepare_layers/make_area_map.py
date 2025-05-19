@@ -49,8 +49,8 @@ def make_area_map(
     allpixels = np.rot90(np.array([list(reversed(pixels)) + pixels]))
 
     area = Area(
-        left=math.floor(180 / pixel_scale) * pixel_scale * -1.0,
-        right=((math.floor(180 / pixel_scale) - 1) * pixel_scale * -1.0),
+        left=0,
+        right=pixel_scale,
         top=(math.floor(90 / pixel_scale) * pixel_scale),
         bottom=(math.floor(90 / pixel_scale) * pixel_scale * -1.0)
     )
@@ -60,6 +60,7 @@ def make_area_map(
         gdal.GDT_Float32,
         filename=output_path
     ) as res:
+        assert res.window.xsize == 1
         res._dataset.WriteArray(allpixels, 0, 0)  # pylint: disable=W0212
 
 
