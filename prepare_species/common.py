@@ -1,6 +1,6 @@
 import importlib
 import logging
-import os
+from pathlib import Path
 from typing import Any, Dict, List, Set, Tuple
 
 import geopandas as gpd
@@ -71,7 +71,7 @@ class SpeciesReport:
     def __getattr__(self, name: str) -> Any:
         if name in self.REPORT_COLUMNS:
             return self.info[name]
-        return None
+        return super().__getattr__(name) # pylint: disable=E1101
 
     def as_row(self) -> List:
         return [self.info[k] for k in self.REPORT_COLUMNS]
@@ -198,7 +198,7 @@ def process_geometries(
 def tidy_reproject_save(
     gdf: gpd.GeoDataFrame,
     report: SpeciesReport,
-    output_directory_path: str
+    output_directory_path: Path
 ) -> None:
     # The geometry is in CRS 4326, but the AoH work is done in World_Behrmann, aka Projected CRS: ESRI:54017
     src_crs = pyproj.CRS.from_epsg(4326)
@@ -206,7 +206,7 @@ def tidy_reproject_save(
 
     graw = gdf.loc[0].copy()
     grow = aoh_cleaning.tidy_data(graw)
-    output_path = os.path.join(output_directory_path, f"{grow.id_no}_{grow.season}.geojson")
+    output_path = output_directory_path / f"{grow.id_no}_{grow.season}.geojson"
     res = gpd.GeoDataFrame(grow.to_frame().transpose(), crs=src_crs, geometry="geometry")
     res_projected = res.to_crs(target_crs)
     report.filename = output_path
@@ -218,7 +218,7 @@ def process_and_save(
     class_name: str,
     habitats,
     geometries,
-    output_directory_path: str,
+    output_directory_path: Path,
 ) -> None:
 
     id_no, assessment_id, elevation_lower, elevation_upper, scientific_name, family_name, threat_code = row

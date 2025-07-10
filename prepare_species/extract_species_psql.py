@@ -3,6 +3,7 @@ import logging
 import os
 from functools import partial
 from multiprocessing import Pool
+from pathlib import Path
 from typing import Optional, Tuple
 
 # import pyshark # pylint: disable=W0611
@@ -99,17 +100,15 @@ DB_CONFIG = (
 
 def process_row(
     class_name: str,
-    output_directory_path: str,
+    output_directory_path: Path,
     presence: Tuple[int],
     row: Tuple,
 ) -> SpeciesReport:
-
     connection = psycopg2.connect(DB_CONFIG)
     register(connection)
     cursor = connection.cursor()
 
     (id_no, assessment_id, _elevation_lower, _elevation_upper, scientific_name, _family_name, _threat_code) = row
-
     report = SpeciesReport(id_no, assessment_id, scientific_name)
 
     cursor.execute(SYSTEMS_STATEMENT, (assessment_id,))
@@ -147,12 +146,11 @@ def process_row(
         geometries,
         output_directory_path
     )
-
     return report
 
 def extract_data_per_species(
     class_name: str,
-    output_directory_path: str,
+    output_directory_path: Path,
     _target_projection: Optional[str],
 ) -> None:
 
@@ -167,7 +165,7 @@ def extract_data_per_species(
     logger.info("Found %d species in class %s", len(results), class_name)
 
     for era, presence in [("current", (1, 2)), ("historic", (1, 2, 4, 5))]:
-        era_output_directory_path = os.path.join(output_directory_path, era)
+        era_output_directory_path = output_directory_path / era
         os.makedirs(era_output_directory_path, exist_ok=True)
 
         # The limiting amount here is how many concurrent connections the database can take
@@ -178,7 +176,7 @@ def extract_data_per_species(
             [x.as_row() for x in reports],
             columns=SpeciesReport.REPORT_COLUMNS
         ).sort_values('id_no')
-        reports_df.to_csv(os.path.join(era_output_directory_path, "report.csv"), index=False)
+        reports_df.to_csv(era_output_directory_path / "report.csv", index=False)
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Process agregate species data to per-species-file.")
@@ -191,7 +189,7 @@ def main() -> None:
     )
     parser.add_argument(
         '--output',
-        type=str,
+        type=Path,
         help='Directory where per species Geojson is stored',
         required=True,
         dest='output_directory_path',
