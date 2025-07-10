@@ -3,6 +3,7 @@ import logging
 import os
 from functools import partial
 from multiprocessing import Pool
+from pathlib import Path
 from typing import Optional, Tuple
 
 import duckdb
@@ -77,7 +78,7 @@ WHERE
 
 def process_row(
     class_name: str,
-    output_directory_path: str,
+    output_directory_path: Path,
     presence: Tuple[int],
     row: Tuple,
 ) -> SpeciesReport:
@@ -128,9 +129,9 @@ def process_row(
 
 def extract_data_per_species(
     class_name: str,
-    batch_dir_path: str,
+    batch_dir_path: Path,
     ranges_shape_path: str,
-    output_directory_path: str,
+    output_directory_path: Path,
     _target_projection: Optional[str],
 ) -> None:
     os.makedirs(output_directory_path, exist_ok=True)
@@ -152,7 +153,7 @@ def extract_data_per_species(
     duckdb.query(f"create table ranges as select * from '{ranges_shape_path}'")
 
     for era, presence in [("current", (1, 2)), ("historic", (1, 2, 4, 5))]:
-        era_output_directory_path = os.path.join(output_directory_path, era)
+        era_output_directory_path = output_directory_path / era
         os.makedirs(era_output_directory_path, exist_ok=True)
 
         con = duckdb.connect(":default:")
@@ -165,7 +166,7 @@ def extract_data_per_species(
             [x.as_row() for x in reports],
             columns=SpeciesReport.REPORT_COLUMNS
         ).sort_values('id_no')
-        reports_df.to_csv(os.path.join(era_output_directory_path, "report.csv"), index=False)
+        reports_df.to_csv(era_output_directory_path / "report.csv", index=False)
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Process agregate species data to per-species-file.")
@@ -178,7 +179,7 @@ def main() -> None:
     )
     parser.add_argument(
         '--batchdir',
-        type=str,
+        type=Path,
         help="IUCN species batch download directory",
         required=True,
         dest="batchdir",
@@ -192,7 +193,7 @@ def main() -> None:
     )
     parser.add_argument(
         '--output',
-        type=str,
+        type=Path,
         help='Directory where per species Geojson is stored',
         required=True,
         dest='output_directory_path',
