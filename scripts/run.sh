@@ -95,11 +95,11 @@ python3 ./prepare_species/extract_species_psql.py --class MAMMALIA --output ${DA
 python3 ./prepare_species/extract_species_psql.py --class REPTILIA --output ${DATADIR}/species-info/REPTILIA/ --projection "EPSG:4326"
 
 # Generate the batch job input CSVs
-python3 ./utils/speciesgenerator.py --input ${DATADIR}/species-info --datadir ${DATADIR} --output ${DATADIR}/aohbatch.csv
-python3 ./utils/persistencegenerator.py --input ${DATADIR}/species-info --datadir ${DATADIR} --output ${DATADIR}/persistencebatch.csv
+python3 ./utils/speciesgenerator.py --datadir ${DATADIR} --output ${DATADIR}/aohbatch.csv
+python3 ./utils/persistencegenerator.py --datadir ${DATADIR} --output ${DATADIR}/persistencebatch.csv
 
 # Calculate all the AoHs
-littlejohn -j 200 -o ${DATADIR}/aohbatch.log -c ${DATADIR}/aohbatch.csv ${VIRTUAL_ENV}/bin/python3 -- ./aoh-calculator/aohcalc.py --force-habitat
+littlejohn -j 700 -o ${DATADIR}/aohbatch.log -c ${DATADIR}/aohbatch.csv ${VIRTUAL_ENV}/bin/python3 -- ./aoh-calculator/aohcalc.py --force-habitat
 
 # Calculate predictors from AoHs
 python3 ./aoh-calculator/summaries/species_richness.py --aohs_folder ${DATADIR}/aohs/current/ \
