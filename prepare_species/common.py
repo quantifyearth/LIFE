@@ -71,7 +71,7 @@ class SpeciesReport:
     def __getattr__(self, name: str) -> Any:
         if name in self.REPORT_COLUMNS:
             return self.info[name]
-        return None
+        return super().__getattr__(name)
 
     def as_row(self) -> List:
         return [self.info[k] for k in self.REPORT_COLUMNS]
