@@ -1,13 +1,14 @@
 import argparse
 import math
+from pathlib import Path
 
 import numpy as np
-from osgeo import gdal
-from yirgacheffe.window import Area, PixelScale
-from yirgacheffe.layers import RasterLayer
+from yirgacheffe.layers import RasterLayer # type: ignore
+from yirgacheffe.operators import DataType # type: ignore
+from yirgacheffe.window import Area, PixelScale # type: ignore
 
 # Taken from https://gis.stackexchange.com/questions/127165/more-accurate-way-to-calculate-area-of-rasters
-def area_of_pixel(pixel_size, center_lat):
+def area_of_pixel(pixel_size: float, center_lat: float) -> float:
     """Calculate m^2 area of a wgs84 square pixel.
 
     Adapted from: https://gis.stackexchange.com/a/127327/2397
@@ -38,9 +39,9 @@ def area_of_pixel(pixel_size, center_lat):
 
 def make_area_map(
     pixel_scale: float,
-    output_path: str
+    output_path: Path,
 ) -> None:
-    pixels = [0,] * math.floor(90.0 / pixel_scale)
+    pixels = [0.0,] * math.floor(90.0 / pixel_scale)
     for i in range(len(pixels)):  # pylint: disable=C0200
         y = (i + 0.5) * pixel_scale
         area = area_of_pixel(pixel_scale, y)
@@ -57,7 +58,7 @@ def make_area_map(
     with RasterLayer.empty_raster_layer(
         area,
         PixelScale(pixel_scale, pixel_scale * -1.0),
-        gdal.GDT_Float32,
+        DataType.Float32,
         filename=output_path
     ) as res:
         assert res.window.xsize == 1

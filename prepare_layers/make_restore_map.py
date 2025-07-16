@@ -1,7 +1,7 @@
 import argparse
 import itertools
 import sys
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -20,9 +20,9 @@ IUCN_CODE_REPLACEMENTS = [
     "14.6"
 ]
 
-def load_crosswalk_table(table_file_name: str) -> Dict[str,int]:
+def load_crosswalk_table(table_file_name: str) -> Dict[str,List[int]]:
     rawdata = pd.read_csv(table_file_name)
-    result = {}
+    result: Dict[str,List[int]] = {}
     for _, row in rawdata.iterrows():
         try:
             result[row.code].append(int(row.value))
