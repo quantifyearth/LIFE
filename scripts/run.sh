@@ -30,9 +30,15 @@ reclaimer zenodo --zenodo_id 4058819 \
                  --extract \
                  --output ${DATADIR}/habitat/jung_l2_raw.tif
 
-python3 ./prepare-layers/make_current_map.py --jung /data/habitat/jung_l2_raw.tif \
-                  --crosswalk /data/crosswalk.csv \
-                  --output /data/habitat/current_raw.tif \
+reclaimer zenodo --zenodo_id 4058819 \
+                 --filename lvl2_changemasks_ver004.zip \
+                 --extract \
+                 --output ${DATADIR}/habitat/
+
+python3 ./prepare_layers/make_current_map.py --jung ${DATADIR}/habitat/jung_l2_raw.tif \
+                  --update_masks ${DATADIR}/habitat/lvl2_changemasks_ver004 \
+                  --crosswalk ${DATADIR}/crosswalk.csv \
+                  --output ${DATADIR}/habitat/current_raw.tif \
                   -j 16
 
 python3 ./aoh-calculator/habitat_process.py --habitat ${DATADIR}/habitat/current_raw.tif \

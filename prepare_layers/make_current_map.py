@@ -4,7 +4,6 @@ from pathlib import Path
 from multiprocessing import set_start_method
 from typing import Dict, List, Optional
 
-import numpy as np
 import pandas as pd
 import yirgacheffe.operators as yo # type: ignore
 from alive_progress import alive_bar # type: ignore
@@ -59,7 +58,7 @@ def make_current_map(
         current_map = yo.where(
             updated_jung.isin(map_preserve_code),
             updated_jung,
-            (np.floor(updated_jung / 100) * 100).astype(int),
+            (yo.floor(updated_jung / 100) * 100).astype(yo.DataType.UInt16),
         )
 
         with RasterLayer.empty_raster_layer_like(
