@@ -1,53 +1,50 @@
 import argparse
-import os
 import shutil
 import tempfile
+from pathlib import Path
 from typing import Optional
 
-from osgeo import gdal
 from alive_progress import alive_bar
+from osgeo import gdal
 from yirgacheffe.layers import RasterLayer, UniformAreaLayer
+from yirgacheffe.operators import DataType
 
 gdal.SetCacheMax(512 * 1024 * 1024)
 
 def make_diff_map(
-    current_path: str,
-    scenario_path: str,
-    area_path: str,
+    current_path: Path,
+    scenario_path: Path,
+    area_path: Path,
     pixel_scale: float,
     target_projection: Optional[str],
-    output_path: str,
+    output_path: Path,
     concurrency: Optional[int],
     show_progress: bool,
 ) -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
-        raw_map_filename = os.path.join(tmpdir, "raw.tif")
+        tmpdir_path = Path(tmpdir)
+        raw_map_filename = tmpdir_path / "raw.tif"
         print("comparing:")
         with RasterLayer.layer_from_file(current_path) as current:
             with RasterLayer.layer_from_file(scenario_path) as scenario:
 
-                layers = [current, scenario]
-                intersection = RasterLayer.find_intersection(layers)
-                for layer in layers:
-                    layer.set_window_for_intersection(intersection)
-
-                calc = current.numpy_apply(lambda a, b: a != b, scenario)
+                diff_map = current != scenario
 
                 gdal.SetCacheMax(512 * 1024 * 1024)
                 with RasterLayer.empty_raster_layer_like(
-                    current,
+                    diff_map,
                     filename=raw_map_filename,
-                    datatype=gdal.GDT_Float32,
+                    datatype=DataType.Float32,
                     threads=16
                 ) as result:
                     if show_progress:
                         with alive_bar(manual=True) as bar:
-                            calc.parallel_save(result, callback=bar, parallelism=concurrency)
+                            diff_map.parallel_save(result, callback=bar, parallelism=concurrency)
                     else:
-                        calc.parallel_save(result, parallelism=concurrency)
+                        diff_map.parallel_save(result, parallelism=concurrency)
 
         gdal.SetCacheMax(256 * 1024 * 1024 * 1024)
-        rescaled_map_filename = os.path.join(tmpdir, "rescaled.tif")
+        rescaled_map_filename = tmpdir_path /  "rescaled.tif"
         print("reprojecting:")
         with alive_bar(manual=True) as bar:
             gdal.Warp(rescaled_map_filename, raw_map_filename, options=gdal.WarpOptions(
@@ -65,26 +62,22 @@ def make_diff_map(
         print("scaling result:")
         with UniformAreaLayer.layer_from_file(area_path) as area_map:
             with RasterLayer.layer_from_file(rescaled_map_filename) as diff_map:
-                layers = [area_map, diff_map]
-                intersection = RasterLayer.find_intersection(layers)
-                for layer in layers:
-                    layer.set_window_for_intersection(intersection)
 
-                area_adjusted_map_filename = os.path.join(tmpdir, "final.tif")
-                calc = area_map * diff_map
+                area_adjusted_map_filename = tmpdir_path /  "final.tif"
+                final = area_map * diff_map
                 gdal.SetCacheMax(512 * 1024 * 1024)
 
                 with RasterLayer.empty_raster_layer_like(
-                    diff_map,
+                    final,
                     filename=area_adjusted_map_filename,
                     datatype=gdal.GDT_Float32,
                     threads=16
                 ) as result:
                     if show_progress:
                         with alive_bar(manual=True) as bar:
-                            calc.parallel_save(result, callback=bar, parallelism=concurrency)
+                            final.parallel_save(result, callback=bar, parallelism=concurrency)
                     else:
-                        calc.parallel_save(result, parallelism=concurrency)
+                        final.parallel_save(result, parallelism=concurrency)
 
                 shutil.move(area_adjusted_map_filename, output_path)
 
@@ -93,21 +86,21 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Generate an area difference map.")
     parser.add_argument(
         '--current',
-        type=str,
-        help='Path of Jung L2 map',
+        type=Path,
+        help='Path of current map',
         required=True,
         dest='current_path',
     )
     parser.add_argument(
         '--scenario',
-        type=str,
+        type=Path,
         help='Path of the scenario map',
         required=True,
         dest='scenario_path',
     )
     parser.add_argument(
         '--area',
-        type=str,
+        type=Path,
         help='Path of the area per pixel map',
         required=True,
         dest='area_path',
@@ -129,7 +122,7 @@ def main() -> None:
     )
     parser.add_argument(
         '--output',
-        type=str,
+        type=Path,
         help='Path where final map should be stored',
         required=True,
         dest='results_path',

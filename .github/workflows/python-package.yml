@@ -41,3 +41,6 @@ jobs:
       - name: Tests
         run: |
           python3 -m pytest ./tests
+      - name: Type checking
+        run: |
+          python3 -m mypy prepare_layers prepare_species deltap

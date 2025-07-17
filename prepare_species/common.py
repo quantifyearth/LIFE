@@ -71,7 +71,7 @@ class SpeciesReport:
     def __getattr__(self, name: str) -> Any:
         if name in self.REPORT_COLUMNS:
             return self.info[name]
-        return super().__getattr__(name) # pylint: disable=E1101
+        return super().__getattr__(name) # type: ignore  # pylint: disable=E1101
 
     def as_row(self) -> List:
         return [self.info[k] for k in self.REPORT_COLUMNS]
@@ -117,8 +117,8 @@ def process_habitats(
     #    unknown
     #    null
 
-    habitats : Dict[Set[str]] = {}
-    major_habitats : Dict[Set[int]] = {}
+    habitats : Dict[int,Set[str]] = {}
+    major_habitats : Dict[int,Set[float]] = {}
     for season, major_importance, habitat_values in habitats_data:
 
         match season:
@@ -152,8 +152,8 @@ def process_habitats(
 
     major_habitats_lvl_1 = {k: {int(v) for v in x} for k, x in major_habitats.items()}
 
-    for _, season_major_habitats in major_habitats_lvl_1.items():
-        if 7 in season_major_habitats:
+    for _, season_major_habitats_lvl1 in major_habitats_lvl_1.items():
+        if 7 in season_major_habitats_lvl1:
             raise ValueError("Habitat 7 in major importance habitat list")
     report.not_major_caves = True
     for _, season_major_habitats in major_habitats.items():
@@ -172,7 +172,7 @@ def process_geometries(
         raise ValueError("No geometries")
     report.has_geometries = True
 
-    geometries = {}
+    geometries : Dict[int,Any] = {}
     for season, geometry in geometries_data:
         grange = shapely.normalize(shapely.from_wkb(geometry))
 

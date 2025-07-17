@@ -1,10 +1,10 @@
 import argparse
 import itertools
-import sys
+from pathlib import Path
 from typing import Dict, List, Optional
 
-import numpy as np
 import pandas as pd
+import yirgacheffe.operators as yo
 from alive_progress import alive_bar
 from yirgacheffe.layers import RasterLayer, RescaledRasterLayer
 
@@ -22,7 +22,7 @@ IUCN_CODE_REPLACEMENTS = [
     "14.6"
 ]
 
-def load_crosswalk_table(table_file_name: str) -> Dict[str,List[int]]:
+def load_crosswalk_table(table_file_name: Path) -> Dict[str,List[int]]:
     rawdata = pd.read_csv(table_file_name)
     result: Dict[str,List[int]] = {}
     for _, row in rawdata.iterrows():
@@ -34,10 +34,10 @@ def load_crosswalk_table(table_file_name: str) -> Dict[str,List[int]]:
 
 
 def make_restore_map(
-    pnv_path: str,
-    current_path: str,
-    crosswalk_path: str,
-    output_path: str,
+    pnv_path: Path,
+    current_path: Path,
+    crosswalk_path: Path,
+    output_path: Path,
     concurrency: Optional[int],
     show_progress: bool,
 ) -> None:
@@ -46,61 +46,46 @@ def make_restore_map(
             crosswalk = load_crosswalk_table(crosswalk_path)
 
             map_replacement_codes = list(itertools.chain.from_iterable([crosswalk[x] for x in IUCN_CODE_REPLACEMENTS]))
-
-            try:
-                intersection = RasterLayer.find_intersection([pnv, current])
-            except ValueError:
-                print("Layers do not match in pixel scale or projection:\n", file=sys.stderr)
-                print(f"\t{pnv_path}: {pnv.pixel_scale}, {pnv.projection}")
-                print(f"\t{current_path}: {current.pixel_scale}, {current.projection}")
-                sys.exit(-1)
-
-            for layer in [pnv, current]:
-                layer.set_window_for_intersection(intersection)
-
-            calc = current.numpy_apply(
-                lambda a, b: np.where(np.isin(a, map_replacement_codes), b, a),
-                pnv
-            )
+            restore_map = yo.where(current.isin(map_replacement_codes), pnv, current)
 
             with RasterLayer.empty_raster_layer_like(
-                current,
+                restore_map,
                 filename=output_path,
                 threads=16
             ) as result:
                 if show_progress:
                     with alive_bar(manual=True) as bar:
-                        calc.parallel_save(result, callback=bar, parallelism=concurrency)
+                        restore_map.parallel_save(result, callback=bar, parallelism=concurrency)
                 else:
-                    calc.parallel_save(result, parallelism=concurrency)
+                    restore_map.parallel_save(result, parallelism=concurrency)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Zenodo resource downloader.")
     parser.add_argument(
         '--pnv',
-        type=str,
+        type=Path,
         help='Path of PNV map',
         required=True,
         dest='pnv_path',
     )
     parser.add_argument(
-        '--currentl2',
-        type=str,
-        help='Path of current L2 map',
+        '--current',
+        type=Path,
+        help='Path of current map',
         required=True,
         dest='current_path',
     )
     parser.add_argument(
         '--crosswalk',
-        type=str,
+        type=Path,
         help='Path of map to IUCN crosswalk table',
         required=True,
         dest='crosswalk_path',
     )
     parser.add_argument(
         '--output',
-        type=str,
+        type=Path,
         help='Path where final map should be stored',
         required=True,
         dest='results_path',

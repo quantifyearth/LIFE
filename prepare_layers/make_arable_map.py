@@ -1,7 +1,8 @@
 import argparse
+from pathlib import Path
 from typing import Optional
 
-import numpy as np
+import yirgacheffe.operators as yo
 from alive_progress import alive_bar
 from yirgacheffe.layers import RasterLayer
 
@@ -12,40 +13,38 @@ JUNG_ARABLE_CODE = 1401
 JUNG_URBAN_CODE = 1405
 
 def make_arable_map(
-    current_path: str,
-    output_path: str,
+    current_path: Path,
+    output_path: Path,
     concurrency: Optional[int],
     show_progress: bool,
 ) -> None:
     with RasterLayer.layer_from_file(current_path) as current:
 
-        calc = current.numpy_apply(
-            lambda a: np.where(a != JUNG_URBAN_CODE, JUNG_ARABLE_CODE, a)
-        )
+        arable_map = yo.where(current != JUNG_URBAN_CODE, JUNG_ARABLE_CODE, JUNG_URBAN_CODE)
 
         with RasterLayer.empty_raster_layer_like(
-            current,
+            arable_map,
             filename=output_path,
             threads=16
         ) as result:
             if show_progress:
                 with alive_bar(manual=True) as bar:
-                    calc.parallel_save(result, callback=bar, parallelism=concurrency)
+                    arable_map.parallel_save(result, callback=bar, parallelism=concurrency)
             else:
-                calc.parallel_save(result, parallelism=concurrency)
+                arable_map.parallel_save(result, parallelism=concurrency)
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate the arable scenario map.")
     parser.add_argument(
         '--current',
-        type=str,
-        help='Path of Jung L2 map',
+        type=Path,
+        help='Path of current map',
         required=True,
         dest='current_path',
     )
     parser.add_argument(
         '--output',
-        type=str,
+        type=Path,
         help='Path where final map should be stored',
         required=True,
         dest='results_path',
