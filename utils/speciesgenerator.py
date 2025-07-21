@@ -12,8 +12,7 @@ def species_generator(
 
     res = []
     for taxa in taxas:
-        for scenario in ['current', 'restore', 'arable', 'pnv']:
-        # for scenario in ['restore_all', 'urban']:
+        for scenario in ['current', 'restore', 'arable', 'pnv', 'restore_all', 'urban', 'pasture', 'restore_agriculture']:
             source = 'historic' if scenario == 'pnv' else 'current'
             taxa_path = species_info_dir / taxa / source
             speciess = taxa_path.glob("*.geojson")

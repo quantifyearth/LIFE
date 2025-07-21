@@ -14,7 +14,7 @@ def species_generator(
     for taxa in taxas:
         taxa_path = species_info_dir / taxa / "current"
         speciess = list(taxa_path.glob("*.geojson"))
-        for scenario in ['arable', 'restore']:
+        for scenario in ['restore_all', 'urban', 'arable', 'pasture', 'restore', 'restore_agriculture']:
             for species in speciess:
                 # for curve in ["0.1", "0.25", "0.5", "1.0", "gompertz"]:
                 for curve in ["0.25"]:
