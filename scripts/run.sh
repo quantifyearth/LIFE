@@ -20,7 +20,8 @@ if [ -z "${VIRTUAL_ENV}" ]; then
     exit 1
 fi
 
-declare -a CURVES=("0.1" "0.25" "0.5" "1.0" "gompertz")
+declare -a SCENARIOS=("arable" "restore" "restore_all" "urban" "pasture" "restore_agriculture")
+declare -a TAXAS=("AMPHIBIA" "AVES" "MAMMALIA" "REPTILIA")
 
 python3 ./prepare_layers/generate_crosswalk.py --output ${DATADIR}/crosswalk.csv
 
@@ -73,6 +74,20 @@ python3 ./prepare_layers/make_diff_map.py --current ${DATADIR}/habitat/current_r
                                           --scale 0.016666666666667 \
                                           --output ${DATADIR}/habitat/arable_diff_area.tif
 
+# Generate the pasture scenario map
+python3 ./prepare_layers/make_pasture_map.py --current ${DATADIR}/habitat/current_raw.tif \
+                                             --output ${DATADIR}/habitat/pasture.tif
+
+python3 ./aoh-calculator/habitat_process.py --habitat ${DATADIR}/habitat/pasture.tif \
+                                          --scale 0.016666666666667 \
+                                          --output ${DATADIR}/habitat_maps/pasture/
+
+python3 ./prepare_layers/make_diff_map.py --current ${DATADIR}/habitat/current_raw.tif \
+                                        --scenario ${DATADIR}/habitat/pasture.tif \
+                                        --area ${DATADIR}/area-per-pixel.tif \
+                                        --scale 0.016666666666667 \
+                                        --output ${DATADIR}/habitat/pasture_diff_area.tif
+
 # Generate the restore map
 python3 ./prepare_layers/make_restore_map.py --pnv ${DATADIR}/habitat/pnv_raw.tif \
                                    --current ${DATADIR}/habitat/current_raw.tif \
@@ -89,16 +104,61 @@ python3 ./prepare_layers/make_diff_map.py --current ${DATADIR}/habitat/current_r
                                           --scale 0.016666666666667 \
                                           --output ${DATADIR}/habitat/restore_diff_area.tif
 
+# Generate the restore map
+python3 ./prepare_layers/make_restore_agriculture_map.py --pnv ${DATADIR}/habitat/pnv_raw.tif \
+                                                        --current ${DATADIR}/habitat/current_raw.tif \
+                                                        --crosswalk ${DATADIR}/crosswalk.csv \
+                                                        --output ${DATADIR}/habitat/restore_agriculture.tif
+
+python3 ./aoh-calculator/habitat_process.py --habitat ${DATADIR}/habitat/restore_agriculture.tif \
+                                           --scale 0.016666666666667 \
+                                           --output ${DATADIR}/habitat_maps/restore_agriculture/
+
+python3 ./prepare_layers/make_diff_map.py --current ${DATADIR}/habitat/current_raw.tif \
+                                        --scenario ${DATADIR}/habitat/restore_agriculture.tif \
+                                        --area ${DATADIR}/area-per-pixel.tif \
+                                        --scale 0.016666666666667 \
+                                        --output ${DATADIR}/habitat/restore_agriculture_diff_area.tif
+
+# Generate the restore all map
+python3 ./prepare_layers/make_restore_all_map.py --pnv ${DATADIR}/habitat/pnv_raw.tif \
+                                 --current ${DATADIR}/habitat/current_raw.tif \
+                                 --crosswalk ${DATADIR}/crosswalk.csv \
+                                 --output ${DATADIR}/habitat/restore_all.tif
+
+python3 ./aoh-calculator/habitat_process.py --habitat ${DATADIR}/habitat/restore_all.tif \
+                                           --scale 0.016666666666667 \
+                                           --output ${DATADIR}/habitat_maps/restore_all/
+
+python3 ./prepare_layers/make_diff_map.py --current ${DATADIR}/habitat/current_raw.tif \
+                                        --scenario ${DATADIR}/habitat/restore_all.tif \
+                                        --area ${DATADIR}/area-per-pixel.tif \
+                                        --scale 0.016666666666667 \
+                                        --output ${DATADIR}/habitat/restore_all_diff_area.tif
+
+# Generate urban all map
+python3 ./prepare_layers/make_constant_habitat.py --examplar ${DATADIR}/habitat_maps/arable/lcc_1401.tif \
+                                                   --habitat_code 14.5 \
+                                                   --crosswalk ${DATADIR}/crosswalk.csv \
+                                                   --output ${DATADIR}/habitat_maps/urban
+
+python3 ./prepare_layers/make_constant_diff_map.py --current ${DATADIR}/habitat/current_raw.tif \
+                                                   --habitat_code 14.5 \
+                                                   --crosswalk ${DATADIR}/crosswalk.csv \
+                                                   --area ${DATADIR}/area-per-pixel.tif \
+                                                   --scale 0.016666666666667 \
+                                                   --output ${DATADIR}/habitat/urban_diff_area.tif
+
 # Fetch and prepare the elevation layers
 reclaimer zenodo --zenodo_id 5719984  --filename dem-100m-esri54017.tif --output ${DATADIR}/elevation.tif
 gdalwarp -t_srs EPSG:4326 -tr 0.016666666666667 -0.016666666666667 -r max -co COMPRESS=LZW -wo NUM_THREADS=40 ${DATADIR}/elevation.tif ${DATADIR}/elevation-max.tif
 gdalwarp -t_srs EPSG:4326 -tr 0.016666666666667 -0.016666666666667 -r min -co COMPRESS=LZW -wo NUM_THREADS=40 ${DATADIR}/elevation.tif ${DATADIR}/elevation-min.tif
 
 # Get species data per taxa from IUCN data
-python3 ./prepare_species/extract_species_psql.py --class AVES --output ${DATADIR}/species-info/AVES/ --projection "EPSG:4326"
-python3 ./prepare_species/extract_species_psql.py --class AMPHIBIA --output ${DATADIR}/species-info/AMPHIBIA/ --projection "EPSG:4326"
-python3 ./prepare_species/extract_species_psql.py --class MAMMALIA --output ${DATADIR}/species-info/MAMMALIA/ --projection "EPSG:4326"
-python3 ./prepare_species/extract_species_psql.py --class REPTILIA --output ${DATADIR}/species-info/REPTILIA/ --projection "EPSG:4326"
+for TAXA in "${TAXAS[@]}"
+do
+    python3 ./prepare_species/extract_species_psql.py --class ${TAXA} --output ${DATADIR}/species-info/${TAXA}/ --projection "EPSG:4326"
+done
 
 # Generate the batch job input CSVs
 python3 ./utils/speciesgenerator.py --datadir ${DATADIR} --output ${DATADIR}/aohbatch.csv
@@ -106,6 +166,14 @@ python3 ./utils/persistencegenerator.py --datadir ${DATADIR} --output ${DATADIR}
 
 # Calculate all the AoHs
 littlejohn -j 700 -o ${DATADIR}/aohbatch.log -c ${DATADIR}/aohbatch.csv ${VIRTUAL_ENV}/bin/python3 -- ./aoh-calculator/aohcalc.py --force-habitat
+
+# Generate validation summaries
+python3 ./aoh-calculator/validation/collate_data.py --aoh_results ${DATADIR}/aohs/current/ --output ${DATADIR}/aohs/current.csv
+python3 ./aoh-calculator/validation/collate_data.py --aoh_results ${DATADIR}/aohs/pnv/ --output ${DATADIR}/aohs/pnv.csv
+for SCENARIO in "${SCENARIOS[@]}"
+do
+    python3 ./aoh-calculator/validation/collate_data.py --aoh_results ${DATADIR}/aohs/${SCENARIO}/ --output ${DATADIR}/aohs/${SCENARIO}.csv
+done
 
 # Calculate predictors from AoHs
 python3 ./aoh-calculator/summaries/species_richness.py --aohs_folder ${DATADIR}/aohs/current/ \
@@ -117,34 +185,17 @@ python3 ./aoh-calculator/summaries/endemism.py --aohs_folder ${DATADIR}/aohs/cur
 # Calculate the per species Delta P values
 littlejohn -j 200 -o ${DATADIR}/persistencebatch.log -c ${DATADIR}/persistencebatch.csv ${VIRTUAL_ENV}/bin/python3 --  ./deltap/global_code_residents_pixel.py
 
-for CURVE in "${CURVES[@]}"
+for SCENARIO in "${SCENARIOS[@]}"
 do
-    # Per scenario per taxa sum the delta Ps
-    python3 ./utils/raster_sum.py --rasters_directory ${DATADIR}/deltap/arable/${CURVE}/REPTILIA/ --output ${DATADIR}/deltap_sum/arable/${CURVE}/REPTILIA.tif
-    python3 ./utils/raster_sum.py --rasters_directory ${DATADIR}/deltap/arable/${CURVE}/AVES/ --output ${DATADIR}/deltap_sum/arable/${CURVE}/AVES.tif
-    python3 ./utils/raster_sum.py --rasters_directory ${DATADIR}/deltap/arable/${CURVE}/MAMMALIA/ --output ${DATADIR}/deltap_sum/arable/${CURVE}/MAMMALIA.tif
-    python3 ./utils/raster_sum.py --rasters_directory ${DATADIR}/deltap/arable/${CURVE}/AMPHIBIA/ --output ${DATADIR}/deltap_sum/arable/${CURVE}/AMPHIBIA.tif
-
-    python3 ./utils/raster_sum.py --rasters_directory ${DATADIR}/deltap/restore/${CURVE}/MAMMALIA/ --output ${DATADIR}/deltap_sum/restore/${CURVE}/MAMMALIA.tif
-    python3 ./utils/raster_sum.py --rasters_directory ${DATADIR}/deltap/restore/${CURVE}/AMPHIBIA/ --output ${DATADIR}/deltap_sum/restore/${CURVE}/AMPHIBIA.tif
-    python3 ./utils/raster_sum.py --rasters_directory ${DATADIR}/deltap/restore/${CURVE}/REPTILIA/ --output ${DATADIR}/deltap_sum/restore/${CURVE}/REPTILIA.tif
-    python3 ./utils/raster_sum.py --rasters_directory ${DATADIR}/deltap/restore/${CURVE}/AVES/ --output ${DATADIR}/deltap_sum/restore/${CURVE}/AVES.tif
+    for TAXA in "${TAXAS[@]}"
+    do
+        python3 ./utils/raster_sum.py --rasters_directory ${DATADIR}/deltap/${SCENARIO}/0.25/${TAXA}/ --output ${DATADIR}/deltap_sum/${SCENARIO}/0.25/${TAXA}.tif
+    done
 
     # Generate final map
-    python3 ./deltap/delta_p_scaled_area.py --input ${DATADIR}/deltap_sum/restore/${CURVE}/ \
-                                        --diffmap ${DATADIR}/habitat/restore_diff_area.tif \
-                                        --output ${DATADIR}/deltap_final/scaled_restore_${CURVE}.tif
-
-    python3 ./deltap/delta_p_scaled_area.py --input ${DATADIR}/deltap_sum/arable/${CURVE}/ \
-                                        --diffmap ${DATADIR}/habitat/arable_diff_area.tif \
-                                        --output ${DATADIR}/deltap_final/scaled_arable_${CURVE}.tif
-
-    # Generate binary summaries for review
-    python3 ./utils/binary_maps.py --input ${DATADIR}/deltap_final/scaled_restore_${CURVE}.tif \
-                                    --output ${DATADIR}/binary/scaled_restore_${CURVE}.tif
-
-    python3 ./utils/binary_maps.py --input ${DATADIR}/deltap_final/scaled_arable_${CURVE}.tif \
-                                    --output ${DATADIR}/binary/scaled_arable_${CURVE}.tif
+    python3 ./deltap/delta_p_scaled_area.py --input ${DATADIR}/deltap_sum/${SCENARIO}/0.25/ \
+                                        --diffmap ${DATADIR}/habitat/${SCENARIO}_diff_area.tif \
+                                        --output ${DATADIR}/deltap_final/scaled_${SCENARIO}_0.25.tif
 done
 
 for CURVE in "${CURVES[@]}"
