@@ -8,7 +8,6 @@ from tempfile import TemporaryDirectory
 
 import geopandas as gpd
 import numpy as np
-import yirgacheffe.operators as yo
 from osgeo import gdal
 from yirgacheffe.layers import RasterLayer, ConstantLayer
 

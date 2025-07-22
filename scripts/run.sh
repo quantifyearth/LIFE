@@ -190,24 +190,13 @@ do
     for TAXA in "${TAXAS[@]}"
     do
         python3 ./utils/raster_sum.py --rasters_directory ${DATADIR}/deltap/${SCENARIO}/0.25/${TAXA}/ --output ${DATADIR}/deltap_sum/${SCENARIO}/0.25/${TAXA}.tif
-    done
+    done`
+`
+    python3 ./utils/species_totals.py --aohs ${DATADIR}/deltap/${SCENARIO}/0.25/ --output ${DATADIR}/deltap/${SCENARIO}/0.25/totals.csv
 
     # Generate final map
-    python3 ./deltap/delta_p_scaled_area.py --input ${DATADIR}/deltap_sum/${SCENARIO}/0.25/ \
-                                        --diffmap ${DATADIR}/habitat/${SCENARIO}_diff_area.tif \
-                                        --output ${DATADIR}/deltap_final/scaled_${SCENARIO}_0.25.tif
-done
-
-for CURVE in "${CURVES[@]}"
-do
-    if [ "${CURVE}" == "0.25" ]; then
-        continue
-    fi
-    python3 ./utils/regression_plot.py --a ${DATADIR}/deltap_final/summed_scaled_arable_${CURVE}.tif \
-                                    --b ${DATADIR}/deltap_final/summed_scaled_arable_0.25.tif \
-                                    --output {$DATADIR}/analysis/arable_0.25_vs_${CURVE}.png
-
-    python3 ./utils/regression_plot.py --a ${DATADIR}/deltap_final/summed_scaled_restore_${CURVE}.tif \
-                                    --b ${DATADIR}/deltap_final/summed_scaled_restore_0.25.tif \
-                                    --output {$DATADIR}/analysis/restore_0.25_vs_${CURVE}.png
+    python3 ./deltap/delta_p_scaled.py --input ${DATADIR}/deltap_sum/${SCENARIO}/0.25/ \
+                                       --diffmap ${DATADIR}/habitat/${SCENARIO}_diff_area.tif \
+                                       --totals ${DATADIR}/deltap/${SCENARIO}/0.25/totals.csv \
+                                       --output ${DATADIR}/deltap_final/scaled_${SCENARIO}_0.25.tif
 done
