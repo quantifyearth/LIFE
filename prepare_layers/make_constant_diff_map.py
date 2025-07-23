@@ -4,6 +4,7 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
+import pandas as pd
 from alive_progress import alive_bar
 from osgeo import gdal
 from yirgacheffe.layers import RasterLayer, UniformAreaLayer
@@ -13,7 +14,8 @@ gdal.SetCacheMax(512 * 1024 * 1024)
 
 def make_diff_map(
     current_path: Path,
-    scenario_path: Path,
+    habitat_code: str,
+    crosswalk_path: Path,
     area_path: Path,
     pixel_scale: float,
     target_projection: Optional[str],
@@ -21,27 +23,29 @@ def make_diff_map(
     concurrency: Optional[int],
     show_progress: bool,
 ) -> None:
+    crosswalk = pd.read_csv(crosswalk_path)
+    translations = crosswalk[crosswalk.code==habitat_code]
+    specific_jung_code = list(translations.value)[-1]
+
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
         raw_map_filename = tmpdir_path / "raw.tif"
         print("comparing:")
         with RasterLayer.layer_from_file(current_path) as current:
-            with RasterLayer.layer_from_file(scenario_path) as scenario:
+            diff_map = current != specific_jung_code
 
-                diff_map = current != scenario
-
-                gdal.SetCacheMax(512 * 1024 * 1024)
-                with RasterLayer.empty_raster_layer_like(
-                    diff_map,
-                    filename=raw_map_filename,
-                    datatype=DataType.Float32,
-                    threads=16
-                ) as result:
-                    if show_progress:
-                        with alive_bar(manual=True) as bar:
-                            diff_map.parallel_save(result, callback=bar, parallelism=concurrency)
-                    else:
-                        diff_map.parallel_save(result, parallelism=concurrency)
+            gdal.SetCacheMax(512 * 1024 * 1024)
+            with RasterLayer.empty_raster_layer_like(
+                diff_map,
+                filename=raw_map_filename,
+                datatype=DataType.Float32,
+                threads=16
+            ) as result:
+                if show_progress:
+                    with alive_bar(manual=True) as bar:
+                        diff_map.parallel_save(result, callback=bar, parallelism=concurrency)
+                else:
+                    diff_map.parallel_save(result, parallelism=concurrency)
 
         gdal.SetCacheMax(256 * 1024 * 1024 * 1024)
         rescaled_map_filename = tmpdir_path /  "rescaled.tif"
@@ -92,11 +96,18 @@ def main() -> None:
         dest='current_path',
     )
     parser.add_argument(
-        '--scenario',
-        type=Path,
-        help='Path of the scenario map',
+        '--habitat_code',
+        type=str,
+        help='IUCN habitat code',
         required=True,
-        dest='scenario_path',
+        dest='habitat_code',
+    )
+    parser.add_argument(
+        '--crosswalk',
+        type=Path,
+        help='Path of map to IUCN crosswalk table',
+        required=True,
+        dest='crosswalk_path',
     )
     parser.add_argument(
         '--area',
@@ -147,7 +158,8 @@ def main() -> None:
 
     make_diff_map(
         args.current_path,
-        args.scenario_path,
+        args.habitat_code,
+        args.crosswalk_path,
         args.area_path,
         args.pixel_scale,
         args.target_projection,

@@ -101,7 +101,7 @@ DB_CONFIG = (
 def process_row(
     class_name: str,
     output_directory_path: Path,
-    presence: Tuple[int],
+    presence: Tuple[int,...],
     row: Tuple,
 ) -> SpeciesReport:
     connection = psycopg2.connect(DB_CONFIG)

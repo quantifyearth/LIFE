@@ -164,13 +164,13 @@ def deltap_sum(
     raster_file_map = {}
     for f in files:
         try:
-            id_no = int(idre.match(f).groups()[0])
+            id_no = int(idre.match(f).groups()[0]) # type: ignore[union-attr]
             raster_file_map[id_no] = os.path.join(images_dir, f)
         except AttributeError:
             print(f)
 
 
-    slice_values = [
+    slice_values : List = [
         (k, collated_metadata[k].unique()) for k in slices
     ]
     recursive_process(slice_values, [], collated_metadata, raster_file_map, processes_count, output_directory)

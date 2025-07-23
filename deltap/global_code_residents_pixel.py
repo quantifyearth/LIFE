@@ -38,7 +38,7 @@ def open_layer_as_float64(filename: str) -> RasterLayer:
 
 def calc_persistence_value(current_aoh: float, historic_aoh: float, exponent_func) -> float:
     sp_p = exponent_func(current_aoh / historic_aoh)
-    sp_p_fix = np.where(sp_p > 1, 1, sp_p)
+    sp_p_fix = 1 if sp_p > 1 else sp_p
     return sp_p_fix
 
 def process_delta_p(
@@ -50,6 +50,11 @@ def process_delta_p(
 ) -> RasterLayer:
     # In theory we could recalc current_aoh, but given we already have it don't duplicate work
     # New section added in: Calculating for rasters rather than csv's
+
+
+    new_p = ((ConstantLayer(current_aoh) - current) + scenario) / historic_aoh
+
+
     const_layer = ConstantLayer(current_aoh)
     calc_1 = (const_layer - current) + scenario
     new_aoh = RasterLayer.empty_raster_layer_like(current)

@@ -13,13 +13,8 @@ gdal.SetCacheMax(1 * 1024 * 1024 * 1024)
 
 # From Eyres et al: In the restoration scenario all areas classified as arable or pasture were restored to their PNV
 IUCN_CODE_REPLACEMENTS = [
-    "14",
     "14.1",
     "14.2",
-    "14.3",
-    "14.4",
-    "14.5",
-    "14.6"
 ]
 
 def load_crosswalk_table(table_file_name: Path) -> Dict[str,List[int]]:

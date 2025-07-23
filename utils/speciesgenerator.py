@@ -1,35 +1,33 @@
-#!/usr/bin/env python3
-
 import argparse
-import os
+from pathlib import Path
 
 import pandas as pd
 
+SCENARIOS = ['current', 'restore', 'arable', 'pnv', 'restore_all', 'urban', 'pasture', 'restore_agriculture']
+
 def species_generator(
-    input_dir: str,
-    data_dir: str,
-    output_csv_path: str
+    data_dir: Path,
+    output_csv_path: Path,
 ):
-    taxas = os.listdir(input_dir)
+    species_info_dir = data_dir / "species-info"
+    taxas = [x.name for x in species_info_dir.iterdir()]
 
     res = []
     for taxa in taxas:
-        # for scenario in ['current', 'restore', 'arable', 'pnv']:
-        for scenario in ['restore_all', 'urban']:
+        for scenario in SCENARIOS:
             source = 'historic' if scenario == 'pnv' else 'current'
-            taxa_path = os.path.join(input_dir, taxa, source)
-            speciess = os.listdir(taxa_path)
+            taxa_path = species_info_dir / taxa / source
+            speciess = taxa_path.glob("*.geojson")
             for species in speciess:
                 res.append([
-                    os.path.join(os.path.join(data_dir, "habitat_maps"), scenario),
-                    os.path.join(data_dir, "elevation-max.tif"),
-                    os.path.join(data_dir, "elevation-min.tif"),
-                    os.path.join(data_dir, "area-per-pixel.tif"),
-                    os.path.join(data_dir, "crosswalk.csv"),
-                    os.path.join(os.path.join(data_dir, "species-info/"), taxa, source, species),
-                    os.path.join(os.path.join(data_dir, "aohs/"), scenario, taxa)
+                    data_dir / "habitat_maps" / scenario,
+                    data_dir / "elevation-max.tif",
+                    data_dir / "elevation-min.tif",
+                    data_dir / "area-per-pixel.tif",
+                    data_dir / "crosswalk.csv",
+                    species,
+                    data_dir / "aohs" / scenario / taxa,
                 ])
-
 
     df = pd.DataFrame(res, columns=[
         '--habitats',
@@ -46,29 +44,22 @@ def species_generator(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Species and seasonality generator.")
     parser.add_argument(
-        '--input',
-        type=str,
-        help="directory with taxa folders of species info",
-        required=True,
-        dest="input_dir"
-    )
-    parser.add_argument(
         '--datadir',
-        type=str,
+        type=Path,
         help="directory for results",
         required=True,
         dest="data_dir",
     )
     parser.add_argument(
         '--output',
-        type=str,
+        type=Path,
         help="name of output file for csv",
         required=True,
         dest="output"
     )
     args = parser.parse_args()
 
-    species_generator(args.input_dir, args.data_dir, args.output)
+    species_generator(args.data_dir, args.output)
 
 if __name__ == "__main__":
     main()
