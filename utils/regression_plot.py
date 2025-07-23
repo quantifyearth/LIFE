@@ -5,6 +5,7 @@ import os
 import random
 import sys
 from multiprocessing import Pool, cpu_count
+from typing import List
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -43,7 +44,7 @@ def regression_plot(
 
     with Pool(processes=cpu_count() // 2) as pool:
         filtered_chunk_pairs = pool.map(filter_data, zip(a_pixels, b_pixels))
-        filtered_pairs = functools.reduce(operator.iconcat, filtered_chunk_pairs, [])
+        filtered_pairs: List = functools.reduce(operator.iconcat, filtered_chunk_pairs, [])
         sampled_pairs = random.sample(filtered_pairs, len(filtered_pairs) // 10)
         a_filtered, b_filtered = zip(*sampled_pairs)
 

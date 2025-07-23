@@ -37,10 +37,10 @@ jobs:
           python -m pip install -r requirements.txt
       - name: Lint with pylint
         run: |
-          python3 -m pylint deltap prepare_layers prepare_species usecases
+          python3 -m pylint deltap prepare_layers prepare_species usecases utils local
+      - name: Type checking
+        run: |
+          python3 -m mypy deltap prepare_layers prepare_species usecases utils local
       - name: Tests
         run: |
           python3 -m pytest ./tests
-      - name: Type checking
-        run: |
-          python3 -m mypy prepare_layers prepare_species deltap

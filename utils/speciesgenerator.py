@@ -3,6 +3,8 @@ from pathlib import Path
 
 import pandas as pd
 
+SCENARIOS = ['current', 'restore', 'arable', 'pnv', 'restore_all', 'urban', 'pasture', 'restore_agriculture']
+
 def species_generator(
     data_dir: Path,
     output_csv_path: Path,
@@ -12,7 +14,7 @@ def species_generator(
 
     res = []
     for taxa in taxas:
-        for scenario in ['current', 'restore', 'arable', 'pnv', 'restore_all', 'urban', 'pasture', 'restore_agriculture']:
+        for scenario in SCENARIOS:
             source = 'historic' if scenario == 'pnv' else 'current'
             taxa_path = species_info_dir / taxa / source
             speciess = taxa_path.glob("*.geojson")
