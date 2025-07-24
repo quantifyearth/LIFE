@@ -22,7 +22,7 @@ jobs:
       - name: Install system
         run: |
           apt-get update -qqy
-          apt-get install -y git python3-pip libpq5 libpq-dev
+          apt-get install -y git python3-pip libpq5 libpq-dev shellcheck
       - uses: actions/checkout@v4
         with:
           submodules: 'true'
@@ -44,3 +44,6 @@ jobs:
       - name: Tests
         run: |
           python3 -m pytest ./tests
+      - name: Script checks
+        run: |
+          shellcheck ./scripts/run.sh
