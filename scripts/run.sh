@@ -22,6 +22,7 @@ fi
 
 declare -a SCENARIOS=("arable" "restore" "restore_all" "urban" "pasture" "restore_agriculture")
 declare -a TAXAS=("AMPHIBIA" "AVES" "MAMMALIA" "REPTILIA")
+export CURVE=0.25
 
 python3 ./prepare_layers/generate_crosswalk.py --output "${DATADIR}"/crosswalk.csv
 
@@ -162,7 +163,7 @@ done
 
 # Generate the batch job input CSVs
 python3 ./utils/speciesgenerator.py --datadir "${DATADIR}" --output "${DATADIR}"/aohbatch.csv
-python3 ./utils/persistencegenerator.py --datadir "${DATADIR}" --output "${DATADIR}"/persistencebatch.csv
+python3 ./utils/persistencegenerator.py --datadir "${DATADIR}" --curve "${CURVE}" --output "${DATADIR}"/persistencebatch.csv
 
 # Calculate all the AoHs
 littlejohn -j 700 -o "${DATADIR}"/aohbatch.log -c "${DATADIR}"/aohbatch.csv "${VIRTUAL_ENV}"/bin/python3 -- ./aoh-calculator/aohcalc.py --force-habitat
@@ -189,14 +190,14 @@ for SCENARIO in "${SCENARIOS[@]}"
 do
     for TAXA in "${TAXAS[@]}"
     do
-        python3 ./utils/raster_sum.py --rasters_directory "${DATADIR}"/deltap/"${SCENARIO}"/0.25/"${TAXA}"/ --output "${DATADIR}"/deltap_sum/"${SCENARIO}"/0.25/"${TAXA}".tif
+        python3 ./utils/raster_sum.py --rasters_directory "${DATADIR}"/deltap/"${SCENARIO}"/"${CURVE}"/"${TAXA}"/ --output "${DATADIR}"/deltap_sum/"${SCENARIO}"/"${CURVE}"/"${TAXA}".tif
     done
 
-    python3 ./utils/species_totals.py --aohs "${DATADIR}"/deltap/"${SCENARIO}"/0.25/ --output "${DATADIR}"/deltap/"${SCENARIO}"/0.25/totals.csv
+    python3 ./utils/species_totals.py --aohs "${DATADIR}"/deltap/"${SCENARIO}"/"${CURVE}"/ --output "${DATADIR}"/deltap/"${SCENARIO}"/"${CURVE}"/totals.csv
 
     # Generate final map
-    python3 ./deltap/delta_p_scaled.py --input "${DATADIR}"/deltap_sum/"${SCENARIO}"/0.25/ \
+    python3 ./deltap/delta_p_scaled.py --input "${DATADIR}"/deltap_sum/"${SCENARIO}"/"${CURVE}"/ \
                                        --diffmap "${DATADIR}"/habitat/"${SCENARIO}"_diff_area.tif \
-                                       --totals "${DATADIR}"/deltap/"${SCENARIO}"/0.25/totals.csv \
-                                       --output "${DATADIR}"/deltap_final/scaled_"${SCENARIO}"_0.25.tif
+                                       --totals "${DATADIR}"/deltap/"${SCENARIO}"/"${CURVE}"/totals.csv \
+                                       --output "${DATADIR}"/deltap_final/scaled_"${SCENARIO}"_"${CURVE}".tif
 done
