@@ -9,11 +9,14 @@
 
 set -e
 
+source ${HOME}/venvs/life/bin/activate
+cd ${HOME}/dev/life
+export PATH=$PATH:$HOME/go/bin
+
 if [ -z "${DATADIR}" ]; then
     echo "Please specify $DATADIR"
     exit 1
 fi
-
 
 if [ -z "${VIRTUAL_ENV}" ]; then
     echo "Please specify run in a virtualenv"
@@ -22,7 +25,8 @@ fi
 
 declare -a SCENARIOS=("arable" "restore" "restore_all" "urban" "pasture" "restore_agriculture")
 declare -a TAXAS=("AMPHIBIA" "AVES" "MAMMALIA" "REPTILIA")
-export CURVE=0.25
+export CURVE=gompertz
+
 
 python3 ./prepare_layers/generate_crosswalk.py --output "${DATADIR}"/crosswalk.csv
 
@@ -166,7 +170,7 @@ python3 ./utils/speciesgenerator.py --datadir "${DATADIR}" --output "${DATADIR}"
 python3 ./utils/persistencegenerator.py --datadir "${DATADIR}" --curve "${CURVE}" --output "${DATADIR}"/persistencebatch.csv
 
 # Calculate all the AoHs
-littlejohn -j 700 -o "${DATADIR}"/aohbatch.log -c "${DATADIR}"/aohbatch.csv "${VIRTUAL_ENV}"/bin/python3 -- ./aoh-calculator/aohcalc.py --force-habitat
+littlejohn -j ${SLURM_JOB_CPUS_PER_NODE} -o "${DATADIR}"/aohbatch.log -c "${DATADIR}"/aohbatch.csv "${VIRTUAL_ENV}"/bin/python3 -- ./aoh-calculator/aohcalc.py --force-habitat
 
 # Generate validation summaries
 python3 ./aoh-calculator/validation/collate_data.py --aoh_results "${DATADIR}"/aohs/current/ --output "${DATADIR}"/aohs/current.csv
@@ -184,7 +188,7 @@ python3 ./aoh-calculator/summaries/endemism.py --aohs_folder "${DATADIR}"/aohs/c
                                                --output "${DATADIR}"/predictors/endemism.tif
 
 # Calculate the per species Delta P values
-littlejohn -j 200 -o "${DATADIR}"/persistencebatch.log -c "${DATADIR}"/persistencebatch.csv "${VIRTUAL_ENV}"/bin/python3 --  ./deltap/global_code_residents_pixel.py
+littlejohn -j ${SLURM_JOB_CPUS_PER_NODE} -o "${DATADIR}"/persistencebatch.log -c "${DATADIR}"/persistencebatch.csv "${VIRTUAL_ENV}"/bin/python3 --  ./deltap/global_code_residents_pixel.py
 
 for SCENARIO in "${SCENARIOS[@]}"
 do
