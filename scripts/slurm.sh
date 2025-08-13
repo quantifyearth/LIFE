@@ -9,9 +9,10 @@
 
 set -e
 
-source ${HOME}/venvs/life/bin/activate
-cd ${HOME}/dev/life
-export PATH=$PATH:$HOME/go/bin
+# shellcheck disable=SC1091
+source "${HOME}"/venvs/life/bin/activate
+cd "${HOME}"/dev/life
+export PATH="${PATH}":"${HOME}"/go/bin
 
 if [ -z "${DATADIR}" ]; then
     echo "Please specify $DATADIR"
