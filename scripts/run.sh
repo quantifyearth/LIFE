@@ -193,7 +193,7 @@ do
         python3 ./utils/raster_sum.py --rasters_directory "${DATADIR}"/deltap/"${SCENARIO}"/"${CURVE}"/"${TAXA}"/ --output "${DATADIR}"/deltap_sum/"${SCENARIO}"/"${CURVE}"/"${TAXA}".tif
     done
 
-    python3 ./utils/species_totals.py --aohs "${DATADIR}"/deltap/"${SCENARIO}"/"${CURVE}"/ --output "${DATADIR}"/deltap/"${SCENARIO}"/"${CURVE}"/totals.csv
+    python3 ./utils/species_totals.py --deltaps "${DATADIR}"/deltap/"${SCENARIO}"/"${CURVE}"/ --output "${DATADIR}"/deltap/"${SCENARIO}"/"${CURVE}"/totals.csv
 
     # Generate final map
     python3 ./deltap/delta_p_scaled.py --input "${DATADIR}"/deltap_sum/"${SCENARIO}"/"${CURVE}"/ \

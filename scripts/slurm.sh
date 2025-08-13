@@ -9,9 +9,10 @@
 
 set -e
 
-source ${HOME}/venvs/life/bin/activate
-cd ${HOME}/dev/life
-export PATH=$PATH:$HOME/go/bin
+# shellcheck disable=SC1091
+source "${HOME}"/venvs/life/bin/activate
+cd "${HOME}"/dev/life
+export PATH="${PATH}":"${HOME}"/go/bin
 
 if [ -z "${DATADIR}" ]; then
     echo "Please specify $DATADIR"
@@ -170,7 +171,7 @@ python3 ./utils/speciesgenerator.py --datadir "${DATADIR}" --output "${DATADIR}"
 python3 ./utils/persistencegenerator.py --datadir "${DATADIR}" --curve "${CURVE}" --output "${DATADIR}"/persistencebatch.csv
 
 # Calculate all the AoHs
-littlejohn -j ${SLURM_JOB_CPUS_PER_NODE} -o "${DATADIR}"/aohbatch.log -c "${DATADIR}"/aohbatch.csv "${VIRTUAL_ENV}"/bin/python3 -- ./aoh-calculator/aohcalc.py --force-habitat
+littlejohn -j "${SLURM_JOB_CPUS_PER_NODE}" -o "${DATADIR}"/aohbatch.log -c "${DATADIR}"/aohbatch.csv "${VIRTUAL_ENV}"/bin/python3 -- ./aoh-calculator/aohcalc.py --force-habitat
 
 # Generate validation summaries
 python3 ./aoh-calculator/validation/collate_data.py --aoh_results "${DATADIR}"/aohs/current/ --output "${DATADIR}"/aohs/current.csv
@@ -188,16 +189,16 @@ python3 ./aoh-calculator/summaries/endemism.py --aohs_folder "${DATADIR}"/aohs/c
                                                --output "${DATADIR}"/predictors/endemism.tif
 
 # Calculate the per species Delta P values
-littlejohn -j ${SLURM_JOB_CPUS_PER_NODE} -o "${DATADIR}"/persistencebatch.log -c "${DATADIR}"/persistencebatch.csv "${VIRTUAL_ENV}"/bin/python3 --  ./deltap/global_code_residents_pixel.py
+littlejohn -j "${SLURM_JOB_CPUS_PER_NODE}" -o "${DATADIR}"/persistencebatch.log -c "${DATADIR}"/persistencebatch.csv "${VIRTUAL_ENV}"/bin/python3 --  ./deltap/global_code_residents_pixel.py
 
 for SCENARIO in "${SCENARIOS[@]}"
 do
     for TAXA in "${TAXAS[@]}"
     do
-        python3 ./utils/raster_sum.py --rasters_directory "${DATADIR}"/deltap/"${SCENARIO}"/"${CURVE}"/"${TAXA}"/ --output "${DATADIR}"/deltap_sum/"${SCENARIO}"/"${CURVE}"/"${TAXA}".tif
+        python3 ./utils/raster_sum.py --rasters_directory "${DATADIR}"/deltap/"${SCENARIO}"/"${CURVE}"/"${TAXA}"/ --output "${DATADIR}"/deltap_sum/"${SCENARIO}"/"${CURVE}"/"${TAXA}".tif -j "${SLURM_JOB_CPUS_PER_NODE}"
     done
 
-    python3 ./utils/species_totals.py --aohs "${DATADIR}"/deltap/"${SCENARIO}"/"${CURVE}"/ --output "${DATADIR}"/deltap/"${SCENARIO}"/"${CURVE}"/totals.csv
+    python3 ./utils/species_totals.py --deltaps "${DATADIR}"/deltap/"${SCENARIO}"/"${CURVE}"/ --output "${DATADIR}"/deltap/"${SCENARIO}"/"${CURVE}"/totals.csv
 
     # Generate final map
     python3 ./deltap/delta_p_scaled.py --input "${DATADIR}"/deltap_sum/"${SCENARIO}"/"${CURVE}"/ \
