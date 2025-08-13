@@ -1,6 +1,7 @@
 import argparse
 import os
 import queue
+import resource
 import sys
 import tempfile
 import time
@@ -26,8 +27,6 @@ def worker(
             path: Path = input_queue.get_nowait()
         except queue.Empty:
             break
-        if compress:
-            print(path)
 
         with RasterLayer.layer_from_file(path) as partial_raster:
             if merged_result is None:
@@ -50,15 +49,25 @@ def raster_sum(
     output_filename: Path,
     processes_count: int
 ) -> None:
+    print(f"process count set to {processes_count}")
+
+    _, max_fd_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
+    resource.setrlimit(resource.RLIMIT_NOFILE, (max_fd_limit, max_fd_limit))
+    print(f"Set fd limit to {max_fd_limit}")
+
     os.makedirs(output_filename.parent, exist_ok=True)
 
-    files = images_dir.glob("*.tif")
+    files = list(images_dir.glob("*.tif"))
     if not files:
         sys.exit(f"No files in {images_dir}, aborting")
+    print(f"Found {len(files)} images to process")
 
     with tempfile.TemporaryDirectory() as tempdir:
         with Manager() as manager:
             source_queue = manager.Queue()
+
+            for file in files:
+                source_queue.put(file)
 
             workers = [Process(target=worker, args=(
                 False,
@@ -68,11 +77,6 @@ def raster_sum(
             )) for index in range(processes_count)]
             for worker_process in workers:
                 worker_process.start()
-
-            for file in files:
-                source_queue.put(file)
-            # for _ in range(len(workers)):
-            #     source_queue.put(None)
 
             processes = workers
             while processes:
@@ -85,7 +89,6 @@ def raster_sum(
                         sys.exit(candidate.exitcode)
                     processes.remove(candidate)
                 time.sleep(0.1)
-
 
             # here we should have now a set of images in tempdir to merge
             single_worker = Process(target=worker, args=(
