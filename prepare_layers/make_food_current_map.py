@@ -16,7 +16,8 @@ from yirgacheffe.layers import RasterLayer
 NULL_CODE = 0
 CROP_CODE = 1401
 PASTURE_CODE = 1402
-URBAN_CODE = 1405
+# Codes not to touch. We're currently working at Level 1 except for artificial which is level 2
+PRESERVE_CODES = [600, 700, 900, 1000, 1100, 1200, 1300, 1405]
 
 class TileInfo(NamedTuple):
     """Info about a tile to process"""
@@ -50,7 +51,7 @@ def process_tile(
             continue
 
         if diff_value > 0:
-            valid_mask = ~np.isin(data, [CROP_CODE, PASTURE_CODE, URBAN_CODE])
+            valid_mask = ~np.isin(data, [CROP_CODE, PASTURE_CODE] + PRESERVE_CODES)
         else:
             valid_mask = data == habitat_code
 
@@ -128,8 +129,8 @@ def build_tile_list(
                     tiles.append(TileInfo(
                         x_steps[x],
                         y_steps[y],
-                        (x_steps[x+1] - x_steps[x]) - 1,
-                        (y_steps[y+1] - y_steps[y]) - 1,
+                        (x_steps[x+1] - x_steps[x]),
+                        (y_steps[y+1] - y_steps[y]),
                         crop_row[0][x],
                         pasture_row[0][x],
                     ))
