@@ -1,12 +1,12 @@
 import argparse
 import math
 import os
-import queue
 import resource
 import sys
 import time
 from pathlib import Path
-from multiprocessing import Manager, Process, Queue, cpu_count
+from multiprocessing import Manager, Process, cpu_count
+from queue import Queue
 from typing import List, NamedTuple, Optional, Tuple
 
 import numpy as np
@@ -31,7 +31,7 @@ def process_tile(
     current: yg.layers.RasterLayer,
     pnv: yg.layers.RasterLayer,
     tile: TileInfo,
-) -> bytearray:
+) -> np.ndarray:
 
     data = current.read_array(tile.x_position, tile.y_position, tile.width, tile.height)
 
@@ -58,9 +58,7 @@ def process_tile(
         possible_points = len(valid_locations[0])
         if possible_points == 0:
             continue
-
-        if required_points > possible_points:
-            required_points = possible_points
+        required_points = min(required_points, possible_points)
 
         selected_locations = np.random.choice(
             len(valid_locations[0]),
@@ -94,7 +92,7 @@ def process_tile_concurrently(
                 tile: Optional[TileInfo] = input_queue.get()
                 if tile is None:
                     break
-                elif np.isnan(tile.crop_diff) and np.isnan(tile.pasture_diff):
+                if np.isnan(tile.crop_diff) and np.isnan(tile.pasture_diff):
                     result_queue.put((tile, None))
                 else:
                     data = process_tile(current, pnv, tile)
@@ -149,7 +147,7 @@ def assemble_map(
         with RasterLayer.empty_raster_layer_like(current, filename=output_path) as output:
 
             # A cheat as we don't have a neat API for this on yirgacheffe yet
-            band = output._dataset.GetRasterBand(1)
+            band = output._dataset.GetRasterBand(1) # pylint: disable=W0212
 
             while True:
                 result : Optional[Tuple[TileInfo,Optional[bytearray]]] = result_queue.get()

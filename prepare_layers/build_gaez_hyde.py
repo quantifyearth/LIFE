@@ -1,12 +1,8 @@
 import argparse
 import math
+import os
 import tempfile
 from pathlib import Path
-
-import rasterio
-import numpy as np
-import sys
-import os
 
 import yirgacheffe as yg
 import yirgacheffe.operators as yo
