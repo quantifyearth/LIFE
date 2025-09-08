@@ -1,5 +1,6 @@
 # pylint: disable=C0301
 import argparse
+import os
 from pathlib import Path
 
 import numpy as np
@@ -49,6 +50,7 @@ def absolute(
     slimmed = pd.concat([slimmed_resident, slimmed_migratory])
     slimmed["extinction"] = slimmed.capped_current_persistence - slimmed.capped_scenario_persistence
 
+    os.makedirs(output_filename.parent, exist_ok=True)
     slimmed.to_csv(output_filename, index=False)
 
     for taxa in TAXA:
