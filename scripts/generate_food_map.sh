@@ -55,10 +55,16 @@ if [ ! -f "${DATADIR}"/food/modified_grazing2017AD.asc ]; then
     sed "s/0.0833333/0.08333333333333333/" "${DATADIR}"/food/grazing2017AD.asc > "${DATADIR}"/food/modified_grazing2017AD.asc
 fi
 
+if [ ! -f "${DATADIR}"/food/modified_grazing2017AD.prj ]; then
+    echo 'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Latitude",NORTH],AXIS["Longitude",EAST],AUTHORITY["EPSG","4326"]]' > "${DATADIR}"/food/modified_grazing2017AD.prj
+fi
+
 # We need rescaled versions of the current data
-python3 ./aoh-calculator/habitat_process.py --habitat "${DATADIR}"/habitat/current_raw.tif \
-                                            --scale 0.08333333333333333 \
-                                            --output "${DATADIR}"/food/current_layers/
+if [ ! -d "${DATADIR}"/food/current_layers ]; then
+    python3 ./aoh-calculator/habitat_process.py --habitat "${DATADIR}"/habitat/current_raw.tif \
+                                                --scale 0.08333333333333333 \
+                                                --output "${DATADIR}"/food/current_layers/
+fi
 
 # Combine GAEZ and HYDE data
 python3 ./prepare_layers/build_gaez_hyde.py --gaez "${DATADIR}"/food/GLCSv11_02_5m.tif \
