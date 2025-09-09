@@ -36,7 +36,7 @@ if [ ! -f "${DATADIR}"/food/GLCSv11_02_5m.tif ]; then
     if [ ! -f "${DATADIR}"/food/LR.zip ]; then
         curl -o "${DATADIR}"/food/LR.zip https://s3.eu-west-1.amazonaws.com/data.gaezdev.aws.fao.org/LR.zip
     fi
-    unzip -j "${DATADIR}"/food/LR.zip lco/GLCSv11_02_5m.tif -d "${DATADIR}"/food/GLCSv11_02_5m.tif
+    unzip -j "${DATADIR}"/food/LR.zip LR/lco/GLCSv11_02_5m.tif -d "${DATADIR}"/food/
 fi
 
 # Get HYDE 3.2 data
@@ -45,10 +45,10 @@ if [ ! -f "${DATADIR}"/food/modified_grazing2017AD.asc ]; then
         curl -o "${DATADIR}"/food/baseline.zip "https://geo.public.data.uu.nl/vault-hyde/HYDE%203.2%5B1710494848%5D/original/baseline.zip"
     fi
     if [ ! -f "${DATADIR}"/food/2017AD_lu.zip ]; then
-        unzip -j "${DATADIR}"/food/baseline.zip zip/2017AD_lu.zip -d "${DATADIR}"/food/2017AD_lu.zip
+        unzip -j "${DATADIR}"/food/baseline.zip baseline/zip/2017AD_lu.zip -d "${DATADIR}"/food/
     fi
     if [ ! -f "${DATADIR}"/food/grazing2017AD.asc ]; then
-        unzip -j "${DATADIR}"/food/2017AD_lu.zip grazing2017AD.asc -d "${DATADIR}"/food/grazing2017AD.asc
+        unzip -j "${DATADIR}"/food/2017AD_lu.zip grazing2017AD.asc -d "${DATADIR}"/food/
     fi
     # The pixel scale in the two files have different rounding despite covering the same area
     # and so this makes them align.
