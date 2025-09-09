@@ -23,137 +23,194 @@ fi
 declare -a SCENARIOS=("arable" "restore" "restore_all" "urban" "pasture" "restore_agriculture")
 declare -a TAXAS=("AMPHIBIA" "AVES" "MAMMALIA" "REPTILIA")
 export CURVE=0.25
+export PIXEL_SCALE=0.016666666666667
 
-python3 ./prepare_layers/generate_crosswalk.py --output "${DATADIR}"/crosswalk.csv
+if [ ! -f "${DATADIR}"/crosswalk.csv ]; then
+    python3 ./prepare_layers/generate_crosswalk.py --output "${DATADIR}"/crosswalk.csv
+fi
 
 # Get habitat layer and prepare for use
-reclaimer zenodo --zenodo_id 4058819 \
-                 --filename iucn_habitatclassification_composite_lvl2_ver004.zip \
-                 --extract \
-                 --output "${DATADIR}"/habitat/jung_l2_raw.tif
+if [ ! -f "${DATADIR}"/habitat/current_raw.tif ]; then
+    if [ ! -f "${DATADIR}"/habitat/jung_l2_raw.tif ]; then
+        reclaimer zenodo --zenodo_id 4058819 \
+                        --filename iucn_habitatclassification_composite_lvl2_ver004.zip \
+                        --extract \
+                        --output "${DATADIR}"/habitat/jung_l2_raw.tif
+    fi
 
-reclaimer zenodo --zenodo_id 4058819 \
-                 --filename lvl2_changemasks_ver004.zip \
-                 --extract \
-                 --output "${DATADIR}"/habitat/
+    if [ ! -d "${DATADIR}"/habitat/lvl2_changemasks_ver004 ]; then
+        reclaimer zenodo --zenodo_id 4058819 \
+                        --filename lvl2_changemasks_ver004.zip \
+                        --extract \
+                        --output "${DATADIR}"/habitat/
+    fi
 
-python3 ./prepare_layers/make_current_map.py --jung "${DATADIR}"/habitat/jung_l2_raw.tif \
-                  --update_masks "${DATADIR}"/habitat/lvl2_changemasks_ver004 \
-                  --crosswalk "${DATADIR}"/crosswalk.csv \
-                  --output "${DATADIR}"/habitat/current_raw.tif \
-                  -j 16
+    python3 ./prepare_layers/make_current_map.py --jung "${DATADIR}"/habitat/jung_l2_raw.tif \
+                    --update_masks "${DATADIR}"/habitat/lvl2_changemasks_ver004 \
+                    --crosswalk "${DATADIR}"/crosswalk.csv \
+                    --output "${DATADIR}"/habitat/current_raw.tif \
+                    -j 16
+fi
 
-python3 ./aoh-calculator/habitat_process.py --habitat "${DATADIR}"/habitat/current_raw.tif \
-                                            --scale 0.016666666666667 \
-                                            --output "${DATADIR}"/habitat_maps/current/
+
+if [ ! -d "${DATADIR}"/habitat_maps/current ]; then
+    python3 ./aoh-calculator/habitat_process.py --habitat "${DATADIR}"/habitat/current_raw.tif \
+                                                --scale "${PIXEL_SCALE}" \
+                                                --output "${DATADIR}"/habitat_maps/current/
+fi
 
 # Get PNV layer and prepare for use
-reclaimer zenodo --zenodo_id 4038749 \
-                 --filename pnv_lvl1_004.zip \
-                 --extract \
-                 --output "${DATADIR}"/habitat/pnv_raw.tif
+if [ ! -f "${DATADIR}"/habitat/pnv_raw.tif ]; then
+    reclaimer zenodo --zenodo_id 4038749 \
+                    --filename pnv_lvl1_004.zip \
+                    --extract \
+                    --output "${DATADIR}"/habitat/pnv_raw.tif
+fi
 
-python3 ./aoh-calculator/habitat_process.py --habitat "${DATADIR}"/habitat/pnv_raw.tif \
-                                            --scale 0.016666666666667 \
-                                            --output "${DATADIR}"/habitat_maps/pnv/
-
+if [ ! -d "${DATADIR}"/habitat_maps/pnv ]; then
+    python3 ./aoh-calculator/habitat_process.py --habitat "${DATADIR}"/habitat/pnv_raw.tif \
+                                                --scale "${PIXEL_SCALE}" \
+                                                --output "${DATADIR}"/habitat_maps/pnv/
+fi
 
 # Generate an area scaling map
-python3 ./prepare_layers/make_area_map.py --scale 0.016666666666667 --output "${DATADIR}"/area-per-pixel.tif
+if [ ! -f "${DATADIR}"/area-per-pixel.tif ]; then
+    python3 ./prepare_layers/make_area_map.py --scale "${PIXEL_SCALE}" --output "${DATADIR}"/area-per-pixel.tif
+fi
 
 # Generate the arable scenario map
-python3 ./prepare_layers/make_arable_map.py --current "${DATADIR}"/habitat/current_raw.tif \
-                                  --output "${DATADIR}"/habitat/arable.tif
+if [ ! -f "${DATADIR}"/habitat/arable.tif ]; then
+    python3 ./prepare_layers/make_arable_map.py --current "${DATADIR}"/habitat/current_raw.tif \
+                                    --output "${DATADIR}"/habitat/arable.tif
+fi
 
-python3 ./aoh-calculator/habitat_process.py --habitat "${DATADIR}"/habitat/arable.tif \
-                                            --scale 0.016666666666667 \
-                                            --output "${DATADIR}"/habitat_maps/arable/
+if [ ! -d "${DATADIR}"/habitat_maps/arable ]; then
+    python3 ./aoh-calculator/habitat_process.py --habitat "${DATADIR}"/habitat/arable.tif \
+                                                --scale "${PIXEL_SCALE}" \
+                                                --output "${DATADIR}"/habitat_maps/arable/
+fi
 
-python3 ./prepare_layers/make_diff_map.py --current "${DATADIR}"/habitat/current_raw.tif \
-                                          --scenario "${DATADIR}"/habitat/arable.tif \
-                                          --area "${DATADIR}"/area-per-pixel.tif \
-                                          --scale 0.016666666666667 \
-                                          --output "${DATADIR}"/habitat/arable_diff_area.tif
+if [ ! -f "${DATADIR}"/habitat/arable_diff_area.tif ]; then
+    python3 ./prepare_layers/make_diff_map.py --current "${DATADIR}"/habitat/current_raw.tif \
+                                            --scenario "${DATADIR}"/habitat/arable.tif \
+                                            --area "${DATADIR}"/area-per-pixel.tif \
+                                            --scale "${PIXEL_SCALE}" \
+                                            --output "${DATADIR}"/habitat/arable_diff_area.tif
+fi
 
 # Generate the pasture scenario map
-python3 ./prepare_layers/make_pasture_map.py --current "${DATADIR}"/habitat/current_raw.tif \
-                                             --output "${DATADIR}"/habitat/pasture.tif
+if [ ! -f "${DATADIR}"/habitat/pasture.tif ]; then
+    python3 ./prepare_layers/make_pasture_map.py --current "${DATADIR}"/habitat/current_raw.tif \
+                                                --output "${DATADIR}"/habitat/pasture.tif
+fi
 
-python3 ./aoh-calculator/habitat_process.py --habitat "${DATADIR}"/habitat/pasture.tif \
-                                          --scale 0.016666666666667 \
-                                          --output "${DATADIR}"/habitat_maps/pasture/
+if [ ! -d "${DATADIR}"/habitat_maps/pasture ]; then
+    python3 ./aoh-calculator/habitat_process.py --habitat "${DATADIR}"/habitat/pasture.tif \
+                                            --scale "${PIXEL_SCALE}" \
+                                            --output "${DATADIR}"/habitat_maps/pasture/
+fi
 
-python3 ./prepare_layers/make_diff_map.py --current "${DATADIR}"/habitat/current_raw.tif \
-                                        --scenario "${DATADIR}"/habitat/pasture.tif \
-                                        --area "${DATADIR}"/area-per-pixel.tif \
-                                        --scale 0.016666666666667 \
-                                        --output "${DATADIR}"/habitat/pasture_diff_area.tif
-
-# Generate the restore map
-python3 ./prepare_layers/make_restore_map.py --pnv "${DATADIR}"/habitat/pnv_raw.tif \
-                                   --current "${DATADIR}"/habitat/current_raw.tif \
-                                   --crosswalk "${DATADIR}"/crosswalk.csv \
-                                   --output "${DATADIR}"/habitat/restore.tif
-
-python3 ./aoh-calculator/habitat_process.py --habitat "${DATADIR}"/habitat/restore.tif \
-                                             --scale 0.016666666666667 \
-                                             --output "${DATADIR}"/habitat_maps/restore/
-
-python3 ./prepare_layers/make_diff_map.py --current "${DATADIR}"/habitat/current_raw.tif \
-                                          --scenario "${DATADIR}"/habitat/restore.tif \
-                                          --area "${DATADIR}"/area-per-pixel.tif \
-                                          --scale 0.016666666666667 \
-                                          --output "${DATADIR}"/habitat/restore_diff_area.tif
+if [ ! -f "${DATADIR}"/habitat/pasture_diff_area.tif ]; then
+    python3 ./prepare_layers/make_diff_map.py --current "${DATADIR}"/habitat/current_raw.tif \
+                                            --scenario "${DATADIR}"/habitat/pasture.tif \
+                                            --area "${DATADIR}"/area-per-pixel.tif \
+                                            --scale "${PIXEL_SCALE}" \
+                                            --output "${DATADIR}"/habitat/pasture_diff_area.tif
+fi
 
 # Generate the restore map
-python3 ./prepare_layers/make_restore_agriculture_map.py --pnv "${DATADIR}"/habitat/pnv_raw.tif \
-                                                        --current "${DATADIR}"/habitat/current_raw.tif \
-                                                        --crosswalk "${DATADIR}"/crosswalk.csv \
-                                                        --output "${DATADIR}"/habitat/restore_agriculture.tif
+if [ ! -f "${DATADIR}"/habitat/restore.tif ]; then
+    python3 ./prepare_layers/make_restore_map.py --pnv "${DATADIR}"/habitat/pnv_raw.tif \
+                                    --current "${DATADIR}"/habitat/current_raw.tif \
+                                    --crosswalk "${DATADIR}"/crosswalk.csv \
+                                    --output "${DATADIR}"/habitat/restore.tif
+fi
 
-python3 ./aoh-calculator/habitat_process.py --habitat "${DATADIR}"/habitat/restore_agriculture.tif \
-                                           --scale 0.016666666666667 \
-                                           --output "${DATADIR}"/habitat_maps/restore_agriculture/
+if [ ! -d "${DATADIR}"/habitat_maps/restore ]; then
+    python3 ./aoh-calculator/habitat_process.py --habitat "${DATADIR}"/habitat/restore.tif \
+                                                --scale "${PIXEL_SCALE}" \
+                                                --output "${DATADIR}"/habitat_maps/restore/
+fi
 
-python3 ./prepare_layers/make_diff_map.py --current "${DATADIR}"/habitat/current_raw.tif \
-                                        --scenario "${DATADIR}"/habitat/restore_agriculture.tif \
-                                        --area "${DATADIR}"/area-per-pixel.tif \
-                                        --scale 0.016666666666667 \
-                                        --output "${DATADIR}"/habitat/restore_agriculture_diff_area.tif
+if [ ! -f "${DATADIR}"/habitat/restore_diff_area.tif ]; then
+    python3 ./prepare_layers/make_diff_map.py --current "${DATADIR}"/habitat/current_raw.tif \
+                                            --scenario "${DATADIR}"/habitat/restore.tif \
+                                            --area "${DATADIR}"/area-per-pixel.tif \
+                                            --scale "${PIXEL_SCALE}" \
+                                            --output "${DATADIR}"/habitat/restore_diff_area.tif
+fi
+
+# Generate the restore map
+if [ ! -f "${DATADIR}"/habitat/restore_agriculture.tif ]; then
+    python3 ./prepare_layers/make_restore_agriculture_map.py --pnv "${DATADIR}"/habitat/pnv_raw.tif \
+                                                            --current "${DATADIR}"/habitat/current_raw.tif \
+                                                            --crosswalk "${DATADIR}"/crosswalk.csv \
+                                                            --output "${DATADIR}"/habitat/restore_agriculture.tif
+fi
+
+if [ ! -d "${DATADIR}"/habitat_maps/restore_agriculture ]; then
+    python3 ./aoh-calculator/habitat_process.py --habitat "${DATADIR}"/habitat/restore_agriculture.tif \
+                                            --scale "${PIXEL_SCALE}" \
+                                            --output "${DATADIR}"/habitat_maps/restore_agriculture/
+fi
+
+if [ ! -f "${DATADIR}"/habitat/restore_agriculture_diff_area.tif ]; then
+    python3 ./prepare_layers/make_diff_map.py --current "${DATADIR}"/habitat/current_raw.tif \
+                                            --scenario "${DATADIR}"/habitat/restore_agriculture.tif \
+                                            --area "${DATADIR}"/area-per-pixel.tif \
+                                            --scale "${PIXEL_SCALE}" \
+                                            --output "${DATADIR}"/habitat/restore_agriculture_diff_area.tif
+fi
 
 # Generate the restore all map
-python3 ./prepare_layers/make_restore_all_map.py --pnv "${DATADIR}"/habitat/pnv_raw.tif \
-                                 --current "${DATADIR}"/habitat/current_raw.tif \
-                                 --crosswalk "${DATADIR}"/crosswalk.csv \
-                                 --output "${DATADIR}"/habitat/restore_all.tif
+if [ ! -f "${DATADIR}"/habitat/restore_all.tif ]; then
+    python3 ./prepare_layers/make_restore_all_map.py --pnv "${DATADIR}"/habitat/pnv_raw.tif \
+                                    --current "${DATADIR}"/habitat/current_raw.tif \
+                                    --crosswalk "${DATADIR}"/crosswalk.csv \
+                                    --output "${DATADIR}"/habitat/restore_all.tif
+fi
 
-python3 ./aoh-calculator/habitat_process.py --habitat "${DATADIR}"/habitat/restore_all.tif \
-                                           --scale 0.016666666666667 \
-                                           --output "${DATADIR}"/habitat_maps/restore_all/
+if [ ! -d "${DATADIR}"/habitat_maps/restore_all ]; then
+    python3 ./aoh-calculator/habitat_process.py --habitat "${DATADIR}"/habitat/restore_all.tif \
+                                            --scale "${PIXEL_SCALE}" \
+                                            --output "${DATADIR}"/habitat_maps/restore_all/
+fi
 
-python3 ./prepare_layers/make_diff_map.py --current "${DATADIR}"/habitat/current_raw.tif \
-                                        --scenario "${DATADIR}"/habitat/restore_all.tif \
-                                        --area "${DATADIR}"/area-per-pixel.tif \
-                                        --scale 0.016666666666667 \
-                                        --output "${DATADIR}"/habitat/restore_all_diff_area.tif
+if [ ! -f "${DATADIR}"/habitat/restore_all_diff_area.tif ]; then
+    python3 ./prepare_layers/make_diff_map.py --current "${DATADIR}"/habitat/current_raw.tif \
+                                            --scenario "${DATADIR}"/habitat/restore_all.tif \
+                                            --area "${DATADIR}"/area-per-pixel.tif \
+                                            --scale "${PIXEL_SCALE}" \
+                                            --output "${DATADIR}"/habitat/restore_all_diff_area.tif
+fi
 
 # Generate urban all map
-python3 ./prepare_layers/make_constant_habitat.py --examplar "${DATADIR}"/habitat_maps/arable/lcc_1401.tif \
-                                                   --habitat_code 14.5 \
-                                                   --crosswalk "${DATADIR}"/crosswalk.csv \
-                                                   --output "${DATADIR}"/habitat_maps/urban
+if [ ! -d "${DATADIR}"/habitat_maps/urban ]; then
+    python3 ./prepare_layers/make_constant_habitat.py --examplar "${DATADIR}"/habitat_maps/arable/lcc_1401.tif \
+                                                    --habitat_code 14.5 \
+                                                    --crosswalk "${DATADIR}"/crosswalk.csv \
+                                                    --output "${DATADIR}"/habitat_maps/urban
+fi
 
-python3 ./prepare_layers/make_constant_diff_map.py --current "${DATADIR}"/habitat/current_raw.tif \
-                                                   --habitat_code 14.5 \
-                                                   --crosswalk "${DATADIR}"/crosswalk.csv \
-                                                   --area "${DATADIR}"/area-per-pixel.tif \
-                                                   --scale 0.016666666666667 \
-                                                   --output "${DATADIR}"/habitat/urban_diff_area.tif
+if [ ! -f "${DATADIR}"/habitat/urban_diff_area.tif ]; then
+    python3 ./prepare_layers/make_constant_diff_map.py --current "${DATADIR}"/habitat/current_raw.tif \
+                                                    --habitat_code 14.5 \
+                                                    --crosswalk "${DATADIR}"/crosswalk.csv \
+                                                    --area "${DATADIR}"/area-per-pixel.tif \
+                                                    --scale "${PIXEL_SCALE}" \
+                                                    --output "${DATADIR}"/habitat/urban_diff_area.tif
+fi
 
 # Fetch and prepare the elevation layers
-reclaimer zenodo --zenodo_id 5719984  --filename dem-100m-esri54017.tif --output "${DATADIR}"/elevation.tif
-gdalwarp -t_srs EPSG:4326 -tr 0.016666666666667 -0.016666666666667 -r max -co COMPRESS=LZW -wo NUM_THREADS=40 "${DATADIR}"/elevation.tif "${DATADIR}"/elevation-max.tif
-gdalwarp -t_srs EPSG:4326 -tr 0.016666666666667 -0.016666666666667 -r min -co COMPRESS=LZW -wo NUM_THREADS=40 "${DATADIR}"/elevation.tif "${DATADIR}"/elevation-min.tif
+if [ ! -f "${DATADIR}"/elevation.tif ]; then
+    reclaimer zenodo --zenodo_id 5719984  --filename dem-100m-esri54017.tif --output "${DATADIR}"/elevation.tif
+fi
+if [ ! -f "${DATADIR}"/elevation-max.tif ]; then
+    gdalwarp -t_srs EPSG:4326 -tr "${PIXEL_SCALE}" -"${PIXEL_SCALE}" -r max -co COMPRESS=LZW -wo NUM_THREADS=40 "${DATADIR}"/elevation.tif "${DATADIR}"/elevation-max.tif
+fi
+if [ ! -f "${DATADIR}"/elevation-min.tif ]; then
+    gdalwarp -t_srs EPSG:4326 -tr "${PIXEL_SCALE}" -"${PIXEL_SCALE}" -r min -co COMPRESS=LZW -wo NUM_THREADS=40 "${DATADIR}"/elevation.tif "${DATADIR}"/elevation-min.tif
+fi
 
 # Get species data per taxa from IUCN data
 for TAXA in "${TAXAS[@]}"

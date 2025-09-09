@@ -48,3 +48,4 @@ jobs:
         run: |
           shellcheck ./scripts/run.sh
           shellcheck ./scripts/slurm.sh
+          shellcheck ./scripts/generate_food_map.sh
