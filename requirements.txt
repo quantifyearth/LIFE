@@ -1,3 +1,4 @@
+# general requirements
 geopandas
 numpy
 duckdb
@@ -13,15 +14,17 @@ rasterio
 requests
 alive-progress
 matplotlib
-
+yirgacheffe
+aoh
 gdal[numpy]
-
 git+https://github.com/quantifyearth/iucn_modlib.git
-git+https://github.com/quantifyearth/yirgacheffe
 git+https://github.com/quantifyearth/seasonality
 
+# developer requirements
 pytest
 pylint
 mypy
 pandas-stubs
 types-requests
+yirgacheffe[dev]
+aoh[dev]

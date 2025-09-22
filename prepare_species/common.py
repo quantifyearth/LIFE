@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Set, Tuple
 
+import aoh
 import geopandas as gpd
 import pyproj
 import shapely
@@ -10,8 +11,6 @@ import shapely
 logger = logging.getLogger(__name__)
 logging.basicConfig()
 logger.setLevel(logging.DEBUG)
-
-aoh_cleaning = importlib.import_module("aoh-calculator.cleaning")
 
 SEASON_NAME = {
     1: "RESIDENT",
@@ -205,7 +204,7 @@ def tidy_reproject_save(
     target_crs = src_crs #pyproj.CRS.from_string(target_projection)
 
     graw = gdf.loc[0].copy()
-    grow = aoh_cleaning.tidy_data(graw)
+    grow = aoh.tidy_data(graw)
     output_path = output_directory_path / f"{grow.id_no}_{grow.season}.geojson"
     res = gpd.GeoDataFrame(grow.to_frame().transpose(), crs=src_crs, geometry="geometry")
     res_projected = res.to_crs(target_crs)

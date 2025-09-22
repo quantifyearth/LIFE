@@ -3,7 +3,7 @@ RUN git clone https://github.com/carboncredits/littlejohn.git
 WORKDIR littlejohn
 RUN go build
 
-from  ghcr.io/osgeo/gdal:ubuntu-small-3.10.1
+from  ghcr.io/osgeo/gdal:ubuntu-small-3.11.4
 
 COPY --from=littlejohn /go/littlejohn/littlejohn /bin/littlejohn
 
@@ -12,6 +12,7 @@ RUN apt-get update -qqy && \
 		git \
 		libpq-dev \
 		python3-pip \
+		R-base \
 	&& rm -rf /var/lib/apt/lists/* \
 	&& rm -rf /var/cache/apt/*
 
@@ -19,7 +20,7 @@ RUN apt-get update -qqy && \
 # gdal's python bindings are sad. Pandas we full out as its slow
 # to build, and this means it'll be cached
 RUN pip install --break-system-packages numpy
-RUN pip install --break-system-packages gdal[numpy]==3.10.1
+RUN pip install --break-system-packages gdal[numpy]==3.11.4
 RUN pip install --break-system-packages pandas
 
 COPY requirements.txt /tmp/
