@@ -70,7 +70,7 @@ def main() -> None:
         '--scenarios',
         nargs='*',
         type=str,
-        help="list of scenarios to calculate LIFE for"
+        help="list of scenarios to calculate LIFE for",
         required=True,
         dest="scenarios",
     )
