@@ -8,6 +8,7 @@ def test_empty_report() -> None:
     assert report.id_no == 1
     assert report.assessment_id == 2
     assert report.scientific_name == "name"
+    assert not report.overriden
     assert not report.has_systems
     assert not report.not_marine
     assert not report.has_habitats
@@ -234,6 +235,16 @@ def test_reject_if_marine_in_system():
     report = SpeciesReport(1, 2, "name")
     with pytest.raises(ValueError):
         process_systems(systems_data, report)
+    assert report.has_systems
+    assert not report.not_marine
+
+def test_reject_if_marine_in_system_with_override():
+    systems_data = [
+        ("Terrestrial|Marine",)
+    ]
+    report = SpeciesReport(1, 2, "name")
+    report.overriden = True
+    process_systems(systems_data, report)
     assert report.has_systems
     assert not report.not_marine
 

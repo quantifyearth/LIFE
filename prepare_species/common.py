@@ -39,6 +39,7 @@ class SpeciesReport:
         "id_no",
         "assessment_id",
         "scientific_name",
+        "overriden",
         "has_systems",
         "not_marine",
         "has_habitats",
@@ -74,7 +75,6 @@ class SpeciesReport:
 
     def as_row(self) -> List:
         return [self.info[k] for k in self.REPORT_COLUMNS]
-
 
 def process_systems(
     systems_data: List[Tuple],
