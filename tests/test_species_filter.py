@@ -228,6 +228,23 @@ def test_inverted_13394_habitat_filter():
     assert report.not_major_caves
     assert report.not_major_freshwater_lakes
 
+def test_reject_if_no_systems():
+    systems_data = []
+    report = SpeciesReport(1, 2, "name")
+    with pytest.raises(ValueError):
+        process_systems(systems_data, report)
+    assert not report.has_systems
+    assert not report.not_marine
+
+def test_reject_if_no_systems_with_overriden():
+    systems_data = []
+    report = SpeciesReport(1, 2, "name")
+    report.overriden = True
+    process_systems(systems_data, report)
+    # No exception from above
+    assert not report.has_systems
+    assert not report.not_marine
+
 def test_reject_if_marine_in_system():
     systems_data = [
         ("Terrestrial|Marine",)
@@ -254,5 +271,6 @@ def test_pass_if_marine_not_in_system():
     ]
     report = SpeciesReport(1, 2, "name")
     process_systems(systems_data, report)
+    # No exception from above
     assert report.has_systems
     assert report.not_marine

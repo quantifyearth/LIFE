@@ -81,17 +81,21 @@ def process_systems(
     report: SpeciesReport,
 ) -> None:
     if len(systems_data) == 0:
-        raise ValueError("No systems found")
-    if len(systems_data) > 1:
-        raise ValueError("More than one systems aggregation found")
-    systems = systems_data[0][0]
-    if systems is None:
-        raise ValueError("no systems info")
-    report.has_systems = True
+        if not report.overriden:
+            raise ValueError("No systems found")
+    else:
+        if len(systems_data) > 1:
+            # We don't allow override on this as it's a programmer/database error
+            raise ValueError("More than one systems aggregation found")
+        systems = systems_data[0][0]
+        if systems is None and not report.overriden:
+            raise ValueError("no systems info")
+        report.has_systems = (len(systems_data) == 1) and (systems is not None)
 
-    if "Marine" in systems:
-        raise ValueError("Marine in systems")
-    report.not_marine = True
+        has_marine_in_systems = "Marine" in systems
+        if has_marine_in_systems and not report.overriden:
+            raise ValueError("Marine in systems")
+        report.not_marine = not has_marine_in_systems
 
 def process_habitats(
     habitats_data: List[Tuple],
