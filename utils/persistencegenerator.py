@@ -8,6 +8,7 @@ def species_generator(
     data_dir: Path,
     curve: str,
     output_csv_path: Path,
+    scenarios: List[str],
 ):
     species_info_dir = data_dir / "species-info"
     taxas = [x.name for x in species_info_dir.iterdir()]
@@ -19,7 +20,7 @@ def species_generator(
     for taxa in taxas:
         taxa_path = species_info_dir / taxa / "current"
         speciess = list(taxa_path.glob("*.geojson"))
-        for scenario in ['restore_all', 'urban', 'arable', 'pasture', 'restore', 'restore_agriculture']:
+        for scenario in scenarios:
             for species in speciess:
                 res.append([
                     species,
@@ -65,9 +66,17 @@ def main() -> None:
         required=True,
         dest="output"
     )
+    parser.add_argument(
+        '--scenarios',
+        nargs='*',
+        type=str,
+        help="list of scenarios to calculate LIFE for"
+        required=True,
+        dest="scenarios",
+    )
     args = parser.parse_args()
 
-    species_generator(args.data_dir, args.curve, args.output)
+    species_generator(args.data_dir, args.curve, args.output, args.scenarios)
 
 if __name__ == "__main__":
     main()

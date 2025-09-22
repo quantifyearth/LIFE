@@ -219,8 +219,13 @@ do
 done
 
 # Generate the batch job input CSVs
-python3 ./utils/speciesgenerator.py --datadir "${DATADIR}" --output "${DATADIR}"/aohbatch.csv
-python3 ./utils/persistencegenerator.py --datadir "${DATADIR}" --curve "${CURVE}" --output "${DATADIR}"/persistencebatch.csv
+python3 ./utils/speciesgenerator.py --datadir "${DATADIR}" \
+                                    --output "${DATADIR}"/aohbatch.csv \
+                                    --scenarios "${SCENARIOS[@]}"
+python3 ./utils/persistencegenerator.py --datadir "${DATADIR}" \
+                                        --curve "${CURVE}" \
+                                        --output "${DATADIR}"/persistencebatch.csv \
+                                        --scenarios "${SCENARIOS[@]}"
 
 # Calculate all the AoHs
 littlejohn -j 700 -o "${DATADIR}"/aohbatch.log -c "${DATADIR}"/aohbatch.csv aoh-calc -- --force-habitat
