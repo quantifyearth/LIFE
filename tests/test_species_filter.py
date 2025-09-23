@@ -85,6 +85,19 @@ def test_reject_if_caves_in_major_habitat():
     assert report.keeps_habitats
     assert not report.not_major_caves
 
+def test_reject_if_caves_in_major_habitat_overriden():
+    habitat_data = [
+        ("resident", "Yes", "4.1|7.2"),
+        ("resident", "No", "4.3"),
+    ]
+    report = SpeciesReport(1, 2, "name")
+    report.overriden = True
+    _ = process_habitats(habitat_data, report)
+    # No exception from above
+    assert report.has_habitats
+    assert report.keeps_habitats
+    assert not report.not_major_caves
+
 def test_do_not_reject_if_caves_in_minor_habitat():
     habitat_data = [
         ("resident", "Yes", "4.1|4.2"),
@@ -192,6 +205,19 @@ def test_13394_habitat_filter():
     report = SpeciesReport(1, 2, "name")
     with pytest.raises(ValueError):
         _ = process_habitats(habitat_data, report)
+    assert report.has_habitats
+    assert report.keeps_habitats
+    assert not report.not_major_freshwater_lakes
+
+def test_13394_habitat_filter_with_overrides():
+    habitat_data = [
+        ("resident", "Yes", "5.1"),
+        ("resident", "No", "1.6|1.9"),
+    ]
+    report = SpeciesReport(1, 2, "name")
+    report.overriden = True
+    _ = process_habitats(habitat_data, report)
+    # No exception from above
     assert report.has_habitats
     assert report.keeps_habitats
     assert not report.not_major_freshwater_lakes

@@ -155,14 +155,17 @@ def process_habitats(
 
     major_habitats_lvl_1 = {k: {int(v) for v in x} for k, x in major_habitats.items()}
 
-    for _, season_major_habitats_lvl1 in major_habitats_lvl_1.items():
-        if 7 in season_major_habitats_lvl1:
-            raise ValueError("Habitat 7 in major importance habitat list")
-    report.not_major_caves = True
-    for _, season_major_habitats in major_habitats.items():
-        if not season_major_habitats - set([5.1, 5.5, 5.6, 5.14, 5.16]):
-            raise ValueError("Freshwater lakes are major habitat")
-    report.not_major_freshwater_lakes = True
+    major_caves = any([7 in x for x in major_habitats_lvl_1.values()])
+    if major_caves and not report.overriden:
+        raise ValueError("Habitat 7 in major importance habitat list")
+    report.not_major_caves = not major_caves
+
+    major_freshwater_lakes = any([
+        not (x - {5.1, 5.5, 5.6, 5.14, 5.16}) for x in major_habitats.values()
+    ])
+    if major_freshwater_lakes and not report.overriden:
+        raise ValueError("Freshwater lakes are major habitat")
+    report.not_major_freshwater_lakes = not major_freshwater_lakes
 
     return habitats
 
