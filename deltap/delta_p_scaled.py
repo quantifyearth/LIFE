@@ -52,6 +52,7 @@ def delta_p_scaled_area(
         scaled_filtered_layer.parallel_save(result, band=1)
 
         for idx, inlayer in enumerate(per_taxa):
+            assert inlayer.name
             _, name = os.path.split(inlayer.name)
             taxa = name[:-4]
             species_count = int(total_counts[total_counts.taxa==taxa]["count"].values[0])
