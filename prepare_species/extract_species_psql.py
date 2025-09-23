@@ -1,6 +1,7 @@
 import argparse
 import logging
 import os
+import sys
 from functools import partial
 from multiprocessing import Pool
 from pathlib import Path
@@ -171,12 +172,12 @@ def extract_data_per_species(
     if overrides_path is not None:
         try:
             overrides_df = pd.read_csv(overrides_path)
-            overrides = set(list(overrides_df.id_no))
+            overrides: Set[int] = set(list(overrides_df.id_no))
         except FileNotFoundError:
             sys.exit(f"Failed to find overrides at {overrides_path}")
         logger.info("Found %d species overrides", len(overrides))
     else:
-        overrides={}
+        overrides=set()
 
     for era, presence in [("current", (1, 2)), ("historic", (1, 2, 4, 5))]:
         era_output_directory_path = output_directory_path / era
@@ -184,7 +185,16 @@ def extract_data_per_species(
 
         # The limiting amount here is how many concurrent connections the database can take
         with Pool(processes=20) as pool:
-            reports = pool.map(partial(process_row, class_name, overrides, era_output_directory_path, presence), results)
+            reports = pool.map(
+                partial(
+                    process_row,
+                    class_name,
+                    overrides,
+                    era_output_directory_path,
+                    presence
+                ),
+                results,
+            )
 
         reports_df = pd.DataFrame(
             [x.as_row() for x in reports],

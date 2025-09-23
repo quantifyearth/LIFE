@@ -1,4 +1,3 @@
-import importlib
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Set, Tuple
@@ -155,14 +154,14 @@ def process_habitats(
 
     major_habitats_lvl_1 = {k: {int(v) for v in x} for k, x in major_habitats.items()}
 
-    major_caves = any([7 in x for x in major_habitats_lvl_1.values()])
+    major_caves = any(7 in x for x in major_habitats_lvl_1.values())
     if major_caves and not report.overriden:
         raise ValueError("Habitat 7 in major importance habitat list")
     report.not_major_caves = not major_caves
 
-    major_freshwater_lakes = any([
+    major_freshwater_lakes = any(
         not (x - {5.1, 5.5, 5.6, 5.14, 5.16}) for x in major_habitats.values()
-    ])
+    )
     if major_freshwater_lakes and not report.overriden:
         raise ValueError("Freshwater lakes are major habitat")
     report.not_major_freshwater_lakes = not major_freshwater_lakes
