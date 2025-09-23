@@ -70,9 +70,9 @@ python3 ./prepare_layers/make_area_map.py --scale 0.016666666666667 --output "${
 python3 ./prepare_layers/make_arable_map.py --current "${DATADIR}"/habitat/current_raw.tif \
                                   --output "${DATADIR}"/habitat/arable.tif
 
-python3 ./aoh-calculator/habitat_process.py --habitat "${DATADIR}"/habitat/arable.tif \
-                                            --scale 0.016666666666667 \
-                                            --output "${DATADIR}"/habitat_maps/arable/
+aoh-habitat-process --habitat "${DATADIR}"/habitat/arable.tif \
+                    --scale 0.016666666666667 \
+                    --output "${DATADIR}"/habitat_maps/arable/
 
 python3 ./prepare_layers/make_diff_map.py --current "${DATADIR}"/habitat/current_raw.tif \
                                           --scenario "${DATADIR}"/habitat/arable.tif \
@@ -84,9 +84,9 @@ python3 ./prepare_layers/make_diff_map.py --current "${DATADIR}"/habitat/current
 python3 ./prepare_layers/make_pasture_map.py --current "${DATADIR}"/habitat/current_raw.tif \
                                              --output "${DATADIR}"/habitat/pasture.tif
 
-python3 ./aoh-calculator/habitat_process.py --habitat "${DATADIR}"/habitat/pasture.tif \
-                                          --scale 0.016666666666667 \
-                                          --output "${DATADIR}"/habitat_maps/pasture/
+aoh-habitat-process --habitat "${DATADIR}"/habitat/pasture.tif \
+                    --scale 0.016666666666667 \
+                    --output "${DATADIR}"/habitat_maps/pasture/
 
 python3 ./prepare_layers/make_diff_map.py --current "${DATADIR}"/habitat/current_raw.tif \
                                         --scenario "${DATADIR}"/habitat/pasture.tif \
@@ -100,9 +100,9 @@ python3 ./prepare_layers/make_restore_map.py --pnv "${DATADIR}"/habitat/pnv_raw.
                                    --crosswalk "${DATADIR}"/crosswalk.csv \
                                    --output "${DATADIR}"/habitat/restore.tif
 
-python3 ./aoh-calculator/habitat_process.py --habitat "${DATADIR}"/habitat/restore.tif \
-                                             --scale 0.016666666666667 \
-                                             --output "${DATADIR}"/habitat_maps/restore/
+aoh-habitat-process --habitat "${DATADIR}"/habitat/restore.tif \
+                    --scale 0.016666666666667 \
+                    --output "${DATADIR}"/habitat_maps/restore/
 
 python3 ./prepare_layers/make_diff_map.py --current "${DATADIR}"/habitat/current_raw.tif \
                                           --scenario "${DATADIR}"/habitat/restore.tif \
@@ -116,9 +116,9 @@ python3 ./prepare_layers/make_restore_agriculture_map.py --pnv "${DATADIR}"/habi
                                                         --crosswalk "${DATADIR}"/crosswalk.csv \
                                                         --output "${DATADIR}"/habitat/restore_agriculture.tif
 
-python3 ./aoh-calculator/habitat_process.py --habitat "${DATADIR}"/habitat/restore_agriculture.tif \
-                                           --scale 0.016666666666667 \
-                                           --output "${DATADIR}"/habitat_maps/restore_agriculture/
+aoh-habitat-process --habitat "${DATADIR}"/habitat/restore_agriculture.tif \
+                    --scale 0.016666666666667 \
+                    --output "${DATADIR}"/habitat_maps/restore_agriculture/
 
 python3 ./prepare_layers/make_diff_map.py --current "${DATADIR}"/habitat/current_raw.tif \
                                         --scenario "${DATADIR}"/habitat/restore_agriculture.tif \
@@ -132,9 +132,9 @@ python3 ./prepare_layers/make_restore_all_map.py --pnv "${DATADIR}"/habitat/pnv_
                                  --crosswalk "${DATADIR}"/crosswalk.csv \
                                  --output "${DATADIR}"/habitat/restore_all.tif
 
-python3 ./aoh-calculator/habitat_process.py --habitat "${DATADIR}"/habitat/restore_all.tif \
-                                           --scale 0.016666666666667 \
-                                           --output "${DATADIR}"/habitat_maps/restore_all/
+aoh-habitat-process --habitat "${DATADIR}"/habitat/restore_all.tif \
+                    --scale 0.016666666666667 \
+                    --output "${DATADIR}"/habitat_maps/restore_all/
 
 python3 ./prepare_layers/make_diff_map.py --current "${DATADIR}"/habitat/current_raw.tif \
                                         --scenario "${DATADIR}"/habitat/restore_all.tif \
@@ -167,26 +167,31 @@ do
 done
 
 # Generate the batch job input CSVs
-python3 ./utils/speciesgenerator.py --datadir "${DATADIR}" --output "${DATADIR}"/aohbatch.csv
-python3 ./utils/persistencegenerator.py --datadir "${DATADIR}" --curve "${CURVE}" --output "${DATADIR}"/persistencebatch.csv
+python3 ./utils/speciesgenerator.py --datadir "${DATADIR}" \
+                                    --output "${DATADIR}"/aohbatch.csv \
+                                    --scenarios "${SCENARIOS[@]}"
+python3 ./utils/persistencegenerator.py --datadir "${DATADIR}" \
+                                        --curve "${CURVE}" \
+                                        --output "${DATADIR}"/persistencebatch.csv \
+                                        --scenarios "${SCENARIOS[@]}"
 
 # Calculate all the AoHs
-littlejohn -j "${SLURM_JOB_CPUS_PER_NODE}" -o "${DATADIR}"/aohbatch.log -c "${DATADIR}"/aohbatch.csv "${VIRTUAL_ENV}"/bin/python3 -- ./aoh-calculator/aohcalc.py --force-habitat
+littlejohn -j "${SLURM_JOB_CPUS_PER_NODE}" -o "${DATADIR}"/aohbatch.log -c "${DATADIR}"/aohbatch.csv aoh-calc -- --force-habitat
 
 # Generate validation summaries
-python3 ./aoh-calculator/validation/collate_data.py --aoh_results "${DATADIR}"/aohs/current/ --output "${DATADIR}"/aohs/current.csv
-python3 ./aoh-calculator/validation/collate_data.py --aoh_results "${DATADIR}"/aohs/pnv/ --output "${DATADIR}"/aohs/pnv.csv
+aoh-collate-data --aoh_results "${DATADIR}"/aohs/current/ --output "${DATADIR}"/aohs/current.csv
+aoh-collate-data --aoh_results "${DATADIR}"/aohs/pnv/ --output "${DATADIR}"/aohs/pnv.csv
 for SCENARIO in "${SCENARIOS[@]}"
 do
-    python3 ./aoh-calculator/validation/collate_data.py --aoh_results "${DATADIR}"/aohs/"${SCENARIO}"/ --output "${DATADIR}"/aohs/"${SCENARIO}".csv
+    aoh-collate-data --aoh_results "${DATADIR}"/aohs/"${SCENARIO}"/ --output "${DATADIR}"/aohs/"${SCENARIO}".csv
 done
 
 # Calculate predictors from AoHs
-python3 ./aoh-calculator/summaries/species_richness.py --aohs_folder "${DATADIR}"/aohs/current/ \
-                                                       --output "${DATADIR}"/predictors/species_richness.tif
-python3 ./aoh-calculator/summaries/endemism.py --aohs_folder "${DATADIR}"/aohs/current/ \
-                                               --species_richness "${DATADIR}"/predictors/species_richness.tif \
-                                               --output "${DATADIR}"/predictors/endemism.tif
+aoh-species-richness --aohs_folder "${DATADIR}"/aohs/current/ \
+                     --output "${DATADIR}"/predictors/species_richness.tif
+aoh-endemism --aohs_folder "${DATADIR}"/aohs/current/ \
+             --species_richness "${DATADIR}"/predictors/species_richness.tif \
+             --output "${DATADIR}"/predictors/endemism.tif
 
 # Calculate the per species Delta P values
 littlejohn -j "${SLURM_JOB_CPUS_PER_NODE}" -o "${DATADIR}"/persistencebatch.log -c "${DATADIR}"/persistencebatch.csv "${VIRTUAL_ENV}"/bin/python3 --  ./deltap/global_code_residents_pixel.py

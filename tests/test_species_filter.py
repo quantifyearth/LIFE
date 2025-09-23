@@ -8,6 +8,7 @@ def test_empty_report() -> None:
     assert report.id_no == 1
     assert report.assessment_id == 2
     assert report.scientific_name == "name"
+    assert not report.overriden
     assert not report.has_systems
     assert not report.not_marine
     assert not report.has_habitats
@@ -80,6 +81,19 @@ def test_reject_if_caves_in_major_habitat():
     report = SpeciesReport(1, 2, "name")
     with pytest.raises(ValueError):
         _ = process_habitats(habitat_data, report)
+    assert report.has_habitats
+    assert report.keeps_habitats
+    assert not report.not_major_caves
+
+def test_reject_if_caves_in_major_habitat_overriden():
+    habitat_data = [
+        ("resident", "Yes", "4.1|7.2"),
+        ("resident", "No", "4.3"),
+    ]
+    report = SpeciesReport(1, 2, "name")
+    report.overriden = True
+    _ = process_habitats(habitat_data, report)
+    # No exception from above
     assert report.has_habitats
     assert report.keeps_habitats
     assert not report.not_major_caves
@@ -195,6 +209,19 @@ def test_13394_habitat_filter():
     assert report.keeps_habitats
     assert not report.not_major_freshwater_lakes
 
+def test_13394_habitat_filter_with_overrides():
+    habitat_data = [
+        ("resident", "Yes", "5.1"),
+        ("resident", "No", "1.6|1.9"),
+    ]
+    report = SpeciesReport(1, 2, "name")
+    report.overriden = True
+    _ = process_habitats(habitat_data, report)
+    # No exception from above
+    assert report.has_habitats
+    assert report.keeps_habitats
+    assert not report.not_major_freshwater_lakes
+
 def test_similar_13394_habitat_filter():
     habitat_data = [
         ("resident", "Yes", "5.1|1.7"),
@@ -227,6 +254,23 @@ def test_inverted_13394_habitat_filter():
     assert report.not_major_caves
     assert report.not_major_freshwater_lakes
 
+def test_reject_if_no_systems():
+    systems_data = []
+    report = SpeciesReport(1, 2, "name")
+    with pytest.raises(ValueError):
+        process_systems(systems_data, report)
+    assert not report.has_systems
+    assert not report.not_marine
+
+def test_reject_if_no_systems_with_overriden():
+    systems_data = []
+    report = SpeciesReport(1, 2, "name")
+    report.overriden = True
+    process_systems(systems_data, report)
+    # No exception from above
+    assert not report.has_systems
+    assert not report.not_marine
+
 def test_reject_if_marine_in_system():
     systems_data = [
         ("Terrestrial|Marine",)
@@ -237,11 +281,22 @@ def test_reject_if_marine_in_system():
     assert report.has_systems
     assert not report.not_marine
 
+def test_reject_if_marine_in_system_with_override():
+    systems_data = [
+        ("Terrestrial|Marine",)
+    ]
+    report = SpeciesReport(1, 2, "name")
+    report.overriden = True
+    process_systems(systems_data, report)
+    assert report.has_systems
+    assert not report.not_marine
+
 def test_pass_if_marine_not_in_system():
     systems_data = [
         ("Terrestrial",)
     ]
     report = SpeciesReport(1, 2, "name")
     process_systems(systems_data, report)
+    # No exception from above
     assert report.has_systems
     assert report.not_marine

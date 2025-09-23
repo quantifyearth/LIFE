@@ -61,9 +61,9 @@ fi
 
 # We need rescaled versions of the current data
 if [ ! -d "${DATADIR}"/food/current_layers ]; then
-    python3 ./aoh-calculator/habitat_process.py --habitat "${DATADIR}"/habitat/current_raw.tif \
-                                                --scale 0.08333333333333333 \
-                                                --output "${DATADIR}"/food/current_layers/
+    aoh-habitat-process --habitat "${DATADIR}"/habitat/current_raw.tif \
+                        --scale 0.08333333333333333 \
+                        --output "${DATADIR}"/food/current_layers/
 fi
 
 # Combine GAEZ and HYDE data

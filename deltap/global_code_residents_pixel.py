@@ -5,6 +5,7 @@ import shutil
 import sys
 from enum import Enum
 from tempfile import TemporaryDirectory
+from typing import Union
 
 import geopandas as gpd
 import numpy as np
@@ -26,7 +27,7 @@ def gen_gompertz(x: float) -> float:
 def numpy_gompertz(x: float) -> float:
     return np.exp(-np.exp(GOMPERTZ_A + (GOMPERTZ_B * (x ** GOMPERTZ_ALPHA))))
 
-def open_layer_as_float64(filename: str) -> RasterLayer:
+def open_layer_as_float64(filename: str) -> Union[ConstantLayer,RasterLayer]:
     if filename == "nan":
         return ConstantLayer(0.0)
     layer = RasterLayer.layer_from_file(filename)
@@ -42,8 +43,8 @@ def calc_persistence_value(current_aoh: float, historic_aoh: float, exponent_fun
     return sp_p_fix
 
 def process_delta_p(
-    current: RasterLayer,
-    scenario: RasterLayer,
+    current: Union[ConstantLayer,RasterLayer],
+    scenario: Union[ConstantLayer,RasterLayer],
     current_aoh: float,
     historic_aoh: float,
     exponent_func_raster

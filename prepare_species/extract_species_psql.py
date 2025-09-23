@@ -1,10 +1,11 @@
 import argparse
 import logging
 import os
+import sys
 from functools import partial
 from multiprocessing import Pool
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Set, Tuple
 
 # import pyshark # pylint: disable=W0611
 import pandas as pd
@@ -100,6 +101,7 @@ DB_CONFIG = (
 
 def process_row(
     class_name: str,
+    overrides: Set[int],
     output_directory_path: Path,
     presence: Tuple[int,...],
     row: Tuple,
@@ -110,6 +112,8 @@ def process_row(
 
     (id_no, assessment_id, _elevation_lower, _elevation_upper, scientific_name, _family_name, _threat_code) = row
     report = SpeciesReport(id_no, assessment_id, scientific_name)
+    if id_no in overrides:
+        report.overriden = True
 
     cursor.execute(SYSTEMS_STATEMENT, (assessment_id,))
     systems_data = cursor.fetchall()
@@ -152,6 +156,7 @@ def extract_data_per_species(
     class_name: str,
     output_directory_path: Path,
     _target_projection: Optional[str],
+    overrides_path: Optional[Path],
 ) -> None:
 
     connection = psycopg2.connect(DB_CONFIG)
@@ -164,13 +169,32 @@ def extract_data_per_species(
 
     logger.info("Found %d species in class %s", len(results), class_name)
 
+    if overrides_path is not None:
+        try:
+            overrides_df = pd.read_csv(overrides_path)
+            overrides: Set[int] = set(list(overrides_df.id_no))
+        except FileNotFoundError:
+            sys.exit(f"Failed to find overrides at {overrides_path}")
+        logger.info("Found %d species overrides", len(overrides))
+    else:
+        overrides=set()
+
     for era, presence in [("current", (1, 2)), ("historic", (1, 2, 4, 5))]:
         era_output_directory_path = output_directory_path / era
         os.makedirs(era_output_directory_path, exist_ok=True)
 
         # The limiting amount here is how many concurrent connections the database can take
         with Pool(processes=20) as pool:
-            reports = pool.map(partial(process_row, class_name, era_output_directory_path, presence), results)
+            reports = pool.map(
+                partial(
+                    process_row,
+                    class_name,
+                    overrides,
+                    era_output_directory_path,
+                    presence
+                ),
+                results,
+            )
 
         reports_df = pd.DataFrame(
             [x.as_row() for x in reports],
@@ -202,12 +226,20 @@ def main() -> None:
         dest="target_projection",
         default="ESRI:54017"
     )
+    parser.add_argument(
+        '--overrides',
+        type=Path,
+        help="CSV of species which should be included despite failing other checks.",
+        required=False,
+        dest="overrides_path",
+    )
     args = parser.parse_args()
 
     extract_data_per_species(
         args.classname,
         args.output_directory_path,
-        args.target_projection
+        args.target_projection,
+        args.overrides_path,
     )
 
 if __name__ == "__main__":

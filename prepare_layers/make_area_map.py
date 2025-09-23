@@ -44,8 +44,7 @@ def make_area_map(
     pixels = [0.0,] * math.floor(90.0 / pixel_scale)
     for i in range(len(pixels)):  # pylint: disable=C0200
         y = (i + 0.5) * pixel_scale
-        area = area_of_pixel(pixel_scale, y)
-        pixels[i] = area
+        pixels[i] = area_of_pixel(pixel_scale, y)
 
     allpixels = np.rot90(np.array([list(reversed(pixels)) + pixels]))
 

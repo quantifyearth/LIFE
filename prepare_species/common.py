@@ -1,8 +1,8 @@
-import importlib
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Set, Tuple
 
+import aoh
 import geopandas as gpd
 import pyproj
 import shapely
@@ -10,8 +10,6 @@ import shapely
 logger = logging.getLogger(__name__)
 logging.basicConfig()
 logger.setLevel(logging.DEBUG)
-
-aoh_cleaning = importlib.import_module("aoh-calculator.cleaning")
 
 SEASON_NAME = {
     1: "RESIDENT",
@@ -40,6 +38,7 @@ class SpeciesReport:
         "id_no",
         "assessment_id",
         "scientific_name",
+        "overriden",
         "has_systems",
         "not_marine",
         "has_habitats",
@@ -76,23 +75,26 @@ class SpeciesReport:
     def as_row(self) -> List:
         return [self.info[k] for k in self.REPORT_COLUMNS]
 
-
 def process_systems(
     systems_data: List[Tuple],
     report: SpeciesReport,
 ) -> None:
     if len(systems_data) == 0:
-        raise ValueError("No systems found")
-    if len(systems_data) > 1:
-        raise ValueError("More than one systems aggregation found")
-    systems = systems_data[0][0]
-    if systems is None:
-        raise ValueError("no systems info")
-    report.has_systems = True
+        if not report.overriden:
+            raise ValueError("No systems found")
+    else:
+        if len(systems_data) > 1:
+            # We don't allow override on this as it's a programmer/database error
+            raise ValueError("More than one systems aggregation found")
+        systems = systems_data[0][0]
+        if systems is None and not report.overriden:
+            raise ValueError("no systems info")
+        report.has_systems = (len(systems_data) == 1) and (systems is not None)
 
-    if "Marine" in systems:
-        raise ValueError("Marine in systems")
-    report.not_marine = True
+        has_marine_in_systems = "Marine" in systems
+        if has_marine_in_systems and not report.overriden:
+            raise ValueError("Marine in systems")
+        report.not_marine = not has_marine_in_systems
 
 def process_habitats(
     habitats_data: List[Tuple],
@@ -152,14 +154,17 @@ def process_habitats(
 
     major_habitats_lvl_1 = {k: {int(v) for v in x} for k, x in major_habitats.items()}
 
-    for _, season_major_habitats_lvl1 in major_habitats_lvl_1.items():
-        if 7 in season_major_habitats_lvl1:
-            raise ValueError("Habitat 7 in major importance habitat list")
-    report.not_major_caves = True
-    for _, season_major_habitats in major_habitats.items():
-        if not season_major_habitats - set([5.1, 5.5, 5.6, 5.14, 5.16]):
-            raise ValueError("Freshwater lakes are major habitat")
-    report.not_major_freshwater_lakes = True
+    major_caves = any(7 in x for x in major_habitats_lvl_1.values())
+    if major_caves and not report.overriden:
+        raise ValueError("Habitat 7 in major importance habitat list")
+    report.not_major_caves = not major_caves
+
+    major_freshwater_lakes = any(
+        not (x - {5.1, 5.5, 5.6, 5.14, 5.16}) for x in major_habitats.values()
+    )
+    if major_freshwater_lakes and not report.overriden:
+        raise ValueError("Freshwater lakes are major habitat")
+    report.not_major_freshwater_lakes = not major_freshwater_lakes
 
     return habitats
 
@@ -205,7 +210,7 @@ def tidy_reproject_save(
     target_crs = src_crs #pyproj.CRS.from_string(target_projection)
 
     graw = gdf.loc[0].copy()
-    grow = aoh_cleaning.tidy_data(graw)
+    grow = aoh.tidy_data(graw)
     output_path = output_directory_path / f"{grow.id_no}_{grow.season}.geojson"
     res = gpd.GeoDataFrame(grow.to_frame().transpose(), crs=src_crs, geometry="geometry")
     res_projected = res.to_crs(target_crs)
