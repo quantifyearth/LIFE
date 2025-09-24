@@ -237,7 +237,7 @@ fi
 # Get species data per taxa from IUCN data
 for TAXA in "${TAXAS[@]}"
 do
-    if [ ! -f "${DATADIR}"/overrides.csv ]; then
+    if [ -f "${DATADIR}"/overrides.csv ]; then
         python3 ./prepare_species/extract_species_psql.py --class "${TAXA}" \
                                                         --output "${DATADIR}"/species-info/"${TAXA}"/ \
                                                         --projection "EPSG:4326" \
@@ -259,7 +259,7 @@ python3 ./utils/persistencegenerator.py --datadir "${DATADIR}" \
                                         --scenarios "${SCENARIOS[@]}"
 
 # Calculate all the AoHs
-littlejohn -j 700 -o "${DATADIR}"/aohbatch.log -c "${DATADIR}"/aohbatch.csv aoh-calc -- --force-habitat
+littlejohn -j 30 -o "${DATADIR}"/aohbatch.log -c "${DATADIR}"/aohbatch.csv "${VIRTUAL_ENV}"/bin/aoh-calc -- --force-habitat
 
 # Generate validation summaries
 aoh-collate-data --aoh_results "${DATADIR}"/aohs/current/ --output "${DATADIR}"/aohs/current.csv
@@ -277,7 +277,7 @@ aoh-endemism --aohs_folder "${DATADIR}"/aohs/current/ \
              --output "${DATADIR}"/predictors/endemism.tif
 
 # Calculate the per species Delta P values
-littlejohn -j 200 -o "${DATADIR}"/persistencebatch.log -c "${DATADIR}"/persistencebatch.csv "${VIRTUAL_ENV}"/bin/python3 --  ./deltap/global_code_residents_pixel.py
+littlejohn -j 30 -o "${DATADIR}"/persistencebatch.log -c "${DATADIR}"/persistencebatch.csv "${VIRTUAL_ENV}"/bin/python3 --  ./deltap/global_code_residents_pixel.py
 
 for SCENARIO in "${SCENARIOS[@]}"
 do
