@@ -7,24 +7,52 @@
 # https://github.com/quantifyearth/reclaimer - used to download inputs from Zenodo directly
 # https://github.com/quantifyearth/littlejohn - used to run batch jobs in parallel
 
+# Set shell script to exit on first error (-e) and to output commands being run to make
+# reviewing logs easier (-x)
 set -e
 set -x
+
+# We know we use two Go tools, so add go/bin to our path as in slurm world they're likely
+# to be installed locally
+export PATH="${PATH}":"${HOME}"/go/bin
+if ! hash littlejohn 2>/dev/null; then
+    echo "Please ensure littlejohn is available"
+    exit 1
+fi
+if ! hash reclaimer 2>/dev/null; then
+    echo "Please ensure reclaimer is available"
+    exit 1
+fi
+
+# Detect if we're running under SLURM
+if [[ -n "${SLURM_JOB_ID}" ]]; then
+    # Slurm users will probably need to customise this
+    # shellcheck disable=SC1091
+    source "${HOME}"/venvs/life/bin/activate
+    cd "${HOME}"/dev/life
+    PROCESS_COUNT="${SLURM_JOB_CPUS_PER_NODE}"
+else
+    PROCESS_COUNT=$(nproc --all)
+fi
 
 if [ -z "${DATADIR}" ]; then
     echo "Please specify $DATADIR"
     exit 1
 fi
 
-
 if [ -z "${VIRTUAL_ENV}" ]; then
     echo "Please specify run in a virtualenv"
     exit 1
 fi
 
-declare -a SCENARIOS=("arable" "restore" "restore_all" "urban" "pasture" "restore_agriculture")
-declare -a TAXAS=("AMPHIBIA" "AVES" "MAMMALIA" "REPTILIA")
-export CURVE=0.25
-export PIXEL_SCALE=0.016666666666667
+# Experiment configuration. You can override these variables in the environment and it will use those
+# values rather than the defaults specified here.
+# shellcheck disable=SC2206
+declare -a SCENARIOS=(${SCENARIOS:-"arable" "restore" "restore_all" "urban" "pasture" "restore_agriculture"})
+# shellcheck disable=SC2206
+declare -a TAXAS=(${TAXAS:-"AMPHIBIA" "AVES" "MAMMALIA" "REPTILIA"})
+export CURVE=${CURVE:-0.25}
+export PIXEL_SCALE=${PIXEL_SCALE:-0.016666666666667}
 
 check_scenario() {
     local target="$1"
@@ -237,15 +265,17 @@ fi
 # Get species data per taxa from IUCN data
 for TAXA in "${TAXAS[@]}"
 do
-    if [ -f "${DATADIR}"/overrides.csv ]; then
-        python3 ./prepare_species/extract_species_psql.py --class "${TAXA}" \
-                                                        --output "${DATADIR}"/species-info/"${TAXA}"/ \
-                                                        --projection "EPSG:4326" \
-                                                        --overrides "${DATADIR}"/overrides.csv
-    else
-        python3 ./prepare_species/extract_species_psql.py --class "${TAXA}" \
-                                                        --output "${DATADIR}"/species-info/"${TAXA}"/ \
-                                                        --projection "EPSG:4326"
+    if [ ! -d "${DATADIR}"/species-info/"${TAXA}"/ ]; then
+        if [ -f "${DATADIR}"/overrides.csv ]; then
+            python3 ./prepare_species/extract_species_psql.py --class "${TAXA}" \
+                                                            --output "${DATADIR}"/species-info/"${TAXA}"/ \
+                                                            --projection "EPSG:4326" \
+                                                            --overrides "${DATADIR}"/overrides.csv
+        else
+            python3 ./prepare_species/extract_species_psql.py --class "${TAXA}" \
+                                                            --output "${DATADIR}"/species-info/"${TAXA}"/ \
+                                                            --projection "EPSG:4326"
+        fi
     fi
 done
 
@@ -259,7 +289,7 @@ python3 ./utils/persistencegenerator.py --datadir "${DATADIR}" \
                                         --scenarios "${SCENARIOS[@]}"
 
 # Calculate all the AoHs
-littlejohn -j 30 -o "${DATADIR}"/aohbatch.log -c "${DATADIR}"/aohbatch.csv "${VIRTUAL_ENV}"/bin/aoh-calc -- --force-habitat
+littlejohn -j "${PROCESS_COUNT}" -o "${DATADIR}"/aohbatch.log -c "${DATADIR}"/aohbatch.csv "${VIRTUAL_ENV}"/bin/aoh-calc -- --force-habitat
 
 # Generate validation summaries
 aoh-collate-data --aoh_results "${DATADIR}"/aohs/current/ --output "${DATADIR}"/aohs/current.csv
@@ -277,7 +307,7 @@ aoh-endemism --aohs_folder "${DATADIR}"/aohs/current/ \
              --output "${DATADIR}"/predictors/endemism.tif
 
 # Calculate the per species Delta P values
-littlejohn -j 30 -o "${DATADIR}"/persistencebatch.log -c "${DATADIR}"/persistencebatch.csv "${VIRTUAL_ENV}"/bin/python3 --  ./deltap/global_code_residents_pixel.py
+littlejohn -j "${PROCESS_COUNT}" -o "${DATADIR}"/persistencebatch.log -c "${DATADIR}"/persistencebatch.csv "${VIRTUAL_ENV}"/bin/python3 --  ./deltap/global_code_residents_pixel.py
 
 for SCENARIO in "${SCENARIOS[@]}"
 do
