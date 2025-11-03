@@ -6,6 +6,7 @@
 # downloaded and generated `current_raw.tif` from the original LIFE pipeline (see run.sh)
 
 set -e
+set -x
 
 if [ -z "${DATADIR}" ]; then
     echo "Please specify $DATADIR"
@@ -67,20 +68,29 @@ if [ ! -d "${DATADIR}"/food/current_layers ]; then
 fi
 
 # Combine GAEZ and HYDE data
-python3 ./prepare_layers/build_gaez_hyde.py --gaez "${DATADIR}"/food/GLCSv11_02_5m.tif \
-                                            --hyde "${DATADIR}"/food/modified_grazing2017AD.asc \
-                                            --output "${DATADIR}"/food/
+if [ ! -f "${DATADIR}"/food/crop.tif ] || [ ! -f "${DATADIR}"/food/pasture.tif ]; then
+    python3 ./prepare_layers/build_gaez_hyde.py --gaez "${DATADIR}"/food/GLCSv11_02_5m.tif \
+                                                --hyde "${DATADIR}"/food/modified_grazing2017AD.asc \
+                                                --output "${DATADIR}"/food/
+fi
 
-python3 ./utils/raster_diff.py --raster_a "${DATADIR}"/food/crop.tif \
-                               --raster_b "${DATADIR}"/food/current_layers/lcc_1401.tif \
-                               --output "${DATADIR}"/food/crop_diff.tif
+if [ ! -f "${DATADIR}"/food/crop_diff.tif ]; then
+    python3 ./utils/raster_diff.py --raster_a "${DATADIR}"/food/crop.tif \
+                                --raster_b "${DATADIR}"/food/current_layers/lcc_1401.tif \
+                                --output "${DATADIR}"/food/crop_diff.tif
+fi
 
-python3 ./utils/raster_diff.py --raster_a "${DATADIR}"/food/pasture.tif \
-                              --raster_b "${DATADIR}"/food/current_layers/lcc_1402.tif \
-                              --output "${DATADIR}"/food/pasture_diff.tif
+if [ ! -f "${DATADIR}"/food/pasture_diff.tif ]; then
+    python3 ./utils/raster_diff.py --raster_a "${DATADIR}"/food/pasture.tif \
+                                --raster_b "${DATADIR}"/food/current_layers/lcc_1402.tif \
+                                --output "${DATADIR}"/food/pasture_diff.tif
+fi
 
-python3 ./prepare_layers/make_food_current_map.py --current_lvl1 "${DATADIR}"/habitat/current_raw.tif \
-                                                  --pnv "${DATADIR}"/habitat/pnv_raw.tif \
-                                                  --crop_diff "${DATADIR}"/food/crop_diff.tif \
-                                                  --pasture_diff "${DATADIR}"/food/pasture_diff.tif \
-                                                  --output "${DATADIR}"/food/current_raw.tif
+if [ ! -f "${DATADIR}"/food/current_raw.tif ]; then
+    python3 ./prepare_layers/make_food_current_map.py --current_lvl1 "${DATADIR}"/habitat/current_raw.tif \
+                                                    --pnv "${DATADIR}"/habitat/pnv_raw.tif \
+                                                    --crop_diff "${DATADIR}"/food/crop_diff.tif \
+                                                    --pasture_diff "${DATADIR}"/food/pasture_diff.tif \
+                                                    --seed 42 \
+                                                    --output "${DATADIR}"/food/current_raw.tif
+fi
