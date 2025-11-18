@@ -51,7 +51,7 @@ fi
 declare -a SCENARIOS=(${SCENARIOS:-"arable" "restore" "restore_all" "urban" "pasture" "restore_agriculture"})
 # shellcheck disable=SC2206
 declare -a TAXAS=(${TAXAS:-"AMPHIBIA" "AVES" "MAMMALIA" "REPTILIA"})
-export CURVE=${CURVE:-0.25}
+export CURVE=${CURVE:0.25}
 export PIXEL_SCALE=${PIXEL_SCALE:-0.016666666666667}
 
 check_scenario() {
