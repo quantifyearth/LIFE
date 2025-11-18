@@ -80,13 +80,13 @@ def query_deltap_per_project(
                 lng = project_mask.area.left + \
                     (project_mask.pixel_scale.xstep * x) + \
                     (project_mask.pixel_scale.xstep / 2)
-                row = [lat, lng]
+                result_row = [lat, lng]
                 if not maskval:
                     continue
                 for species in species_keys:
                     val = species_dict[species].read_array(x, y, 1, 1)[0][0]
-                    row.append(val)
-                table.append(row)
+                    result_row.append(val)
+                table.append(result_row)
         df = pd.DataFrame(table, columns=["lat", "lng"] + species_keys)
         df.to_csv(os.path.join(outputs_path, f"{project_code}_{klass}_{scenario}.csv"), index=False)
 
