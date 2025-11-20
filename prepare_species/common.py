@@ -20,6 +20,7 @@ SEASON_NAME = {
 COLUMNS = [
     "id_no",
     "assessment_id",
+    "assessment_year",
     "season",
     "elevation_lower",
     "elevation_upper",
@@ -170,7 +171,7 @@ def process_habitats(
 
 
 def process_geometries(
-    geometries_data: List[Tuple[int,shapely.Geometry]],
+    geometries_data: List[Tuple[int,str]],
     report: SpeciesReport,
 ) -> Dict[int,shapely.Geometry]:
     if len(geometries_data) == 0:
@@ -226,7 +227,8 @@ def process_and_save(
     output_directory_path: Path,
 ) -> None:
 
-    id_no, assessment_id, elevation_lower, elevation_upper, scientific_name, family_name, threat_code = row
+    id_no, assessment_id, assessment_year, elevation_lower, elevation_upper, scientific_name, \
+        family_name, threat_code = row
 
     seasons = set(geometries.keys()) | set(habitats.keys())
 
@@ -237,6 +239,7 @@ def process_and_save(
             [[
                 id_no,
                 assessment_id,
+                int(assessment_year),
                 SEASON_NAME[1],
                 int(elevation_lower) if elevation_lower is not None else None,
                 int(elevation_upper) if elevation_upper is not None else None,
@@ -299,6 +302,7 @@ def process_and_save(
             [[
                 id_no,
                 assessment_id,
+                int(assessment_year),
                 SEASON_NAME[2],
                 int(elevation_lower) if elevation_lower is not None else None,
                 int(elevation_upper) if elevation_upper is not None else None,
@@ -318,6 +322,7 @@ def process_and_save(
             [[
                 id_no,
                 assessment_id,
+                int(assessment_year),
                 SEASON_NAME[3],
                 int(elevation_lower) if elevation_lower is not None else None,
                 int(elevation_upper) if elevation_upper is not None else None,

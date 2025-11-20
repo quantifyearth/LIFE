@@ -1,3 +1,6 @@
+[MAIN]
+init-hook='import sys; from pathlib import Path; script_dir = Path(".").resolve(); sys.path.extend([str(script_dir / "prepare_layers"), str(script_dir / "prepare_species")])'
+
 [FORMAT]
 max-line-length=120
 

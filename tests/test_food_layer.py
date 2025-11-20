@@ -48,9 +48,17 @@ from prepare_layers.make_food_current_map import TileInfo, process_tile
 
 ])
 def test_process_tile_all(initial, crop_diff, pasture_diff, expected) -> None:
-    with RasterLayer.empty_raster_layer(Area(-180, 90, 180, -90), PixelScale(1.0, -1.0), datatype=DataType.Int16) as current:
+    with RasterLayer.empty_raster_layer(
+        Area(-180, 90, 180, -90),
+        PixelScale(1.0, -1.0),
+        datatype=DataType.Int16,
+    ) as current:
         yg.constant(initial).save(current)
-        with RasterLayer.empty_raster_layer(Area(-180, 90, 180, -90), PixelScale(1.0, -1.0), datatype=DataType.Int16) as pnv:
+        with RasterLayer.empty_raster_layer(
+            Area(-180, 90, 180, -90),
+            PixelScale(1.0, -1.0),
+            datatype=DataType.Int16,
+        ) as pnv:
             yg.constant(31).save(pnv)
 
             test_tile = TileInfo(
@@ -62,11 +70,11 @@ def test_process_tile_all(initial, crop_diff, pasture_diff, expected) -> None:
                 pasture_diff=pasture_diff,
             )
 
-            result = process_tile(current, pnv, test_tile)
+            result = process_tile(current, pnv, test_tile, 42)
             expected = np.full((12, 10), expected, dtype=np.int16)
             assert (result == expected).all()
 
-@pytest.mark.parametrize("initial,crop_diff,pasture_diff,expected_crop_count,expected_pasture_count,expected_pnv_count", [
+@pytest.mark.parametrize("initial,crop_diff,pasture_diff,expected_crop_count,expected_pasture_count,expected_pnv_count", [ # pylint:disable=C0301
     (42, float("nan"), float("nan"), 0, 0, 0),
     (42, 0.5, float("nan"), 50, 0, 0),
     (42, float("nan"), 0.5, 0, 50, 0),
@@ -81,10 +89,25 @@ def test_process_tile_all(initial, crop_diff, pasture_diff, expected) -> None:
     (1402, float("nan"), -0.5, 0, 50, 50),
     (1402, -0.5, float("nan"), 0, 100, 0),
 ])
-def test_partial_replacement(initial, crop_diff, pasture_diff, expected_crop_count, expected_pasture_count, expected_pnv_count) -> None:
-    with RasterLayer.empty_raster_layer(Area(-180, 90, 180, -90), PixelScale(1.0, -1.0), datatype=DataType.Int16) as current:
+def test_partial_replacement(
+    initial : int,
+    crop_diff : float,
+    pasture_diff : float,
+    expected_crop_count : int,
+    expected_pasture_count : int,
+    expected_pnv_count : int,
+) -> None:
+    with RasterLayer.empty_raster_layer(
+        Area(-180, 90, 180, -90),
+        PixelScale(1.0, -1.0),
+        datatype=DataType.Int16,
+    ) as current:
         yg.constant(initial).save(current)
-        with RasterLayer.empty_raster_layer(Area(-180, 90, 180, -90), PixelScale(1.0, -1.0), datatype=DataType.Int16) as pnv:
+        with RasterLayer.empty_raster_layer(
+            Area(-180, 90, 180, -90),
+            PixelScale(1.0, -1.0),
+            datatype=DataType.Int16,
+        ) as pnv:
             yg.constant(31).save(pnv)
 
             test_tile = TileInfo(
@@ -96,7 +119,7 @@ def test_partial_replacement(initial, crop_diff, pasture_diff, expected_crop_cou
                 pasture_diff=pasture_diff,
             )
 
-            result = process_tile(current, pnv, test_tile)
+            result = process_tile(current, pnv, test_tile, 42)
             crop_count = (result == 1401).sum()
             assert crop_count == expected_crop_count
             pasture_count = (result == 1402).sum()
@@ -104,7 +127,7 @@ def test_partial_replacement(initial, crop_diff, pasture_diff, expected_crop_cou
             pnv_count = (result == 31).sum()
             assert pnv_count == expected_pnv_count
 
-@pytest.mark.parametrize("initial,crop_diff,pasture_diff,expected_crop_count,expected_pasture_count,expected_pnv_count", [
+@pytest.mark.parametrize("initial,crop_diff,pasture_diff,expected_crop_count,expected_pasture_count,expected_pnv_count", [ # pylint:disable=C0301
     (42, float("nan"), float("nan"), 0, 0, 0),
     (42, 0.5, float("nan"), 50, 0, 0),
     (42, float("nan"), 0.5, 0, 50, 0),
@@ -128,8 +151,19 @@ def test_partial_replacement(initial, crop_diff, pasture_diff, expected_crop_cou
     (1405, -0.5, float("nan"), 0, 0, 0),
     (1405, -1.0, float("nan"), 0, 0, 0),
 ])
-def test_partial_initial_tile(initial, crop_diff, pasture_diff, expected_crop_count, expected_pasture_count, expected_pnv_count) -> None:
-    with RasterLayer.empty_raster_layer(Area(-180, 90, 180, -90), PixelScale(1.0, -1.0), datatype=DataType.Int16) as current:
+def test_partial_initial_tile(
+    initial : int,
+    crop_diff : float,
+    pasture_diff : float,
+    expected_crop_count : int,
+    expected_pasture_count : int,
+    expected_pnv_count : int,
+) -> None:
+    with RasterLayer.empty_raster_layer(
+        Area(-180, 90, 180, -90),
+        PixelScale(1.0, -1.0),
+        datatype=DataType.Int16,
+    ) as current:
 
         # Cheating as Yirgacheffe doesn't have a neat way to provide numpy data straight to a layer
         band = current._dataset.GetRasterBand(1)
@@ -137,7 +171,11 @@ def test_partial_initial_tile(initial, crop_diff, pasture_diff, expected_crop_co
         all_vals = np.tile(vals, (90, 180))
         band.WriteArray(all_vals, 0, 0)
 
-        with RasterLayer.empty_raster_layer(Area(-180, 90, 180, -90), PixelScale(1.0, -1.0), datatype=DataType.Int16) as pnv:
+        with RasterLayer.empty_raster_layer(
+            Area(-180, 90, 180, -90),
+            PixelScale(1.0, -1.0),
+            datatype=DataType.Int16,
+        ) as pnv:
             yg.constant(31).save(pnv)
 
             test_tile = TileInfo(
@@ -149,7 +187,7 @@ def test_partial_initial_tile(initial, crop_diff, pasture_diff, expected_crop_co
                 pasture_diff=pasture_diff,
             )
 
-            result = process_tile(current, pnv, test_tile)
+            result = process_tile(current, pnv, test_tile, 42)
             crop_count = (result == 1401).sum()
             assert crop_count == expected_crop_count
             pasture_count = (result == 1402).sum()

@@ -7,12 +7,16 @@ import pandas as pd
 
 def species_generator(
     data_dir: Path,
+    aohs_path: Path | None,
     curve: str,
     output_csv_path: Path,
     scenarios: List[str],
 ):
     species_info_dir = data_dir / "species-info"
     taxas = [x.name for x in species_info_dir.iterdir()]
+
+    if aohs_path is None:
+        aohs_path = data_dir / "aohs"
 
     if curve not in ["0.1", "0.25", "0.5", "1.0", "gompertz"]:
         sys.exit(f'curve {curve} not in expected set of values: ["0.1", "0.25", "0.5", "1.0", "gompertz"]')
@@ -25,9 +29,9 @@ def species_generator(
             for species in speciess:
                 res.append([
                     species,
-                    data_dir / "aohs" / "current" / taxa,
-                    data_dir / "aohs" / scenario / taxa,
-                    data_dir / "aohs" / "pnv" / taxa,
+                    aohs_path / "current" / taxa,
+                    aohs_path / scenario / taxa,
+                    aohs_path / "pnv" / taxa,
                     curve,
                     data_dir / "deltap" / scenario / curve / taxa,
                 ])
@@ -51,6 +55,13 @@ def main() -> None:
         help="directory for results",
         required=True,
         dest="data_dir",
+    )
+    parser.add_argument(
+        '--aohs_path',
+        type=Path,
+        help="Path to find AOHs in",
+        required=False,
+        dest="aohs_path",
     )
     parser.add_argument(
         '--curve',
@@ -77,7 +88,13 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    species_generator(args.data_dir, args.curve, args.output, args.scenarios)
+    species_generator(
+        args.data_dir,
+        args.aohs_path,
+        args.curve,
+        args.output,
+        args.scenarios,
+    )
 
 if __name__ == "__main__":
     main()

@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from multiprocessing import Manager, Process, cpu_count
 from queue import Queue
-from typing import List, NamedTuple, Optional, Tuple
+from typing import NamedTuple
 
 import numpy as np
 import yirgacheffe as yg
@@ -32,7 +32,10 @@ def process_tile(
     current: yg.layers.RasterLayer,
     pnv: yg.layers.RasterLayer,
     tile: TileInfo,
+    random_seed: int,
 ) -> np.ndarray:
+
+    rng = np.random.default_rng(random_seed)
 
     data = current.read_array(tile.x_position, tile.y_position, tile.width, tile.height)
 
@@ -61,7 +64,7 @@ def process_tile(
             continue
         required_points = min(required_points, possible_points)
 
-        selected_locations = np.random.choice(
+        selected_locations = rng.choice(
             len(valid_locations[0]),
             size=required_points,
             replace=False
@@ -90,13 +93,14 @@ def process_tile_concurrently(
     with yg.read_raster(current_lvl1_path) as current:
         with yg.read_raster(pnv_path) as pnv:
             while True:
-                tile: Optional[TileInfo] = input_queue.get()
-                if tile is None:
+                job : tuple[TileInfo, int] | None = input_queue.get()
+                if job is None:
                     break
+                tile, seed = job
                 if np.isnan(tile.crop_diff) and np.isnan(tile.pasture_diff):
                     result_queue.put((tile, None))
                 else:
-                    data = process_tile(current, pnv, tile)
+                    data = process_tile(current, pnv, tile, seed)
                     result_queue.put((tile, data.tobytes()))
 
     result_queue.put(None)
@@ -105,7 +109,7 @@ def build_tile_list(
     current_lvl1_path: Path,
     crop_adjustment_path: Path,
     pasture_adjustment_path: Path,
-) -> List[TileInfo]:
+) -> list[TileInfo]:
     tiles = []
     with yg.read_raster(current_lvl1_path) as current:
         current_dimensions = current.window.xsize, current.window.ysize
@@ -151,7 +155,7 @@ def assemble_map(
             band = output._dataset.GetRasterBand(1) # pylint: disable=W0212
 
             while True:
-                result : Optional[Tuple[TileInfo,Optional[bytearray]]] = result_queue.get()
+                result : tuple[TileInfo,bytearray | None] | None = result_queue.get()
                 if result is None:
                     sentinal_count -= 1
                     if sentinal_count == 0:
@@ -174,14 +178,18 @@ def pipeline_source(
     pasture_adjustment_path: Path,
     source_queue: Queue,
     sentinal_count: int,
+    random_seed: int,
 ) -> None:
+    rng = np.random.default_rng(random_seed)
+
     tiles = build_tile_list(
         current_lvl1_path,
         crop_adjustment_path,
         pasture_adjustment_path,
     )
-    for tile in tiles:
-        source_queue.put(tile)
+    seeds = rng.integers(2**63, size=len(tiles))
+    for tile, seed in zip(tiles, seeds):
+        source_queue.put((tile, seed))
     for _ in range(sentinal_count):
         source_queue.put(None)
 
@@ -190,6 +198,7 @@ def make_food_current_map(
     pnv_path: Path,
     crop_adjustment_path: Path,
     pasture_adjustment_path: Path,
+    random_seed: int,
     output_path: Path,
     processes_count: int,
 ) -> None:
@@ -210,7 +219,7 @@ def make_food_current_map(
             pnv_path,
             source_queue,
             result_queue,
-        )) for index in range(processes_count)]
+        )) for _ in range(processes_count)]
         for worker_process in workers:
             worker_process.start()
 
@@ -220,6 +229,7 @@ def make_food_current_map(
             pasture_adjustment_path,
             source_queue,
             processes_count,
+            random_seed,
         ))
         source_worker.start()
 
@@ -274,6 +284,13 @@ def main() -> None:
         dest="pasture_adjustment_path",
     )
     parser.add_argument(
+        "--seed",
+        type=int,
+        required=True,
+        help="Seed the random number generator",
+        dest="seed",
+    )
+    parser.add_argument(
         '--output',
         type=Path,
         help='Path of food current raster',
@@ -295,6 +312,7 @@ def main() -> None:
         args.pnv_path,
         args.crop_adjustment_path,
         args.pasture_adjustment_path,
+        args.seed,
         args.output_path,
         args.processes_count,
     )

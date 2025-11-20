@@ -22,6 +22,7 @@ MAIN_STATEMENT = """
 SELECT
     assessments.sis_taxon_id as id_no,
     assessments.id as assessment_id,
+    DATE_PART('year', assessments.assessment_date) as assessment_year,
     (assessment_supplementary_infos.supplementary_fields->>'ElevationLower.limit')::numeric AS elevation_lower,
     (assessment_supplementary_infos.supplementary_fields->>'ElevationUpper.limit')::numeric AS elevation_upper,
     taxons.scientific_name,
@@ -110,7 +111,16 @@ def process_row(
     register(connection)
     cursor = connection.cursor()
 
-    (id_no, assessment_id, _elevation_lower, _elevation_upper, scientific_name, _family_name, _threat_code) = row
+    (
+        id_no,
+        assessment_id,
+        _assessment_year,
+        _elevation_lower,
+        _elevation_upper,
+        scientific_name,
+        _family_name,
+        _threat_code,
+    ) = row
     report = SpeciesReport(id_no, assessment_id, scientific_name)
     if id_no in overrides:
         report.overriden = True
