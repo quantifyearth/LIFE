@@ -8,6 +8,8 @@ from pathlib import Path
 from multiprocessing import Manager, Process, cpu_count
 from queue import Queue
 from typing import NamedTuple
+from osgeo import gdal
+gdal.SetCacheMax(4 * 1024 * 1024 * 1024)
 
 import numpy as np
 import yirgacheffe as yg
