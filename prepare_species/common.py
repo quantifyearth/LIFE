@@ -266,7 +266,7 @@ def process_and_save(
         if len(geometries_breeding) == 0:
             logger.debug("Dropping %s as no breeding geometries", id_no)
             return
-        report.has_breeding_geoemetry = True
+        report.has_breeding_geometry = True
         geometry_breeding = shapely.union_all(geometries_breeding)
 
         geometries_seasons_non_breeding = set(geometries.keys())
@@ -275,7 +275,7 @@ def process_and_save(
         if len(geometries_non_breeding) == 0:
             logger.debug("Dropping %s as no non-breeding geometries", id_no)
             return
-        report.has_nonbreeding_geoemetry = True
+        report.has_nonbreeding_geometry = True
         geometry_non_breeding = shapely.union_all(geometries_non_breeding)
 
         habitats_seasons_breeding = set(habitats.keys())
@@ -286,7 +286,7 @@ def process_and_save(
         if len(habitats_breeding) == 0:
             logger.debug("Dropping %s as no breeding habitats", id_no)
             return
-        report.has_breeding_habitats = True
+        report.has_breeding_habitat = True
 
         habitats_seasons_non_breeding = set(habitats.keys())
         habitats_seasons_non_breeding.discard(2)
@@ -296,7 +296,7 @@ def process_and_save(
         if len(habitats_non_breeding) == 0:
             logger.debug("Dropping %s as no non-breeding habitats", id_no)
             return
-        report.has_nonbreeding_habitats = True
+        report.has_nonbreeding_habitat = True
 
         gdf = gpd.GeoDataFrame(
             [[
