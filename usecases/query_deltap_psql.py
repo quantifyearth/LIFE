@@ -131,7 +131,7 @@ def query_deltap(
         e = RasterLayer.empty_raster_layer_like(mask, filename=os.path.join(outputs_path, f"{row.Rsrv_Code}_mask.tif"))
         mask.save(e)
 
-        query_deltap_per_project(row.Rsrv_Code, row.geometry, mask, corpus, outputs_path)
+        query_deltap_per_project(str(row.Rsrv_Code), row.geometry, mask, corpus, outputs_path)
 
 
 def main() -> None:
