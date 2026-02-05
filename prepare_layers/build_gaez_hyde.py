@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 
 import yirgacheffe as yg
-import yirgacheffe.operators as yo
+from snakemake_argparse_bridge import snakemake_compatible # type: ignore
 
 from make_area_map import make_area_map
 
@@ -35,12 +35,12 @@ def build_gaez_hyde(
                     # where gaez and hyde disagree (sum greater than disagg cutoff), scale down
                     uncapped_total = portional_gaez + portional_hyde
                     # NaNs stop warnings about divide by zero
-                    uncapped_total_with_nan = yo.where(uncapped_total == 0.0, float("nan"), uncapped_total)
+                    uncapped_total_with_nan = yg.where(uncapped_total == 0.0, float("nan"), uncapped_total)
 
                     # calculate ag-perc scalars
-                    total = yo.where(
+                    total = yg.where(
                         uncapped_total_with_nan >= DISAGG_CUTOFF,
-                        DISAGG_CUTOFF - (yg.constant(1) / yo.exp(uncapped_total_with_nan * 2)),
+                        DISAGG_CUTOFF - (yg.constant(1) / yg.exp(uncapped_total_with_nan * 2)),
                         uncapped_total_with_nan,
                     )
 
@@ -52,6 +52,11 @@ def build_gaez_hyde(
                     hyde_values = total * hyde_ratio
                     hyde_values.to_geotiff(output_dir_path / "pasture.tif")
 
+@snakemake_compatible(mapping={
+    "gaez_path": "input.gaez_raster",
+    "hyde_path": "input.hyde_raster",
+    "output_dir_path": "params.output_dir",
+})
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate a combined GAEZ and Hyde layers")
     parser.add_argument(

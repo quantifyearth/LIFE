@@ -1,8 +1,10 @@
 import argparse
 import os
+from pathlib import Path
 
 import pandas as pd
 from iucn_modlib.translator import toJung
+from snakemake_argparse_bridge import snakemake_compatible
 
 
 # Take from https://www.iucnredlist.org/resources/habitat-classification-scheme
@@ -31,11 +33,9 @@ IUCN_HABITAT_CODES = [
 ]
 
 def generate_crosswalk(
-    output_filename: str,
+    output_filename: Path,
 ) -> None:
-    output_dir, _ = os.path.split(output_filename)
-    if output_dir:
-        os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(output_filename.parent, exist_ok=True)
 
     res = []
     for iucn_code in IUCN_HABITAT_CODES:
@@ -48,11 +48,14 @@ def generate_crosswalk(
     df = pd.DataFrame(res, columns=["code", "value"])
     df.to_csv(output_filename, index=False)
 
+@snakemake_compatible(mapping={
+    "output_filename": "output.crosswalk",
+})
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate a Jung crosswalk table as CSV.")
     parser.add_argument(
         '--output',
-        type=str,
+        type=Path,
         help='Path where final crosswalk should be stored',
         required=True,
         dest='output_filename',

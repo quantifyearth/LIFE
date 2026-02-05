@@ -5,9 +5,9 @@ from multiprocessing import set_start_method
 from typing import Dict, List, Optional
 
 import pandas as pd
-import yirgacheffe.operators as yo # type: ignore
+import yirgacheffe as yg
 from alive_progress import alive_bar # type: ignore
-from yirgacheffe.layers import RasterLayer # type: ignore
+from snakemake_argparse_bridge import snakemake_compatible # type: ignore
 
 from osgeo import gdal # type: ignore
 gdal.SetCacheMax(1 * 1024 * 1024 * 1024)
@@ -41,37 +41,39 @@ def make_current_map(
 
     if update_masks_path is not None:
         update_masks = [
-            RasterLayer.layer_from_file(x) for x in sorted(list(update_masks_path.glob("*.tif")))
+            yg.read_raster(x) for x in sorted(list(update_masks_path.glob("*.tif")))
         ]
     else:
         update_masks = []
 
-    with RasterLayer.layer_from_file(jung_path) as jung:
+    with yg.read_raster(jung_path) as jung:
         crosswalk = load_crosswalk_table(crosswalk_path)
 
         map_preserve_code = list(itertools.chain.from_iterable([crosswalk[x] for x in IUCN_CODE_ARTIFICAL]))
 
         updated_jung = jung
         for update in update_masks:
-            updated_jung = yo.where(update != 0, update, updated_jung)
+            updated_jung = yg.where(update != 0, update, updated_jung)
 
-        current_map = yo.where(
+        current_map = yg.where(
             updated_jung.isin(map_preserve_code),
             updated_jung,
-            (yo.floor(updated_jung / 100) * 100).astype(yo.DataType.UInt16),
+            (yg.floor(updated_jung / 100) * 100).astype(yg.DataType.UInt16),
         )
 
-        with RasterLayer.empty_raster_layer_like(
-            jung,
-            filename=output_path,
-            threads=16
-        ) as result:
-            if show_progress:
-                with alive_bar(manual=True) as bar:
-                    current_map.parallel_save(result, callback=bar, parallelism=concurrency)
-            else:
-                current_map.parallel_save(result, parallelism=concurrency)
+        if show_progress:
+            with alive_bar(manual=True) as bar:
+                current_map.to_geotiff(output_path, callback=bar, parallelism=concurrency)
+        else:
+            current_map.to_geotiff(output_path, parallelism=concurrency)
 
+@snakemake_compatible(mapping={
+    "jung_path": "input.habitat",
+    "update_masks_path": "params.updates_dir",
+    "crosswalk_path": "input.crosswalk",
+    "concurrency": "threads",
+    "results_path": "output.current",
+})
 def main() -> None:
     set_start_method("spawn")
 

@@ -20,6 +20,12 @@ gdal[numpy]
 git+https://github.com/quantifyearth/iucn_modlib.git
 git+https://github.com/quantifyearth/seasonality
 
+
+# Snakemake workflow management
+snakemake>=8.0
+# We require a bug fix on this package that isn't yet upstream
+snakemake-argparse-bridge @ git+https://github.com/mdales/snakemake-argparse-bridge@77ac272d0bc22c370aeb9d1670882fd9dac9b098
+
 # developer requirements
 pytest
 pylint
@@ -28,3 +34,4 @@ pandas-stubs
 types-requests
 yirgacheffe[dev]
 aoh[dev]
+snakefmt

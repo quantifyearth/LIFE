@@ -13,6 +13,7 @@ from osgeo import gdal
 import numpy as np
 import yirgacheffe as yg
 from yirgacheffe.layers import RasterLayer
+from snakemake_argparse_bridge import snakemake_compatible # type: ignore
 
 gdal.SetCacheMax(4 * 1024 * 1024 * 1024)
 
@@ -93,18 +94,20 @@ def process_tile_concurrently(
     input_queue: Queue,
     result_queue: Queue,
 ) -> None:
-    with yg.read_raster(current_lvl1_path) as current:
-        with yg.read_raster(pnv_path) as pnv:
-            while True:
-                job : tuple[TileInfo, int] | None = input_queue.get()
-                if job is None:
-                    break
-                tile, seed = job
-                if np.isnan(tile.crop_diff) and np.isnan(tile.pasture_diff):
-                    result_queue.put((tile, None))
-                else:
-                    data = process_tile(current, pnv, tile, seed)
-                    result_queue.put((tile, data.tobytes()))
+    with (
+        yg.read_raster(current_lvl1_path) as current,
+        yg.read_raster(pnv_path) as pnv
+    ):
+        while True:
+            job : tuple[TileInfo, int] | None = input_queue.get()
+            if job is None:
+                break
+            tile, seed = job
+            if np.isnan(tile.crop_diff) and np.isnan(tile.pasture_diff):
+                result_queue.put((tile, None))
+            else:
+                data = process_tile(current, pnv, tile, seed)
+                result_queue.put((tile, data.tobytes()))
 
     result_queue.put(None)
 
@@ -116,31 +119,33 @@ def build_tile_list(
     tiles = []
     with yg.read_raster(current_lvl1_path) as current:
         current_dimensions = current.window.xsize, current.window.ysize
-    with yg.read_raster(crop_adjustment_path) as crop_diff:
-        with yg.read_raster(pasture_adjustment_path) as pasture_diff:
-            assert crop_diff.window == pasture_diff.window
-            diff_dimensions = crop_diff.window.xsize, crop_diff.window.ysize
+    with (
+        yg.read_raster(crop_adjustment_path) as crop_diff,
+        yg.read_raster(pasture_adjustment_path) as pasture_diff
+    ):
+        assert crop_diff.window == pasture_diff.window
+        diff_dimensions = crop_diff.window.xsize, crop_diff.window.ysize
 
-            x_scale = current_dimensions[0] / diff_dimensions[0]
-            y_scale = current_dimensions[1] / diff_dimensions[1]
+        x_scale = current_dimensions[0] / diff_dimensions[0]
+        y_scale = current_dimensions[1] / diff_dimensions[1]
 
-            x_steps = [round(i * x_scale) for i in range(diff_dimensions[0])]
-            x_steps.append(current_dimensions[0])
-            y_steps = [round(i * y_scale) for i in range(diff_dimensions[1])]
-            y_steps.append(current_dimensions[1])
+        x_steps = [round(i * x_scale) for i in range(diff_dimensions[0])]
+        x_steps.append(current_dimensions[0])
+        y_steps = [round(i * y_scale) for i in range(diff_dimensions[1])]
+        y_steps.append(current_dimensions[1])
 
-            for y in range(crop_diff.window.ysize):
-                crop_row = crop_diff.read_array(0, y, crop_diff.window.xsize, 1)
-                pasture_row = pasture_diff.read_array(0, y, pasture_diff.window.xsize, 1)
-                for x in range(crop_diff.window.xsize):
-                    tiles.append(TileInfo(
-                        x_steps[x],
-                        y_steps[y],
-                        (x_steps[x+1] - x_steps[x]),
-                        (y_steps[y+1] - y_steps[y]),
-                        crop_row[0][x],
-                        pasture_row[0][x],
-                    ))
+        for y in range(crop_diff.window.ysize):
+            crop_row = crop_diff.read_array(0, y, crop_diff.window.xsize, 1)
+            pasture_row = pasture_diff.read_array(0, y, pasture_diff.window.xsize, 1)
+            for x in range(crop_diff.window.xsize):
+                tiles.append(TileInfo(
+                    x_steps[x],
+                    y_steps[y],
+                    (x_steps[x+1] - x_steps[x]),
+                    (y_steps[y+1] - y_steps[y]),
+                    crop_row[0][x],
+                    pasture_row[0][x],
+                ))
     return tiles
 
 def assemble_map(
@@ -209,7 +214,6 @@ def make_food_current_map(
     # we need to adjust the ulimit, which is quite low by default
     _, max_fd_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
     resource.setrlimit(resource.RLIMIT_NOFILE, (max_fd_limit, max_fd_limit))
-    print(f"Set fd limit to {max_fd_limit}")
 
     os.makedirs(output_path.parent, exist_ok=True)
 
@@ -256,6 +260,15 @@ def make_food_current_map(
                 processes.remove(candidate)
             time.sleep(0.1)
 
+@snakemake_compatible(mapping={
+    "current_lvl1_path": "input.jung",
+    "pnv_path": "input.pnv",
+    "crop_adjustment_path": "input.crop_diff",
+    "pasture_adjustment_path": "input.pasture_diff",
+    "seed": "params.seed",
+    "processes_count": "threads",
+    "output_path": "output.raster",
+})
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build the food current map")
     parser.add_argument(
@@ -304,7 +317,7 @@ def main() -> None:
         "-j",
         type=int,
         required=False,
-        default=round(cpu_count() / 1),
+        default=cpu_count() // 2,
         dest="processes_count",
         help="Number of concurrent threads to use."
     )
