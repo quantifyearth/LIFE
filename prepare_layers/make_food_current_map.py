@@ -31,8 +31,8 @@ class TileInfo(NamedTuple):
     y_position : int
     width : int
     height : int
-    crop_diff : float
-    pasture_diff : float
+    crop_target : float
+    pasture_target : float
 
 def balance_crop_and_pasture_differences(
     crop_diff: float,
@@ -160,19 +160,42 @@ def process_tile(
     tile: TileInfo,
 ) -> np.ndarray:
 
+    if np.isnan(tile.crop_target) and np.isnan(tile.pasture_target):
+        return None
+
     for current in current_maps.values():
         assert current.map_projection == pnv.map_projection
         assert current.area == pnv.area
 
-    lcc_data_map = {
-        lcc: raster.nan_to_num().read_array(tile.x_position, tile.y_position, tile.width, tile.height)
-        for lcc, raster in current_maps.items()
-    }
     pnv_data = None
 
+    if not np.isnan(tile.crop_target):
+        crop_data = current_maps[CROP_CODE].nan_to_num().read_array(tile.x_position, tile.y_position, tile.width, tile.height)
+        crop_diff = tile.crop_target - (crop_data.sum() / crop_data.size)
+    else:
+        crop_data = None
+        crop_diff = 0
+    if not np.isnan(tile.pasture_target):
+        pasture_data = current_maps[PASTURE_CODE].nan_to_num().read_array(tile.x_position, tile.y_position, tile.width, tile.height)
+        pasture_diff = tile.pasture_target - (pasture_data.sum() / pasture_data.size)
+    else:
+        pasture_data = None
+        pasture_diff = 0
+    if (crop_diff == 0) and (pasture_diff == 0):
+        return None
+
+    lcc_data_map = {
+        CROP_CODE: crop_data if crop_data is not None else current_maps[CROP_CODE].nan_to_num().read_array(tile.x_position, tile.y_position, tile.width, tile.height),
+        PASTURE_CODE: pasture_data if pasture_data is not None else current_maps[PASTURE_CODE].nan_to_num().read_array(tile.x_position, tile.y_position, tile.width, tile.height),
+    }
+    for lcc in current_maps:
+        if lcc in [CROP_CODE, PASTURE_CODE]:
+            continue
+        lcc_data_map[lcc] = current_maps[lcc].nan_to_num().read_array(tile.x_position, tile.y_position, tile.width, tile.height)
+
     crop_diff, pasture_diff = balance_crop_and_pasture_differences(
-        tile.crop_diff,
-        tile.pasture_diff,
+        crop_diff,
+        pasture_diff,
         lcc_data_map,
     )
 
@@ -214,11 +237,12 @@ def process_tile_concurrently(
             tile : TileInfo | None = input_queue.get()
             if tile is None:
                 break
-            if (np.isnan(tile.crop_diff) or tile.crop_diff == 0) and (np.isnan(tile.pasture_diff) or tile.pasture_diff == 0):
-                result_queue.put((tile, None))
-            else:
-                res = process_tile(current_maps, pnv, tile)
+
+            res = process_tile(current_maps, pnv, tile)
+            if res is not None:
                 result_queue.put((tile, {lcc: data.tobytes() for lcc, data in res.items() }))
+            else:
+                result_queue.put((tile, None))
 
     result_queue.put(None)
 
@@ -232,24 +256,24 @@ def build_tile_list(
     with yg.read_rasters(current_lvl1_path.glob("*.tif")) as current:
         current_dimensions = current.window.xsize, current.window.ysize
     with (
-        yg.read_raster(crop_adjustment_path) as crop_diff,
-        yg.read_raster(pasture_adjustment_path) as pasture_diff
+        yg.read_raster(crop_adjustment_path) as crop,
+        yg.read_raster(pasture_adjustment_path) as pasture,
     ):
-        assert crop_diff.window == pasture_diff.window
-        diff_dimensions = crop_diff.window.xsize, crop_diff.window.ysize
+        assert crop.window == pasture.window
+        argi_dimensions = crop.window.xsize, crop.window.ysize
 
-        x_scale = current_dimensions[0] / diff_dimensions[0]
-        y_scale = current_dimensions[1] / diff_dimensions[1]
+        x_scale = current_dimensions[0] / argi_dimensions[0]
+        y_scale = current_dimensions[1] / argi_dimensions[1]
 
-        x_steps = [round(i * x_scale) for i in range(diff_dimensions[0])]
+        x_steps = [round(i * x_scale) for i in range(argi_dimensions[0])]
         x_steps.append(current_dimensions[0])
-        y_steps = [round(i * y_scale) for i in range(diff_dimensions[1])]
+        y_steps = [round(i * y_scale) for i in range(argi_dimensions[1])]
         y_steps.append(current_dimensions[1])
 
-        for y in range(crop_diff.window.ysize):
-            crop_row = crop_diff.read_array(0, y, crop_diff.window.xsize, 1)
-            pasture_row = pasture_diff.read_array(0, y, pasture_diff.window.xsize, 1)
-            for x in range(crop_diff.window.xsize):
+        for y in range(crop.window.ysize):
+            crop_row = crop.read_array(0, y, crop.window.xsize, 1)
+            pasture_row = pasture.read_array(0, y, pasture.window.xsize, 1)
+            for x in range(crop.window.xsize):
                 tiles.append(TileInfo(
                     x_steps[x],
                     y_steps[y],
@@ -308,6 +332,7 @@ def assemble_map(
                 data = np.reshape(n, (tile.height, tile.width))
                 band = new_maps[lcc]._dataset.GetRasterBand(1)
                 band.WriteArray(data, tile.x_position, tile.y_position)
+        print(f"assembled {count} tiles")
 
 
 def pipeline_source(
@@ -410,17 +435,17 @@ def main() -> None:
         dest='pnv_path',
     )
     parser.add_argument(
-        "--crop_diff",
+        "--crop",
         type=Path,
         required=True,
-        help="Path of adjustment for crop diff",
+        help="Path of crop area",
         dest="crop_adjustment_path",
     )
     parser.add_argument(
-        "--pasture_diff",
+        "--pasture",
         type=Path,
         required=True,
-        help="Path of adjustment for pasture diff",
+        help="Path of pasture area",
         dest="pasture_adjustment_path",
     )
     parser.add_argument(

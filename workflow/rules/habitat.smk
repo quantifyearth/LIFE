@@ -147,8 +147,8 @@ rule combine_gaez_hyde:
     Combine the GAEZ and Hyde data, adjusting for overflow in cells.
     """
     input:
-        hyde_projection_file=DATADIR / "food" / "modified_grazing2017AD.prj",
-        hyde_raster=DATADIR / "food" / "modified_grazing2017AD.asc",
+        hyde_projection_file=DATADIR / "food" / "modied_grazing2017AD.prj",
+        hyde_raster=DATADIR / "food" / "modified_ifgrazing2017AD.asc",
         gaez_raster=DATADIR / "food" / "GLCSv11_02_5m.tif",
     output:
         crop=DATADIR / "food" / "crop.tif",
