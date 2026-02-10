@@ -1,5 +1,6 @@
 import argparse
 import itertools
+import os
 from pathlib import Path
 from multiprocessing import set_start_method
 from typing import Dict, List, Optional
@@ -29,15 +30,17 @@ def load_crosswalk_table(table_file_name: Path) -> Dict[str,List[int]]:
             result[row.code] = [int(row.value)]
     return result
 
-
-def make_current_map(
+def make_current_maps(
     jung_path: Path,
     update_masks_path: Optional[Path],
     crosswalk_path: Path,
-    output_path: Path,
+    output_dir_path: Path,
     concurrency: Optional[int],
     show_progress: bool,
+    sentinel_path: Path | None,
 ) -> None:
+    os.makedirs(output_dir_path, exist_ok=True)
+    print(f"Using {concurrency} workers")
 
     if update_masks_path is not None:
         update_masks = [
@@ -61,18 +64,38 @@ def make_current_map(
             (yg.floor(updated_jung / 100) * 100).astype(yg.DataType.UInt16),
         )
 
-        if show_progress:
+        print("Calculating unique land cover types...")
+        # vals = current_map.unique()
+        vals = [100, 200, 300, 400, 500, 600, 800] + map_preserve_code
+
+        for lcc in vals:
+            print(f"Processing {lcc}...")
+            per_class = current_map == lcc
+            cast_per_class = per_class.astype(yg.DataType.Float32)
+            cast_per_class.pretty_print()
             with alive_bar(manual=True) as bar:
-                current_map.to_geotiff(output_path, callback=bar, parallelism=concurrency)
-        else:
-            current_map.to_geotiff(output_path, parallelism=concurrency)
+                cast_per_class.to_geotiff(
+                    output_dir_path / f"lcc_{lcc}.tif",
+                    callback=bar,
+                    parallelism=concurrency,
+                    nodata=0.0,
+                    sparse=True,
+                )
+
+    # This script generates a bunch of rasters, but snakemake needs one
+    # output to say when this is done, so if we're in snakemake mode we touch a sentinel file to
+    # let it know we've done. One day this should be another decorator.
+    if sentinel_path is not None:
+        os.makedirs(sentinel_path.parent, exist_ok=True)
+        sentinel_path.touch()
 
 @snakemake_compatible(mapping={
     "jung_path": "input.habitat",
     "update_masks_path": "params.updates_dir",
     "crosswalk_path": "input.crosswalk",
     "concurrency": "threads",
-    "results_path": "output.current",
+    "output_dir_path": "params.output_dir",
+    "sentinel_path": "output.sentinel",
 })
 def main() -> None:
     set_start_method("spawn")
@@ -104,7 +127,7 @@ def main() -> None:
         type=Path,
         help='Path where final map should be stored',
         required=True,
-        dest='results_path',
+        dest='output_dir_path',
     )
     parser.add_argument(
         '-j',
@@ -122,15 +145,24 @@ def main() -> None:
         action='store_true',
         dest='show_progress',
     )
+    parser.add_argument(
+        '--sentinel',
+        type=Path,
+        help='Generate a sentinel file on completion for snakemake to track',
+        required=False,
+        default=None,
+        dest='sentinel_path',
+    )
     args = parser.parse_args()
 
-    make_current_map(
+    make_current_maps(
         args.jung_path,
         args.update_masks_path,
         args.crosswalk_path,
-        args.results_path,
+        args.output_dir_path,
         args.concurrency,
         args.show_progress,
+        args.sentinel_path,
     )
 
 if __name__ == "__main__":

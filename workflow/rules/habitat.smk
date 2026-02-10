@@ -194,7 +194,7 @@ rule project_jung_for_hyde_gaez:
 # =============================================================================
 rule diff_crop:
     """
-    Get the differencen betwee the jung data and the new crop data.
+    Get the difference between the jung data and the new crop data.
     """
     input:
         raster_a=DATADIR / "food" / "crop.tif",

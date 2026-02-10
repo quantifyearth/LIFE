@@ -2,9 +2,8 @@ import argparse
 from pathlib import Path
 from typing import Optional
 
-import yirgacheffe.operators as yo
+import yirgacheffe as yg
 from alive_progress import alive_bar
-from yirgacheffe.layers import RasterLayer
 
 from osgeo import gdal
 gdal.SetCacheMax(1 * 1024 * 1024 * 1024)
@@ -18,20 +17,13 @@ def make_arable_map(
     concurrency: Optional[int],
     show_progress: bool,
 ) -> None:
-    with RasterLayer.layer_from_file(current_path) as current:
-
-        arable_map = yo.where(current != JUNG_URBAN_CODE, JUNG_ARABLE_CODE, JUNG_URBAN_CODE)
-
-        with RasterLayer.empty_raster_layer_like(
-            arable_map,
-            filename=output_path,
-            threads=16
-        ) as result:
-            if show_progress:
-                with alive_bar(manual=True) as bar:
-                    arable_map.parallel_save(result, callback=bar, parallelism=concurrency)
-            else:
-                arable_map.parallel_save(result, parallelism=concurrency)
+    with yg.read_raster(current_path) as current:
+        arable_map = yg.where(current != JUNG_URBAN_CODE, JUNG_ARABLE_CODE, JUNG_URBAN_CODE)
+        if show_progress:
+            with alive_bar(manual=True) as bar:
+                arable_map.to_geotiff(output_path, callback=bar, parallelism=concurrency)
+        else:
+            arable_map.to_geotiff(output_path, parallelism=concurrency)
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate the arable scenario map.")

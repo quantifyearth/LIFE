@@ -1,5 +1,4 @@
 import argparse
-import math
 import os
 import resource
 import sys
@@ -23,6 +22,9 @@ PASTURE_CODE = 1402
 # Codes not to touch. We're currently working at Level 1 except for artificial which is level 2
 PRESERVE_CODES = [600, 700, 900, 1000, 1100, 1200, 1300, 1405]
 
+# PNV codes
+# array([ 100,  200,  300,  400,  500,  600,  800,  900, 1100, 1200], dtype=uint16)
+
 class TileInfo(NamedTuple):
     """Info about a tile to process"""
     x_position : int
@@ -32,61 +34,169 @@ class TileInfo(NamedTuple):
     crop_diff : float
     pasture_diff : float
 
+def balance_crop_and_pasture_differences(
+    crop_diff: float,
+    pasture_diff: float,
+    lcc_data_map: dict[int,np.ndarray],
+) -> tuple[float,float]:
+    """
+    If we remove one time of agricultural land but expand another, keep them in the same area where possible.
+
+    One thing we know is that reductions are always achievable, as the difference is generated as
+    (GAEZ and HYDE - Jung), so if we have a negative value the initial state is enough to cover that.
+    """
+    # Either both are a reduction or both an increase, or at least one is null, so no
+    # balancing required.
+    if crop_diff * pasture_diff >= 0:
+        return crop_diff, pasture_diff
+
+    # If balanced they will cancel each other out, otherwise
+    # we will move the smaller difference from one to the other.
+    transfer_amount = min(abs(crop_diff), abs(pasture_diff))
+
+    if crop_diff > 0:
+        # Crop increasing, pasture decreasing
+        src_lcc, dst_lcc = PASTURE_CODE, CROP_CODE
+    else:
+        # Pasture increasing, crop decreasing
+        src_lcc, dst_lcc = CROP_CODE, PASTURE_CODE
+
+    src_raster = lcc_data_map[src_lcc]
+    dst_raster = lcc_data_map[dst_lcc]
+
+    total_cells = src_raster.size
+
+    transfer_mask = src_raster > 0
+    src_cells = src_raster.sum()
+    if src_cells == 0:
+        if crop_diff > 0:
+            raise ValueError(f"not cells in pasture {src_raster.sum()}, but pasture diff is -ve {pasture_diff}")
+        else:
+            raise ValueError(f"not cells in crop {src_raster.sum()}, but crop diff is -ve {crop_diff}")
+
+    src_coverage = src_raster.sum() / total_cells
+
+    # Per-cell reduction factor: what fraction of each cell's current value to move
+    # This is safe because our simplifying assumption guarantees transfer <= source_coverage
+    per_cell_factor = transfer_amount / src_coverage
+
+    transferred = transfer_mask * per_cell_factor
+    src_raster -= transferred
+    dst_raster += transferred
+
+    new_crop_diff = crop_diff + transfer_amount * np.sign(pasture_diff)
+    new_pasture_diff = pasture_diff + transfer_amount * np.sign(crop_diff)
+    return new_crop_diff, new_pasture_diff
+
+def remove_land_cover(
+    lcc_code: int,
+    diff: float,
+    pnv: np.ndarray,
+    lcc_data_map: dict[int,np.ndarray],
+) -> None:
+    assert diff <= 0
+    diff = abs(diff)
+
+    agri_raster = lcc_data_map[lcc_code]
+    removal_mask = agri_raster > 0
+
+    current_coverage = agri_raster.sum() / agri_raster.size
+    if current_coverage == 0:
+        return
+
+    per_cell_fraction = min(diff / current_coverage, 1.0)
+
+    removed_grid = agri_raster * (removal_mask * per_cell_fraction)
+    agri_raster -= removed_grid
+
+    # Reallocate to PNV classes - note we assume this does not include the agricultural classes
+    # so as to not undo what we just did!
+    for lcc, lcc_data in lcc_data_map.items():
+        pnv_match = (pnv == lcc) & removal_mask
+        lcc_data[pnv_match] += removed_grid[pnv_match]
+
+def add_land_cover(
+    lcc_code: int,
+    diff: float,
+    lcc_data_map: dict[int,np.ndarray],
+) -> None:
+    assert diff >= 0
+
+    agri_raster = lcc_data_map[lcc_code]
+
+    # Find areas we can put the new data. This is anywhere we don't already
+    # have agricultural land, and other places unlikely to be converted (cities, lakes, etc.)
+    # We know that there should be no partial cells involving crop/pasture at this stage
+    # because of the balancing we did initially.
+    excluded_codes = [CROP_CODE, PASTURE_CODE] + PRESERVE_CODES
+    eligible_mask = np.ones_like(agri_raster, dtype=bool)
+    for excluded_code in excluded_codes:
+        if excluded_code in lcc_data_map:
+            eligible_mask &= (lcc_data_map[excluded_code] == 0)
+
+    eligible_count = eligible_mask.sum()
+    if eligible_count == 0:
+        return
+
+    # Calculate capacity
+    total_cells = eligible_mask.size
+    eligible_fraction = eligible_count / total_cells
+
+    if eligible_fraction == 0:
+        return
+
+    per_cell_addition = diff / eligible_fraction
+    per_cell_addition = min(per_cell_addition, 1.0)
+
+    agri_raster[eligible_mask] += per_cell_addition
+    for lcc, lcc_data in lcc_data_map.items():
+        if lcc == lcc_code:
+            continue
+        lcc_data[eligible_mask & (lcc_data > 0)] -= per_cell_addition
+
 def process_tile(
-    current: yg.layers.RasterLayer,
+    current_maps: dict[int,yg.layers.RasterLayer],
     pnv: yg.layers.RasterLayer,
     tile: TileInfo,
-    random_seed: int,
 ) -> np.ndarray:
 
-    rng = np.random.default_rng(random_seed)
+    for current in current_maps.values():
+        assert current.map_projection == pnv.map_projection
+        assert current.area == pnv.area
 
-    data = current.read_array(tile.x_position, tile.y_position, tile.width, tile.height)
+    lcc_data_map = {
+        lcc: raster.nan_to_num().read_array(tile.x_position, tile.y_position, tile.width, tile.height)
+        for lcc, raster in current_maps.items()
+    }
+    pnv_data = None
 
+    crop_diff, pasture_diff = balance_crop_and_pasture_differences(
+        tile.crop_diff,
+        tile.pasture_diff,
+        lcc_data_map,
+    )
+
+    # Order the changes by removals first then additions. In random sampling this was
+    # important, but not so with a fractional approach. However, we need some consistent
+    # ordering so we leave this in for consistency.
     diffs = [
-        (tile.crop_diff, CROP_CODE),
-        (tile.pasture_diff, PASTURE_CODE),
+        (crop_diff, CROP_CODE),
+        (pasture_diff, PASTURE_CODE),
     ]
     diffs.sort(key=lambda a: a[0])
 
-    # Ordered so removes will come first
     for diff_value, habitat_code in diffs:
-        if np.isnan(diff_value):
-            continue
-        required_points = math.floor(data.shape[0] * data.shape[1] * math.fabs(diff_value))
-        if required_points == 0:
+        if diff_value == 0 or np.isnan(diff_value):
             continue
 
-        if diff_value > 0:
-            valid_mask = ~np.isin(data, [CROP_CODE, PASTURE_CODE] + PRESERVE_CODES)
+        if diff_value < 0:
+            if pnv is None:
+                pnv = pnv.read_array(tile.x_position, tile.y_position, tile.width, tile.height)
+            remove_land_cover(habitat_code, diff_value, pnv_data, lcc_data_map)
         else:
-            valid_mask = data == habitat_code
+            add_land_cover(habitat_code, diff_value, lcc_data_map)
 
-        valid_locations = valid_mask.nonzero()
-        possible_points = len(valid_locations[0])
-        if possible_points == 0:
-            continue
-        required_points = min(required_points, possible_points)
-
-        selected_locations = rng.choice(
-            len(valid_locations[0]),
-            size=required_points,
-            replace=False
-        )
-        rows = valid_locations[0][selected_locations]
-        cols = valid_locations[1][selected_locations]
-        if diff_value > 0:
-            data[rows, cols] = habitat_code
-        else:
-            for y, x in zip(rows, cols):
-                absolute_x = x + tile.x_position
-                absolute_y = y + tile.y_position
-                lat, lng = current.latlng_for_pixel(absolute_x, absolute_y)
-                pnv_x, pnv_y = pnv.pixel_for_latlng(lat, lng)
-                val = pnv.read_array(pnv_x, pnv_y, 1, 1)[0][0]
-                data[y][x] = val
-
-    return data
+    return lcc_data_map
 
 def process_tile_concurrently(
     current_lvl1_path: Path,
@@ -94,20 +204,21 @@ def process_tile_concurrently(
     input_queue: Queue,
     result_queue: Queue,
 ) -> None:
-    with (
-        yg.read_raster(current_lvl1_path) as current,
-        yg.read_raster(pnv_path) as pnv
-    ):
+    current_maps = {
+        int(filename.stem.split('_')[1]): yg.read_raster(filename) for filename in current_lvl1_path.glob("lcc_*.tif")
+    }
+    reference_layer = next(iter(current_maps.values()))
+    with yg.read_raster_like(pnv_path, reference_layer, yg.ResamplingMethod.Nearest) as pnv:
+        pnv.set_window_for_intersection(reference_layer.area)
         while True:
-            job : tuple[TileInfo, int] | None = input_queue.get()
-            if job is None:
+            tile : TileInfo | None = input_queue.get()
+            if tile is None:
                 break
-            tile, seed = job
-            if np.isnan(tile.crop_diff) and np.isnan(tile.pasture_diff):
+            if (np.isnan(tile.crop_diff) or tile.crop_diff == 0) and (np.isnan(tile.pasture_diff) or tile.pasture_diff == 0):
                 result_queue.put((tile, None))
             else:
-                data = process_tile(current, pnv, tile, seed)
-                result_queue.put((tile, data.tobytes()))
+                res = process_tile(current_maps, pnv, tile)
+                result_queue.put((tile, {lcc: data.tobytes() for lcc, data in res.items() }))
 
     result_queue.put(None)
 
@@ -117,7 +228,8 @@ def build_tile_list(
     pasture_adjustment_path: Path,
 ) -> list[TileInfo]:
     tiles = []
-    with yg.read_raster(current_lvl1_path) as current:
+
+    with yg.read_rasters(current_lvl1_path.glob("*.tif")) as current:
         current_dimensions = current.window.xsize, current.window.ysize
     with (
         yg.read_raster(crop_adjustment_path) as crop_diff,
@@ -154,29 +266,47 @@ def assemble_map(
     result_queue: Queue,
     sentinal_count: int,
 ) -> None:
+    os.makedirs(output_path, exist_ok=True)
 
-    with yg.read_raster(current_lvl1_path) as current:
-        dtype = current.read_array(0, 0, 1, 1).dtype
-        with RasterLayer.empty_raster_layer_like(current, filename=output_path) as output:
+    original_filenames = list(current_lvl1_path.glob("lcc_*.tif"))
+    current_maps = {
+        int(filename.stem.split('_')[1]): yg.read_raster(filename).nan_to_num() for filename in original_filenames
+    }
+    new_maps = {}
+    with yg.read_raster(original_filenames[0]) as example:
+        for filename in original_filenames:
+            lcc = int(filename.stem.split('_')[1])
+            outputname = output_path / f"lcc_{lcc}.tif"
+            new_maps[lcc] = RasterLayer.empty_raster_layer_like(
+                example,
+                filename=outputname,
+                nodata=0.0,
+                threads=16,
+                sparse=True,
+            )
+        dtype = example.read_array(0, 0, 1, 1).dtype
 
-            # A cheat as we don't have a neat API for this on yirgacheffe yet
-            band = output._dataset.GetRasterBand(1) # pylint: disable=W0212
+    count = 0
+    while True:
+        result : tuple[TileInfo,bytearray | None] | None = result_queue.get()
+        if result is None:
+            sentinal_count -= 1
+            if sentinal_count == 0:
+                break
+            continue
 
-            while True:
-                result : tuple[TileInfo,bytearray | None] | None = result_queue.get()
-                if result is None:
-                    sentinal_count -= 1
-                    if sentinal_count == 0:
-                        break
-                    continue
-
-                tile, rawdata = result
-                if rawdata is None:
-                    data = current.read_array(tile.x_position, tile.y_position, tile.width, tile.height)
-                else:
-                    n = np.frombuffer(rawdata, dtype=dtype)
-                    data = np.reshape(n, (tile.height, tile.width))
-
+        count += 1
+        tile, rawdata = result
+        if rawdata is None:
+            for lcc in current_maps.keys():
+                data = current_maps[lcc].read_array(tile.x_position, tile.y_position, tile.width, tile.height)
+                band = new_maps[lcc]._dataset.GetRasterBand(1)
+                band.WriteArray(data, tile.x_position, tile.y_position)
+        else:
+            for lcc in current_maps.keys():
+                n = np.frombuffer(rawdata[lcc], dtype=dtype)
+                data = np.reshape(n, (tile.height, tile.width))
+                band = new_maps[lcc]._dataset.GetRasterBand(1)
                 band.WriteArray(data, tile.x_position, tile.y_position)
 
 
@@ -186,18 +316,15 @@ def pipeline_source(
     pasture_adjustment_path: Path,
     source_queue: Queue,
     sentinal_count: int,
-    random_seed: int,
 ) -> None:
-    rng = np.random.default_rng(random_seed)
-
     tiles = build_tile_list(
         current_lvl1_path,
         crop_adjustment_path,
         pasture_adjustment_path,
     )
-    seeds = rng.integers(2**63, size=len(tiles))
-    for tile, seed in zip(tiles, seeds):
-        source_queue.put((tile, seed))
+    print(f"There are {len(tiles)} tiles")
+    for tile in tiles:
+        source_queue.put(tile)
     for _ in range(sentinal_count):
         source_queue.put(None)
 
@@ -206,7 +333,6 @@ def make_food_current_map(
     pnv_path: Path,
     crop_adjustment_path: Path,
     pasture_adjustment_path: Path,
-    random_seed: int,
     output_path: Path,
     processes_count: int,
 ) -> None:
@@ -236,7 +362,6 @@ def make_food_current_map(
             pasture_adjustment_path,
             source_queue,
             processes_count,
-            random_seed,
         ))
         source_worker.start()
 
@@ -265,7 +390,6 @@ def make_food_current_map(
     "pnv_path": "input.pnv",
     "crop_adjustment_path": "input.crop_diff",
     "pasture_adjustment_path": "input.pasture_diff",
-    "seed": "params.seed",
     "processes_count": "threads",
     "output_path": "output.raster",
 })
@@ -275,7 +399,7 @@ def main() -> None:
         "--current_lvl1",
         type=Path,
         required=True,
-        help="Path of lvl1 current map",
+        help="Path of lvl1 current maps",
         dest="current_lvl1_path",
     )
     parser.add_argument(
@@ -300,13 +424,6 @@ def main() -> None:
         dest="pasture_adjustment_path",
     )
     parser.add_argument(
-        "--seed",
-        type=int,
-        required=True,
-        help="Seed the random number generator",
-        dest="seed",
-    )
-    parser.add_argument(
         '--output',
         type=Path,
         help='Path of food current raster',
@@ -328,7 +445,6 @@ def main() -> None:
         args.pnv_path,
         args.crop_adjustment_path,
         args.pasture_adjustment_path,
-        args.seed,
         args.output_path,
         args.processes_count,
     )

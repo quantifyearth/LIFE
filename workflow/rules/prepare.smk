@@ -63,7 +63,7 @@ rule jung_habitat_updates:
         touch {output.sentinel}
         """
 
-rule current_raw:
+rule current_raws:
     """
     Build the LIFE current map, which is Jung with updates applied
     and restricted to L1 to match the PNV map restrictions.
@@ -73,9 +73,10 @@ rule current_raw:
         habitat=DATADIR / "habitat" / "jung_l2_raw.tif",
         crosswalk=DATADIR / "crosswalk.csv",
     params:
-        updates_dir=DATADIR / "habitat" / "lvl2_changemasks_ver004"
+        updates_dir=DATADIR / "habitat" / "lvl2_changemasks_ver004",
+        output_dir=DATADIR / "habitat" / "current_raw",
     output:
-        current=DATADIR / "habitat" / "current_raw.tif"
+        sentinel=DATADIR / "habitat" / "current_raw" / ".current_raw"
     threads: workflow.cores
     script:
         str(SRCDIR / "prepare_layers" / "make_current_map.py")
