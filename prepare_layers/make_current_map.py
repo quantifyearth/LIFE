@@ -61,21 +61,19 @@ def make_current_maps(
         current_map = yg.where(
             updated_jung.isin(map_preserve_code),
             updated_jung,
-            (yg.floor(updated_jung / 100) * 100).astype(yg.DataType.UInt16),
+            (yg.floor(updated_jung / 100) * 100),
         )
 
         print("Calculating unique land cover types...")
-        # vals = current_map.unique()
-        vals = [100, 200, 300, 400, 500, 600, 800] + map_preserve_code
+        vals = current_map.unique()
 
         for lcc in vals:
             print(f"Processing {lcc}...")
             per_class = current_map == lcc
             cast_per_class = per_class.astype(yg.DataType.Float32)
-            cast_per_class.pretty_print()
             with alive_bar(manual=True) as bar:
                 cast_per_class.to_geotiff(
-                    output_dir_path / f"lcc_{lcc}.tif",
+                    output_dir_path / f"lcc_{int(lcc)}.tif",
                     callback=bar,
                     parallelism=concurrency,
                     nodata=0.0,

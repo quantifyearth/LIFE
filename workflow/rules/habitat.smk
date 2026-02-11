@@ -160,77 +160,20 @@ rule combine_gaez_hyde:
 
 
 # =============================================================================
-# Project Jung to Hyde/GAEZ
-# =============================================================================
-rule project_jung_for_hyde_gaez:
-    """
-    We need a proportional value per pixel per habitat class version of the Jung
-    current L1 map at the same scale as the GAEZ and Hyde data so we can then
-    compare them.
-    """
-    input:
-        habitat=ancient(DATADIR / "habitat" / "current_raw.tif"),
-    output:
-        crop=DATADIR / "food" / "current_layers" / "lcc_1401.tif",
-        pasture=DATADIR / "food" / "current_layers" / "lcc_1402.tif",
-    params:
-        scale=config["hyde_pixel_scale"],
-        output_dir=DATADIR / "food" / "current_layers",
-    log:
-        DATADIR / "logs" / "process_habitat_food.log",
-    shell:
-        """
-        set -e
-        aoh-habitat-process --habitat {input.habitat} \
-                           --scale {params.scale} \
-                           --projection "{params.projection}" \
-                           --output {params.output_dir} \
-                           2>&1 | tee {log}
-        """
-
-
-# =============================================================================
 # Combine Jung, Hyde, and GAEZ
 # =============================================================================
-rule diff_crop:
-    """
-    Get the difference between the jung data and the new crop data.
-    """
-    input:
-        raster_a=DATADIR / "food" / "crop.tif",
-        raster_b=DATADIR / "food" / "current_layers" / "lcc_1401.tif",
-    output:
-        diff=DATADIR / "food" / "crop_diff.tif"
-    script:
-        str(SRCDIR / "utils" / "raster_diff.py")
-
-
-rule diff_pasture:
-    """
-    Get the difference between the jung data and the new pasture data.
-    """
-    input:
-        raster_a=DATADIR / "food" / "pasture.tif",
-        raster_b=DATADIR / "food" / "current_layers" / "lcc_1402.tif",
-    output:
-        diff=DATADIR / "food" / "pasture_diff.tif"
-    script:
-        str(SRCDIR / "utils" / "raster_diff.py")
-
 
 rule build_food_map:
     """
     Pull together all the pieces into a new L1 habitat map at the original Jung scale.
     """
     input:
-        crop_diff=DATADIR / "food" / "crop_diff.tif",
-        pasture_diff=DATADIR / "food" / "pasture_diff.tif",
+        crop=DATADIR / "food" / "crop.tif",
+        pasture=DATADIR / "food" / "pasture.tif",
         pnv=DATADIR / "habitat" / "pnv_raw.tif",
         jung=DATADIR / "habitat" / "current_raw.tif",
     output:
-        raster=DATADIR / "food" / "current_raw.tif",
-    params:
-        seed=42
+        rasters=DATADIR / "food" / "current_raw",
     threads: workflow.cores
     script:
         str(SRCDIR / "prepare_layers" / "make_food_current_map.py")

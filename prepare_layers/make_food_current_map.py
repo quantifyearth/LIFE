@@ -1,10 +1,11 @@
 import argparse
+import multiprocessing
 import os
 import resource
 import sys
 import time
 from pathlib import Path
-from multiprocessing import Manager, Process, cpu_count
+from multiprocessing import Process, cpu_count
 from queue import Queue
 from typing import NamedTuple
 from osgeo import gdal
@@ -158,10 +159,15 @@ def process_tile(
     current_maps: dict[int,yg.layers.RasterLayer],
     pnv: yg.layers.RasterLayer,
     tile: TileInfo,
-) -> np.ndarray:
+) -> dict[int,np.ndarray]:
+
+    lcc_data_map = {
+        lcc: current_map.nan_to_num().read_array(tile.x_position, tile.y_position, tile.width, tile.height)
+        for lcc, current_map in current_maps.items()
+    }
 
     if np.isnan(tile.crop_target) and np.isnan(tile.pasture_target):
-        return None
+        return lcc_data_map
 
     for current in current_maps.values():
         assert current.map_projection == pnv.map_projection
@@ -170,28 +176,17 @@ def process_tile(
     pnv_data = None
 
     if not np.isnan(tile.crop_target):
-        crop_data = current_maps[CROP_CODE].nan_to_num().read_array(tile.x_position, tile.y_position, tile.width, tile.height)
+        crop_data = lcc_data_map[CROP_CODE]
         crop_diff = tile.crop_target - (crop_data.sum() / crop_data.size)
     else:
-        crop_data = None
         crop_diff = 0
     if not np.isnan(tile.pasture_target):
-        pasture_data = current_maps[PASTURE_CODE].nan_to_num().read_array(tile.x_position, tile.y_position, tile.width, tile.height)
+        pasture_data = lcc_data_map[PASTURE_CODE]
         pasture_diff = tile.pasture_target - (pasture_data.sum() / pasture_data.size)
     else:
-        pasture_data = None
         pasture_diff = 0
     if (crop_diff == 0) and (pasture_diff == 0):
-        return None
-
-    lcc_data_map = {
-        CROP_CODE: crop_data if crop_data is not None else current_maps[CROP_CODE].nan_to_num().read_array(tile.x_position, tile.y_position, tile.width, tile.height),
-        PASTURE_CODE: pasture_data if pasture_data is not None else current_maps[PASTURE_CODE].nan_to_num().read_array(tile.x_position, tile.y_position, tile.width, tile.height),
-    }
-    for lcc in current_maps:
-        if lcc in [CROP_CODE, PASTURE_CODE]:
-            continue
-        lcc_data_map[lcc] = current_maps[lcc].nan_to_num().read_array(tile.x_position, tile.y_position, tile.width, tile.height)
+        return lcc_data_map
 
     crop_diff, pasture_diff = balance_crop_and_pasture_differences(
         crop_diff,
@@ -239,10 +234,7 @@ def process_tile_concurrently(
                 break
 
             res = process_tile(current_maps, pnv, tile)
-            if res is not None:
-                result_queue.put((tile, {lcc: data.tobytes() for lcc, data in res.items() }))
-            else:
-                result_queue.put((tile, None))
+            result_queue.put((tile, {lcc: data.tobytes() for lcc, data in res.items() }))
 
     result_queue.put(None)
 
@@ -332,7 +324,8 @@ def assemble_map(
                 data = np.reshape(n, (tile.height, tile.width))
                 band = new_maps[lcc]._dataset.GetRasterBand(1)
                 band.WriteArray(data, tile.x_position, tile.y_position)
-        print(f"assembled {count} tiles")
+        if count % 1000 == 0:
+            print(f"assembled {count} tiles")
 
 
 def pipeline_source(
@@ -368,55 +361,54 @@ def make_food_current_map(
 
     os.makedirs(output_path.parent, exist_ok=True)
 
-    with Manager() as manager:
-        source_queue = manager.Queue()
-        result_queue = manager.Queue()
+    source_queue = multiprocessing.Queue(maxsize=1000)
+    result_queue = multiprocessing.Queue(maxsize=1000)
 
-        workers = [Process(target=process_tile_concurrently, args=(
-            current_lvl1_path,
-            pnv_path,
-            source_queue,
-            result_queue,
-        )) for _ in range(processes_count)]
-        for worker_process in workers:
-            worker_process.start()
+    workers = [Process(target=process_tile_concurrently, args=(
+        current_lvl1_path,
+        pnv_path,
+        source_queue,
+        result_queue,
+    )) for _ in range(processes_count)]
+    for worker_process in workers:
+        worker_process.start()
 
-        source_worker = Process(target=pipeline_source, args=(
-            current_lvl1_path,
-            crop_adjustment_path,
-            pasture_adjustment_path,
-            source_queue,
-            processes_count,
-        ))
-        source_worker.start()
+    source_worker = Process(target=pipeline_source, args=(
+        current_lvl1_path,
+        crop_adjustment_path,
+        pasture_adjustment_path,
+        source_queue,
+        processes_count,
+    ))
+    source_worker.start()
 
-        assemble_map(
-            current_lvl1_path,
-            output_path,
-            result_queue,
-            processes_count,
-        )
+    assemble_map(
+        current_lvl1_path,
+        output_path,
+        result_queue,
+        processes_count,
+    )
 
-        processes = workers
-        processes.append(source_worker)
-        while processes:
-            candidates = [x for x in processes if not x.is_alive()]
-            for candidate in candidates:
-                candidate.join()
-                if candidate.exitcode:
-                    for victim in processes:
-                        victim.kill()
-                    sys.exit(candidate.exitcode)
-                processes.remove(candidate)
-            time.sleep(0.1)
+    processes = workers
+    processes.append(source_worker)
+    while processes:
+        candidates = [x for x in processes if not x.is_alive()]
+        for candidate in candidates:
+            candidate.join()
+            if candidate.exitcode:
+                for victim in processes:
+                    victim.kill()
+                sys.exit(candidate.exitcode)
+            processes.remove(candidate)
+        time.sleep(0.1)
 
 @snakemake_compatible(mapping={
     "current_lvl1_path": "input.jung",
     "pnv_path": "input.pnv",
-    "crop_adjustment_path": "input.crop_diff",
-    "pasture_adjustment_path": "input.pasture_diff",
+    "crop_adjustment_path": "input.crop",
+    "pasture_adjustment_path": "input.pasture",
     "processes_count": "threads",
-    "output_path": "output.raster",
+    "output_path": "output.rasters",
 })
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build the food current map")
