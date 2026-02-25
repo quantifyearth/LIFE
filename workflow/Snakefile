@@ -41,3 +41,19 @@ TAXA = config["taxa"]
 # Include rule modules
 include: "rules/prepare.smk"
 include: "rules/habitat.smk"
+include: "rules/aoh.smk"
+include: "rules/scenario.smk"
+include: "rules/species.smk"
+
+
+
+rule species_data:
+"""
+Target: extract species data from PostgreSQL.
+"""
+input:
+    DATADIR / "species-info" / "AVES" / ".birdlife_applied",
+    expand(
+        str(DATADIR / "species-info" / "{taxa}" / SCENARIO / "report.csv"),
+        taxa=TAXA,
+    ),

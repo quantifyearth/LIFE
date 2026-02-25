@@ -1,45 +1,40 @@
 import argparse
 import os
 from multiprocessing import cpu_count
+from pathlib import Path
 
-import numpy as np
-from osgeo import gdal
-from yirgacheffe.layers import RasterLayer
+import yirgacheffe as yg
 
-layers = ["all", "AMPHIBIANS", "AVES", "MAMMALIA", "REPTILES"]
-# layers = ["AMPHIBIANS", "AVES", "MAMMALIA", "REPTILES"]
+LAYERS = ["all", "AMPHIBIANS", "AVES", "MAMMALIA", "REPTILES"]
+# LAYERS = ["AMPHIBIANS", "AVES", "MAMMALIA", "REPTILES"]
 
 def binary_maps(
-    map_path: str,
-    output_path: str,
+    map_path: Path,
+    output_path: Path,
     parallelism: int
 ) -> None:
-    output_dir, filename = os.path.split(output_path)
-    base, _ext = os.path.splitext(filename)
-    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(output_path.parent, exist_ok=True)
 
-    for index, layername in enumerate(layers):
-        with RasterLayer.layer_from_file(map_path, band=index+1) as inputmap:
-            with RasterLayer.empty_raster_layer_like(
-                inputmap,
-                filename=os.path.join(output_dir, f"{base}_{layername}_binary.tif"),
-                datatype=gdal.GDT_Int16,
-            ) as result:
-                calc = inputmap.numpy_apply(lambda c: np.where(c != 0, c / np.abs(c), 0))
-                calc.parallel_save(result, parallelism=parallelism)
+    for index, layername in enumerate(LAYERS):
+        with yg.read_raster(map_path, band=index+1) as inputmap:
+            binary_map = yg.where(inputmap != 0, inputmap / yg.abs(inputmap), 0)
+            binary_map.astype(yg.DataType.Int16).to_geotiff(
+                filename.parent / f"{filename.stem}_{layername}_binary.tif",
+                parallelism=parallelism,
+            )
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Converts the output maps to binary")
     parser.add_argument(
         "--input",
-        type=str,
+        type=Path,
         required=True,
         dest="input_filename",
         help="multilayer result geotiff"
     )
     parser.add_argument(
         "--output",
-        type=str,
+        type=Path,
         required=True,
         dest="output_filename",
         help="Destination geotiff path."

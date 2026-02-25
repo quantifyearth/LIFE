@@ -2,9 +2,6 @@
 import numpy as np
 import pytest
 import yirgacheffe as yg
-from yirgacheffe.layers import RasterLayer
-from yirgacheffe.operators import DataType
-from yirgacheffe.window import Area, PixelScale
 
 from prepare_layers.make_food_current_map import TileInfo, process_tile, balance_crop_and_pasture_differences, \
     CROP_CODE, PASTURE_CODE, remove_land_cover, add_land_cover

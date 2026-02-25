@@ -1,15 +1,13 @@
 import argparse
 import itertools
+import os
+from contextlib import ExitStack, nullcontext
 from pathlib import Path
 from typing import Dict, List, Optional
 
 import pandas as pd
-import yirgacheffe.operators as yo
+import yirgacheffe as yg
 from alive_progress import alive_bar
-from yirgacheffe.layers import RasterLayer, RescaledRasterLayer
-
-from osgeo import gdal
-gdal.SetCacheMax(1 * 1024 * 1024 * 1024)
 
 # From Eyres et al: In the restoration scenario all areas classified as arable or pasture were restored to their PNV
 IUCN_CODE_REPLACEMENTS = [
@@ -30,33 +28,44 @@ def load_crosswalk_table(table_file_name: Path) -> Dict[str,List[int]]:
             result[row.code] = [int(row.value)]
     return result
 
-
 def make_restore_map(
     pnv_path: Path,
-    current_path: Path,
+    current_dir_path: Path,
     crosswalk_path: Path,
     output_path: Path,
-    concurrency: Optional[int],
+    parallelism: Optional[int],
     show_progress: bool,
 ) -> None:
-    with RasterLayer.layer_from_file(current_path) as current:
-        with RescaledRasterLayer.layer_from_file(pnv_path, current.pixel_scale) as pnv:
-            crosswalk = load_crosswalk_table(crosswalk_path)
+    os.makedirs(output_path, exist_ok=True)
 
-            map_replacement_codes = list(itertools.chain.from_iterable([crosswalk[x] for x in IUCN_CODE_REPLACEMENTS]))
-            restore_map = yo.where(current.isin(map_replacement_codes), pnv, current)
+    crosswalk = load_crosswalk_table(crosswalk_path)
 
-            with RasterLayer.empty_raster_layer_like(
-                restore_map,
-                filename=output_path,
-                threads=16
-            ) as result:
-                if show_progress:
-                    with alive_bar(manual=True) as bar:
-                        restore_map.parallel_save(result, callback=bar, parallelism=concurrency)
-                else:
-                    restore_map.parallel_save(result, parallelism=concurrency)
+    map_replacement_codes = list(itertools.chain.from_iterable([crosswalk[x] for x in IUCN_CODE_REPLACEMENTS]))
+    ideal_map_replacement_filenames = [current_dir_path / f"lcc_{code}.tif" for code in map_replacement_codes]
+    map_replacement_filenames = [path for path in ideal_map_replacement_filenames if path.exists()]
 
+    with ExitStack() as stack:
+        replacement_maps = [stack.enter_context(yg.read_raster(filename)) for filename in map_replacement_filenames]
+        replacement_total = yg.sum(replacement_maps)
+
+        # all the ones we expect to be left with, but not the ones we're removing
+        current_raster_filenames = [path for path in current_dir_path.glob("*.tif") if path not in map_replacement_filenames]
+
+        # Read the PNV as the same scale as the other maps
+        with yg.read_raster_like(pnv_path, replacement_maps[0], yg.ResamplingMethod.Nearest) as pnv:
+
+            for filename in current_raster_filenames:
+                lcc_code = int(filename.stem.split('_')[1])
+                ctx = alive_bar(manual=True, title=str(lcc_code)) if show_progress else nullcontext()
+                with ctx as bar:
+                    with yg.read_raster(filename) as layer:
+                        updated_layer = layer + (replacement_total * (pnv == lcc_code).astype(yg.DataType.Float32))
+                        capped_updated_layer = yg.where(updated_layer > 1, 1.0, updated_layer)
+                        capped_updated_layer.to_geotiff(
+                            output_path / f"lcc_{lcc_code}.tif",
+                            callback=bar,
+                            parallelism=parallelism,
+                        )
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Zenodo resource downloader.")
@@ -70,9 +79,9 @@ def main() -> None:
     parser.add_argument(
         '--current',
         type=Path,
-        help='Path of current map',
+        help='Path of current maps',
         required=True,
-        dest='current_path',
+        dest='current_dir_path',
     )
     parser.add_argument(
         '--crosswalk',
@@ -91,10 +100,10 @@ def main() -> None:
     parser.add_argument(
         '-j',
         type=int,
-        help='Number of concurrent threads to use for calculation.',
+        help='Number of parallel threads to use for calculation.',
         required=False,
         default=None,
-        dest='concurrency',
+        dest='parallelism',
     )
     parser.add_argument(
         '-p',
@@ -108,10 +117,10 @@ def main() -> None:
 
     make_restore_map(
         args.pnv_path,
-        args.current_path,
+        args.current_dir_path,
         args.crosswalk_path,
         args.results_path,
-        args.concurrency,
+        args.parallelism,
         args.show_progress,
     )
 

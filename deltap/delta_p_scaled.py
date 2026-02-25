@@ -4,8 +4,7 @@ import sys
 from pathlib import Path
 
 import pandas as pd
-import yirgacheffe.operators as yo
-from yirgacheffe.layers import RasterLayer
+import yirgacheffe as yg
 
 SCALE = 1e6
 
@@ -18,19 +17,18 @@ def delta_p_scaled_area(
     os.makedirs(output_path.parent, exist_ok=True)
 
     per_taxa = [
-        RasterLayer.layer_from_file(os.path.join(input_path, x))
-        for x in sorted(input_path.glob("*.tif"))
+        yg.read_raster(x) for x in sorted(input_path.glob("*.tif"))
     ]
     if not per_taxa:
         sys.exit(f"Failed to find any per-taxa maps in {input_path}")
 
-    area_restore = RasterLayer.layer_from_file(diff_area_map_path)
+    area_restore = yg.read_raster(diff_area_map_path)
 
     total_counts = pd.read_csv(totals_path)
 
-    area_restore_filter = yo.where(area_restore < SCALE, float('nan'), area_restore) / SCALE
+    area_restore_filter = yg.where(area_restore < SCALE, float('nan'), area_restore / SCALE)
 
-    with RasterLayer.empty_raster_layer_like(
+    with yg.layers.RasterLayer.empty_raster_layer_like(
         area_restore,
         filename=output_path,
         nodata=float('nan'),
@@ -44,7 +42,7 @@ def delta_p_scaled_area(
         for layer in per_taxa[1:]:
             summed_layer = summed_layer + layer
 
-        scaled_filtered_layer = yo.where(
+        scaled_filtered_layer = yg.where(
             area_restore_filter != 0,
             ((summed_layer / area_restore_filter) * -1.0) / species_count,
             float('nan')
@@ -57,7 +55,7 @@ def delta_p_scaled_area(
             taxa = name[:-4]
             species_count = int(total_counts[total_counts.taxa==taxa]["count"].values[0])
             result._dataset.GetRasterBand(idx + 2).SetDescription(taxa)  # pylint: disable=W0212
-            scaled_filtered_layer = yo.where(
+            scaled_filtered_layer = yg.where(
                 area_restore_filter != 0,
                 ((inlayer / area_restore_filter) * -1.0) / species_count,
                 float('nan')

@@ -15,7 +15,7 @@ requests
 alive-progress
 matplotlib
 yirgacheffe
-aoh
+aoh>=2.0.5
 gdal[numpy]
 git+https://github.com/quantifyearth/iucn_modlib.git
 git+https://github.com/quantifyearth/seasonality

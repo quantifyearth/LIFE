@@ -1,11 +1,14 @@
+"""
+This script is used to merge localised raster data into a global raster map.
+
+Specifically it was used originally to merge crosswalked Brazil Mapbiomass data
+into the Jung habitat map.
+"""
+
 import argparse
 from pathlib import Path
 
-from yirgacheffe.layers import RasterLayer, RescaledRasterLayer
-import yirgacheffe.operators as yo
-
-from osgeo import gdal
-gdal.SetCacheMax(32 * 1024 * 1024)
+import yirgacheffe as yg
 
 def merge_global_habitat(
     global_layer_path: Path,
@@ -13,20 +16,15 @@ def merge_global_habitat(
     output_layer_path: Path,
 ) -> None:
     # Note, we assume naively the local data is higher resolution than the global layer for now
-    with RasterLayer.layer_from_file(local_layer_path) as local_layer:
-        with RescaledRasterLayer.layer_from_file(
-            global_layer_path,
-            pixel_scale=local_layer.pixel_scale
-        ) as global_layer:
-            local_layer.set_window_for_union(global_layer.area)
-            cleared = local_layer.nan_to_num()
-            combined = yo.where(cleared != 0, local_layer, global_layer)
-            with RasterLayer.empty_raster_layer_like(
-                combined,
-                filename=output_layer_path,
-                datatype=local_layer.datatype
-            ) as result:
-                combined.parallel_save(result, parallelism=200)
+    # In a better world we'd work out which is higher res and make everything in that pixel scale
+    with (
+        yg.read_raster(local_layer_path) as local_layer,
+        yg.read_raster_like(global_layer_path, local_layer, yg.ResamplingMethod.Nearest) as global_layer:
+    ):
+        local_layer.set_window_for_union(global_layer.area)
+        cleared = local_layer.nan_to_num()
+        combined = yg.where(cleared != 0, local_layer, global_layer)
+        combined.to_geotiff(output_layer_path, parallelism=True)
 
 def main() -> None:
     parser = argparse.ArgumentParser()

@@ -111,11 +111,6 @@ if [ ! -d "${DATADIR}"/habitat_maps/pnv ]; then
                         --output "${DATADIR}"/habitat_maps/pnv/
 fi
 
-# Generate an area scaling map
-if [ ! -f "${DATADIR}"/area-per-pixel.tif ]; then
-    python3 ./prepare_layers/make_area_map.py --scale "${PIXEL_SCALE}" --output "${DATADIR}"/area-per-pixel.tif
-fi
-
 # Generate the arable scenario map
 if check_scenario "arable"; then
     if [ ! -f "${DATADIR}"/habitat/arable.tif ]; then
@@ -132,7 +127,6 @@ if check_scenario "arable"; then
     if [ ! -f "${DATADIR}"/habitat/arable_diff_area.tif ]; then
         python3 ./prepare_layers/make_diff_map.py --current "${DATADIR}"/habitat/current_raw.tif \
                                                 --scenario "${DATADIR}"/habitat/arable.tif \
-                                                --area "${DATADIR}"/area-per-pixel.tif \
                                                 --scale "${PIXEL_SCALE}" \
                                                 --output "${DATADIR}"/habitat/arable_diff_area.tif
     fi
@@ -154,7 +148,6 @@ if check_scenario "pasture"; then
     if [ ! -f "${DATADIR}"/habitat/pasture_diff_area.tif ]; then
         python3 ./prepare_layers/make_diff_map.py --current "${DATADIR}"/habitat/current_raw.tif \
                                                 --scenario "${DATADIR}"/habitat/pasture.tif \
-                                                --area "${DATADIR}"/area-per-pixel.tif \
                                                 --scale "${PIXEL_SCALE}" \
                                                 --output "${DATADIR}"/habitat/pasture_diff_area.tif
     fi
@@ -178,7 +171,6 @@ if check_scenario "restore"; then
     if [ ! -f "${DATADIR}"/habitat/restore_diff_area.tif ]; then
         python3 ./prepare_layers/make_diff_map.py --current "${DATADIR}"/habitat/current_raw.tif \
                                                 --scenario "${DATADIR}"/habitat/restore.tif \
-                                                --area "${DATADIR}"/area-per-pixel.tif \
                                                 --scale "${PIXEL_SCALE}" \
                                                 --output "${DATADIR}"/habitat/restore_diff_area.tif
     fi
@@ -202,7 +194,6 @@ if check_scenario "restore_agriculture"; then
     if [ ! -f "${DATADIR}"/habitat/restore_agriculture_diff_area.tif ]; then
         python3 ./prepare_layers/make_diff_map.py --current "${DATADIR}"/habitat/current_raw.tif \
                                                 --scenario "${DATADIR}"/habitat/restore_agriculture.tif \
-                                                --area "${DATADIR}"/area-per-pixel.tif \
                                                 --scale "${PIXEL_SCALE}" \
                                                 --output "${DATADIR}"/habitat/restore_agriculture_diff_area.tif
     fi
@@ -226,7 +217,6 @@ if check_scenario "restore_all"; then
     if [ ! -f "${DATADIR}"/habitat/restore_all_diff_area.tif ]; then
         python3 ./prepare_layers/make_diff_map.py --current "${DATADIR}"/habitat/current_raw.tif \
                                                 --scenario "${DATADIR}"/habitat/restore_all.tif \
-                                                --area "${DATADIR}"/area-per-pixel.tif \
                                                 --scale "${PIXEL_SCALE}" \
                                                 --output "${DATADIR}"/habitat/restore_all_diff_area.tif
     fi
@@ -245,7 +235,6 @@ if check_scenario "urban"; then
         python3 ./prepare_layers/make_constant_diff_map.py --current "${DATADIR}"/habitat/current_raw.tif \
                                                         --habitat_code 14.5 \
                                                         --crosswalk "${DATADIR}"/crosswalk.csv \
-                                                        --area "${DATADIR}"/area-per-pixel.tif \
                                                         --scale "${PIXEL_SCALE}" \
                                                         --output "${DATADIR}"/habitat/urban_diff_area.tif
     fi
@@ -289,7 +278,7 @@ python3 ./utils/persistencegenerator.py --datadir "${DATADIR}" \
                                         --scenarios "${SCENARIOS[@]}"
 
 # Calculate all the AoHs
-littlejohn -j "${PROCESS_COUNT}" -o "${DATADIR}"/aohbatch.log -c "${DATADIR}"/aohbatch.csv "${VIRTUAL_ENV}"/bin/aoh-calc -- --force-habitat
+littlejohn -j "${PROCESS_COUNT}" -o "${DATADIR}"/aohbatch.log -c "${DATADIR}"/aohbatch.csv "${VIRTUAL_ENV}"/bin/aoh-calc -- --force-habitat --pixel-area
 
 # Generate validation summaries
 aoh-collate-data --aoh_results "${DATADIR}"/aohs/current/ --output "${DATADIR}"/aohs/current.csv
