@@ -1,6 +1,8 @@
 import argparse
 import itertools
+import math
 import os
+from contextlib import nullcontext
 from pathlib import Path
 from multiprocessing import set_start_method
 from typing import Dict, List, Optional
@@ -35,12 +37,12 @@ def make_current_maps(
     update_masks_path: Optional[Path],
     crosswalk_path: Path,
     output_dir_path: Path,
-    concurrency: Optional[int],
+    parallelism: Optional[int],
     show_progress: bool,
     sentinel_path: Path | None,
 ) -> None:
     os.makedirs(output_dir_path, exist_ok=True)
-    print(f"Using {concurrency} workers")
+    print(f"Using {parallelism} workers")
 
     if update_masks_path is not None:
         update_masks = [
@@ -68,16 +70,18 @@ def make_current_maps(
         vals = current_map.unique()
 
         for lcc in vals:
+            # Seems there are some NaN values in Jung
+            if math.isnan(lcc):
+                continue
             print(f"Processing {lcc}...")
             per_class = current_map == lcc
             cast_per_class = per_class.astype(yg.DataType.Float32)
-            with alive_bar(manual=True) as bar:
+            ctx = alive_bar(manual=True, title=str(lcc)) if show_progress else nullcontext()
+            with ctx as bar:
                 cast_per_class.to_geotiff(
                     output_dir_path / f"lcc_{int(lcc)}.tif",
                     callback=bar,
-                    parallelism=concurrency,
-                    nodata=0.0,
-                    sparse=True,
+                    parallelism=parallelism,
                 )
 
     # This script generates a bunch of rasters, but snakemake needs one
@@ -133,7 +137,7 @@ def main() -> None:
         help='Number of concurrent threads to use for calculation.',
         required=False,
         default=None,
-        dest='concurrency',
+        dest='parallelism',
     )
     parser.add_argument(
         '-p',
@@ -158,7 +162,7 @@ def main() -> None:
         args.update_masks_path,
         args.crosswalk_path,
         args.output_dir_path,
-        args.concurrency,
+        args.parallelism,
         args.show_progress,
         args.sentinel_path,
     )

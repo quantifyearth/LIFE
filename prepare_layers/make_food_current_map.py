@@ -12,7 +12,6 @@ from osgeo import gdal
 
 import numpy as np
 import yirgacheffe as yg
-from yirgacheffe.layers import RasterLayer
 from snakemake_argparse_bridge import snakemake_compatible # type: ignore
 
 gdal.SetCacheMax(4 * 1024 * 1024 * 1024)
@@ -72,8 +71,7 @@ def balance_crop_and_pasture_differences(
     if src_cells == 0:
         if crop_diff > 0:
             raise ValueError(f"not cells in pasture {src_raster.sum()}, but pasture diff is -ve {pasture_diff}")
-        else:
-            raise ValueError(f"not cells in crop {src_raster.sum()}, but crop diff is -ve {crop_diff}")
+        raise ValueError(f"not cells in crop {src_raster.sum()}, but crop diff is -ve {crop_diff}")
 
     src_coverage = src_raster.sum() / total_cells
 
@@ -156,13 +154,13 @@ def add_land_cover(
         lcc_data[eligible_mask & (lcc_data > 0)] -= per_cell_addition
 
 def process_tile(
-    current_maps: dict[int,yg.layers.RasterLayer],
-    pnv: yg.layers.RasterLayer,
+    current_maps: dict[int,yg.YirgacheffeLayer],
+    pnv: yg.YirgacheffeLayer,
     tile: TileInfo,
 ) -> dict[int,np.ndarray]:
 
     lcc_data_map = {
-        lcc: current_map.nan_to_num().read_array(tile.x_position, tile.y_position, tile.width, tile.height)
+        lcc: current_map.read_array(tile.x_position, tile.y_position, tile.width, tile.height)
         for lcc, current_map in current_maps.items()
     }
 
@@ -172,8 +170,6 @@ def process_tile(
     for current in current_maps.values():
         assert current.map_projection == pnv.map_projection
         assert current.area == pnv.area
-
-    pnv_data = None
 
     if not np.isnan(tile.crop_target):
         crop_data = lcc_data_map[CROP_CODE]
@@ -203,13 +199,14 @@ def process_tile(
     ]
     diffs.sort(key=lambda a: a[0])
 
+    pnv_data = None
     for diff_value, habitat_code in diffs:
         if diff_value == 0 or np.isnan(diff_value):
             continue
 
         if diff_value < 0:
-            if pnv is None:
-                pnv = pnv.read_array(tile.x_position, tile.y_position, tile.width, tile.height)
+            if pnv_data is None:
+                pnv_data = pnv.read_array(tile.x_position, tile.y_position, tile.width, tile.height)
             remove_land_cover(habitat_code, diff_value, pnv_data, lcc_data_map)
         else:
             add_land_cover(habitat_code, diff_value, lcc_data_map)
@@ -220,23 +217,23 @@ def process_tile_concurrently(
     current_lvl1_path: Path,
     pnv_path: Path,
     input_queue: Queue,
-    result_queue: Queue,
+    result_queues: dict[int,Queue],
 ) -> None:
     current_maps = {
         int(filename.stem.split('_')[1]): yg.read_raster(filename) for filename in current_lvl1_path.glob("lcc_*.tif")
     }
     reference_layer = next(iter(current_maps.values()))
-    with yg.read_raster_like(pnv_path, reference_layer, yg.ResamplingMethod.Nearest) as pnv:
+    with yg.read_raster(pnv_path) as pnv:
         pnv.set_window_for_intersection(reference_layer.area)
         while True:
             tile : TileInfo | None = input_queue.get()
             if tile is None:
                 break
-
             res = process_tile(current_maps, pnv, tile)
-            result_queue.put((tile, {lcc: data.tobytes() for lcc, data in res.items() }))
-
-    result_queue.put(None)
+            for lcc, data in res.items():
+                result_queues[lcc].put((tile, data.tobytes()))
+    for queue in result_queues.values():
+        queue.put(None)
 
 def build_tile_list(
     current_lvl1_path: Path,
@@ -245,8 +242,8 @@ def build_tile_list(
 ) -> list[TileInfo]:
     tiles = []
 
-    with yg.read_rasters(current_lvl1_path.glob("*.tif")) as current:
-        current_dimensions = current.window.xsize, current.window.ysize
+    with yg.read_raster(next(current_lvl1_path.glob("*.tif"))) as example:
+        current_dimensions = example.window.xsize, example.window.ysize
     with (
         yg.read_raster(crop_adjustment_path) as crop,
         yg.read_raster(pasture_adjustment_path) as pasture,
@@ -277,34 +274,25 @@ def build_tile_list(
     return tiles
 
 def assemble_map(
+    lcc: int,
     current_lvl1_path: Path,
     output_path: Path,
     result_queue: Queue,
     sentinal_count: int,
 ) -> None:
     os.makedirs(output_path, exist_ok=True)
-
-    original_filenames = list(current_lvl1_path.glob("lcc_*.tif"))
-    current_maps = {
-        int(filename.stem.split('_')[1]): yg.read_raster(filename).nan_to_num() for filename in original_filenames
-    }
-    new_maps = {}
-    with yg.read_raster(original_filenames[0]) as example:
-        for filename in original_filenames:
-            lcc = int(filename.stem.split('_')[1])
-            outputname = output_path / f"lcc_{lcc}.tif"
-            new_maps[lcc] = RasterLayer.empty_raster_layer_like(
-                example,
-                filename=outputname,
-                nodata=0.0,
-                threads=16,
-                sparse=True,
-            )
-        dtype = example.read_array(0, 0, 1, 1).dtype
+    with yg.read_raster(current_lvl1_path / f"lcc_{lcc}.tif") as current_map:
+        new_map = yg.layers.RasterLayer.empty_raster_layer_like(
+            current_map,
+            filename=output_path / f"lcc_{lcc}.tif",
+            threads=16,
+        )
+        dtype = current_map.read_array(0, 0, 1, 1).dtype
+    band = new_map._dataset.GetRasterBand(1) # pylint: disable=W0212
 
     count = 0
     while True:
-        result : tuple[TileInfo,bytearray | None] | None = result_queue.get()
+        result : tuple[TileInfo,bytearray] | None = result_queue.get()
         if result is None:
             sentinal_count -= 1
             if sentinal_count == 0:
@@ -313,20 +301,11 @@ def assemble_map(
 
         count += 1
         tile, rawdata = result
-        if rawdata is None:
-            for lcc in current_maps.keys():
-                data = current_maps[lcc].read_array(tile.x_position, tile.y_position, tile.width, tile.height)
-                band = new_maps[lcc]._dataset.GetRasterBand(1)
-                band.WriteArray(data, tile.x_position, tile.y_position)
-        else:
-            for lcc in current_maps.keys():
-                n = np.frombuffer(rawdata[lcc], dtype=dtype)
-                data = np.reshape(n, (tile.height, tile.width))
-                band = new_maps[lcc]._dataset.GetRasterBand(1)
-                band.WriteArray(data, tile.x_position, tile.y_position)
+        n = np.frombuffer(rawdata, dtype=dtype)
+        data = np.reshape(n, (tile.height, tile.width))
+        band.WriteArray(data, tile.x_position, tile.y_position)
         if count % 1000 == 0:
-            print(f"assembled {count} tiles")
-
+            print(f"{lcc}: assembled {count} tiles")
 
 def pipeline_source(
     current_lvl1_path: Path,
@@ -346,6 +325,11 @@ def pipeline_source(
     for _ in range(sentinal_count):
         source_queue.put(None)
 
+
+def get_lcc_list(current_lvl1_path: Path) -> list[int]:
+    rasters = current_lvl1_path.glob("*.tif")
+    return [int(x.stem.split('_')[1]) for x in rasters]
+
 def make_food_current_map(
     current_lvl1_path: Path,
     pnv_path: Path,
@@ -361,14 +345,28 @@ def make_food_current_map(
 
     os.makedirs(output_path.parent, exist_ok=True)
 
-    source_queue = multiprocessing.Queue(maxsize=1000)
-    result_queue = multiprocessing.Queue(maxsize=1000)
+    lcc_list = get_lcc_list(current_lvl1_path)
+    result_queues: dict[int,multiprocessing.queues.Queue] = { lcc: multiprocessing.Queue(maxsize=10) for lcc in lcc_list}
+
+    assembly_processes = [
+        Process(target=assemble_map, args=(
+            lcc,
+            current_lvl1_path,
+            output_path,
+            queue,
+            processes_count,
+        )) for lcc, queue in result_queues.items()
+    ]
+    for assembly_worker in assembly_processes:
+        assembly_worker.start()
+
+    source_queue: multiprocessing.queues.Queue = multiprocessing.Queue(maxsize=1000)
 
     workers = [Process(target=process_tile_concurrently, args=(
         current_lvl1_path,
         pnv_path,
         source_queue,
-        result_queue,
+        result_queues,
     )) for _ in range(processes_count)]
     for worker_process in workers:
         worker_process.start()
@@ -382,14 +380,7 @@ def make_food_current_map(
     ))
     source_worker.start()
 
-    assemble_map(
-        current_lvl1_path,
-        output_path,
-        result_queue,
-        processes_count,
-    )
-
-    processes = workers
+    processes = workers + assembly_processes
     processes.append(source_worker)
     while processes:
         candidates = [x for x in processes if not x.is_alive()]

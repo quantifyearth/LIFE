@@ -2,12 +2,9 @@ import argparse
 import json
 import math
 import os
-import shutil
 import sys
-from enum import Enum
 from pathlib import Path
 
-import numpy as np
 import yirgacheffe as yg
 
 # This isn't a hard requirement, but in practice most experiments use 0.25, and the original
@@ -35,7 +32,6 @@ def open_layer(filename: Path) -> tuple[yg.YirgacheffeLayer,float]:
     with open(json_filename, "r", encoding="utf-8") as f:
         data = json.load(f)
     total_aoh = data["aoh_total"]
-    # total_aoh = layer.astype(yg.DataType.Float64).sum()
 
     return layer, total_aoh
 
@@ -187,7 +183,8 @@ def global_code_residents_pixel_ae(
             # In general Yirgacheffe can infer the behaviour needed for area intersections based on
             # operator, but in this instance we want to force the caclulation to take place for the
             # union of the areas involved.
-            layers = [x for x in [current_breeding, scenario_breeding, current_non_breeding, scenario_non_breeding] if isinstance(x, yg.YirgacheffeLayer)]
+            src_layers = [current_breeding, scenario_breeding, current_non_breeding, scenario_non_breeding]
+            layers = [x for x in src_layers if isinstance(x, yg.YirgacheffeLayer)]
             union = yg.layers.RasterLayer.find_union(layers)
             for layer in layers:
                 layer.set_window_for_union(union)
@@ -228,8 +225,8 @@ def exponent_type(value: str):
         return value
     try:
         f = float(value)
-    except ValueError:
-        raise argparse.ArgumentTypeError(f"invalid exponent: {value!r}")
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"invalid exponent: {value!r}") from exc
     if f not in FLOAT_EXPONENTS:
         raise argparse.ArgumentTypeError(f"numeric exponent must be one of {sorted(FLOAT_EXPONENTS)}, got {f}")
     return f

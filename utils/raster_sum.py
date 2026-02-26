@@ -9,8 +9,7 @@ from pathlib import Path
 from multiprocessing import Manager, Process, Queue, cpu_count
 from typing import Optional
 
-from yirgacheffe.layers import RasterLayer  # type: ignore
-from yirgacheffe.operators import DataType
+import yirgacheffe as yg
 
 def worker(
     compress: bool,

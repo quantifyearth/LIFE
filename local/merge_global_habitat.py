@@ -19,7 +19,7 @@ def merge_global_habitat(
     # In a better world we'd work out which is higher res and make everything in that pixel scale
     with (
         yg.read_raster(local_layer_path) as local_layer,
-        yg.read_raster_like(global_layer_path, local_layer, yg.ResamplingMethod.Nearest) as global_layer:
+        yg.read_raster_like(global_layer_path, local_layer, yg.ResamplingMethod.Nearest) as global_layer,
     ):
         local_layer.set_window_for_union(global_layer.area)
         cleared = local_layer.nan_to_num()

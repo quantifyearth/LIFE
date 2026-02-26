@@ -49,7 +49,9 @@ def make_restore_map(
         replacement_total = yg.sum(replacement_maps)
 
         # all the ones we expect to be left with, but not the ones we're removing
-        current_raster_filenames = [path for path in current_dir_path.glob("*.tif") if path not in map_replacement_filenames]
+        current_raster_filenames = [
+            path for path in current_dir_path.glob("*.tif") if path not in map_replacement_filenames
+        ]
 
         # Read the PNV as the same scale as the other maps
         with yg.read_raster_like(pnv_path, replacement_maps[0], yg.ResamplingMethod.Nearest) as pnv:
