@@ -6,14 +6,17 @@ into the Jung habitat map.
 """
 
 import argparse
+from contextlib import nullcontext
 from pathlib import Path
 
 import yirgacheffe as yg
+from alive_progress import alive_bar # type: ignore
 
 def merge_global_habitat(
     global_layer_path: Path,
     local_layer_path: Path,
     output_layer_path: Path,
+    show_progress: bool,
 ) -> None:
     # Note, we assume naively the local data is higher resolution than the global layer for now
     # In a better world we'd work out which is higher res and make everything in that pixel scale
@@ -24,7 +27,9 @@ def merge_global_habitat(
         local_layer.set_window_for_union(global_layer.area)
         cleared = local_layer.nan_to_num()
         combined = yg.where(cleared != 0, local_layer, global_layer)
-        combined.to_geotiff(output_layer_path, parallelism=True)
+        ctx = alive_bar(manual=True, title=str(lcc)) if show_progress else nullcontext()
+        with ctx as bar:
+            combined.to_geotiff(output_layer_path, callback=bar, parallelism=True)
 
 def main() -> None:
     parser = argparse.ArgumentParser()
@@ -49,12 +54,21 @@ def main() -> None:
         dest="output_layer_path",
         help="Result combined raster path",
     )
+    parser.add_argument(
+        '-p',
+        help="Show progress indicator",
+        default=False,
+        required=False,
+        action='store_true',
+        dest='show_progress',
+    )
     args = parser.parse_args()
 
     merge_global_habitat(
         args.global_layer_path,
         args.local_layer_path,
         args.output_layer_path,
+        args.show_progress,
     )
 
 if __name__ == "__main__":

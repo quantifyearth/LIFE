@@ -11,7 +11,7 @@ SCALE = 1e6
 def delta_p_scaled_area(
     input_path: Path,
     diff_area_map_path: Path,
-    totals_path: Path,
+    species_totals_path: Path,
     output_path: Path,
 ):
     os.makedirs(output_path.parent, exist_ok=True)
@@ -22,46 +22,39 @@ def delta_p_scaled_area(
     if not per_taxa:
         sys.exit(f"Failed to find any per-taxa maps in {input_path}")
 
-    area_restore = yg.read_raster(diff_area_map_path)
+    species_total_counts = pd.read_csv(species_totals_path)
 
-    total_counts = pd.read_csv(totals_path)
+    diff_area = yg.read_raster(diff_area_map_path)
+    diff_area_rescaled = yg.where(diff_area < SCALE, float('nan'), diff_area / SCALE)
 
-    area_restore_filter = yg.where(area_restore < SCALE, float('nan'), area_restore / SCALE)
+    # Process all species in total
+    total_species_count = int(species_total_counts[species_total_counts.taxa=="all"]["count"].values[0])
+    summed_layer = yg.sum(per_taxa)
+    all_scaled_filtered_layer = yg.where(
+        diff_area_rescaled != 0,
+        ((summed_layer / diff_area_rescaled) * -1.0) / total_species_count,
+        float('nan')
+    )
 
-    with yg.layers.RasterLayer.empty_raster_layer_like(
-        area_restore,
-        filename=output_path,
-        nodata=float('nan'),
-        bands=len(per_taxa) + 1
-    ) as result:
+    bands = [all_scaled_filtered_layer]
+    labels = ["all"]
 
-        species_count = int(total_counts[total_counts.taxa=="all"]["count"].values[0])
+    # Now per taxa
+    for inlayer in per_taxa:
+        # get the taxa from the filename
+        _, name = os.path.split(inlayer.name)
+        taxa = name[:-4]
+        labels.append(taxa)
 
-        result._dataset.GetRasterBand(1).SetDescription("all")  # pylint: disable=W0212
-        summed_layer = per_taxa[0]
-        for layer in per_taxa[1:]:
-            summed_layer = summed_layer + layer
-
+        taxa_species_count = int(species_total_counts[species_total_counts.taxa==taxa]["count"].values[0])
         scaled_filtered_layer = yg.where(
-            area_restore_filter != 0,
-            ((summed_layer / area_restore_filter) * -1.0) / species_count,
+            diff_area_rescaled != 0,
+            ((inlayer / diff_area_rescaled) * -1.0) / taxa_species_count,
             float('nan')
         )
-        scaled_filtered_layer.parallel_save(result, band=1)
+        bands.append(scaled_filtered_layer)
 
-        for idx, inlayer in enumerate(per_taxa):
-            assert inlayer.name
-            _, name = os.path.split(inlayer.name)
-            taxa = name[:-4]
-            species_count = int(total_counts[total_counts.taxa==taxa]["count"].values[0])
-            result._dataset.GetRasterBand(idx + 2).SetDescription(taxa)  # pylint: disable=W0212
-            scaled_filtered_layer = yg.where(
-                area_restore_filter != 0,
-                ((inlayer / area_restore_filter) * -1.0) / species_count,
-                float('nan')
-            )
-            scaled_filtered_layer.parallel_save(result, band=idx + 2)
-
+    yg.to_geotiff(output_path, bands, labels, nodata=float('nan'))
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Scale final results for publication.")

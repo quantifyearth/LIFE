@@ -69,7 +69,7 @@ if [ ! -f "${DATADIR}"/crosswalk.csv ]; then
 fi
 
 # Get habitat layer and prepare for use
-if [ ! -f "${DATADIR}"/habitat/current_raw.tif ]; then
+if [ ! -f "${DATADIR}"/5_arc_seconds/current/.sentinel ]; then
     if [ ! -f "${DATADIR}"/habitat/jung_l2_raw.tif ]; then
         reclaimer zenodo --zenodo_id 4058819 \
                         --filename iucn_habitatclassification_composite_lvl2_ver004.zip \
@@ -203,11 +203,16 @@ if check_scenario "restore"; then
         touch "${DATADIR}"/5_arc_seconds/restore/.sentinel
     fi
 
+    if [ ! -f "${DATADIR}"/100m/restore_diff_area.tif ]; then
+        python3 ./prepare_layers/make_diff_map.py --current "${DATADIR}"/100m/current \
+                                                --scenario "${DATADIR}"/100m/restore \
+                                                --output "${DATADIR}"/100m/restore_diff_area.tif
+    fi
 
-    if [ ! -f "${DATADIR}"/habitat/restore_diff_area.tif ]; then
-        python3 ./prepare_layers/make_diff_map.py --current "${DATADIR}"/5_arc_seconds/current \
-                                                --scenario "${DATADIR}"/5_arc_seconds/restore \
-                                                --output "${DATADIR}"/habitat/restore_diff_area.tif
+    if [ ! -f "${DATADIR}"/5_arc_seconds/restore_diff_area.tif ]; then
+        # In theory we should just use gdalwarp here, but it kept running out of
+        # memory, so we use our own Yirgacheffe version that just does the same thing in small
+        # chunks.
     fi
 fi
 #
