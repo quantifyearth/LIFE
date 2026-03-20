@@ -27,7 +27,7 @@ def merge_global_habitat(
         local_layer.set_window_for_union(global_layer.area)
         cleared = local_layer.nan_to_num()
         combined = yg.where(cleared != 0, local_layer, global_layer)
-        ctx = alive_bar(manual=True, title=str(lcc)) if show_progress else nullcontext()
+        ctx = alive_bar(manual=True) if show_progress else nullcontext()
         with ctx as bar:
             combined.to_geotiff(output_layer_path, callback=bar, parallelism=True)
 

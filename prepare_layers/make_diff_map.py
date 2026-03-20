@@ -1,7 +1,10 @@
 import argparse
+from contextlib import nullcontext
 from pathlib import Path
 
 import yirgacheffe as yg
+from alive_progress import alive_bar # type: ignore
+from snakemake_argparse_bridge import snakemake_compatible # type: ignore
 
 POSSIBLE_HABITAT_CLASSES = [100, 200, 300, 400, 500, 600, 700, 800, 900,
     1000, 1100, 1200, 1300, 1400, 1401, 1402, 1403, 1404,
@@ -21,15 +24,27 @@ def make_diff_map(
 
         if not current_habitat_filename.exists() and not scenario_habitat_filename.exists():
             continue
-        current_layer = yg.read_raster(current_habitat_filename) if current_habitat_filename.exists() else yg.constant(0.0)
-        scenario_layer = yg.read_raster(scenario_habitat_filename) if scenario_habitat_filename.exists() else yg.constant(0.0)
+        current_layer = yg.read_raster(current_habitat_filename) if current_habitat_filename.exists() \
+            else yg.constant(0.0)
+        scenario_layer = yg.read_raster(scenario_habitat_filename) if scenario_habitat_filename.exists() \
+            else yg.constant(0.0)
         habitat_diff = current_layer != scenario_layer
         layers.append(habitat_diff)
+
     diff = yg.any(layers)
     area = yg.area_raster(diff.map_projection)
     scaled_diff = diff * area
-    scaled_diff.to_geotiff(output_path, parallelism=parallelism)
 
+    ctx = alive_bar(manual=True) if show_progress else nullcontext()
+    with ctx as bar:
+        scaled_diff.to_geotiff(output_path, callback=bar, parallelism=parallelism)
+
+@snakemake_compatible(mapping={
+    "current_path": "input.current",
+    "scenario_path": "params.scenario",
+    "parallelism": "threads",
+    "output_path": "output[0]",
+})
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate an area difference map.")
     parser.add_argument(
@@ -51,7 +66,7 @@ def main() -> None:
         type=Path,
         help='Path where final map should be stored',
         required=True,
-        dest='results_path',
+        dest='output_path',
     )
     parser.add_argument(
         '-j',
@@ -74,7 +89,7 @@ def main() -> None:
     make_diff_map(
         args.current_path,
         args.scenario_path,
-        args.results_path,
+        args.output_path,
         args.parallelism,
         args.show_progress,
     )

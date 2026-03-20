@@ -1,20 +1,27 @@
 
 import numpy as np
 import pytest
-import yirgacheffe as yg
 
-from prepare_layers.make_food_current_map import TileInfo, process_tile, balance_crop_and_pasture_differences, \
+from prepare_layers.make_food_current_map import balance_crop_and_pasture_differences, \
     CROP_CODE, PASTURE_CODE, remove_land_cover, add_land_cover
 
-@pytest.mark.parametrize("initial_crop_diff,initial_pasture_diff,expected_crop_diff,expected_pasture_diff", [
-    (0.0, 0.0, 0.0, 0.0),
-    (0.8, 0.0, 0.8, 0.0),
-    (-0.8, 0.0, -0.8, 0.0),
-    (0.0, 0.8, 0.0, 0.8),
-    (0.0, -0.8, 0.0, -0.8),
-    (0.4, 0.2, 0.4, 0.2),
-    (-0.4, -0.2, -0.4, -0.2),
-])
+@pytest.mark.parametrize(
+    [
+        "initial_crop_diff",
+        "initial_pasture_diff",
+        "expected_crop_diff",
+        "expected_pasture_diff"
+    ],
+    [
+        (0.0, 0.0, 0.0, 0.0),
+        (0.8, 0.0, 0.8, 0.0),
+        (-0.8, 0.0, -0.8, 0.0),
+        (0.0, 0.8, 0.0, 0.8),
+        (0.0, -0.8, 0.0, -0.8),
+        (0.4, 0.2, 0.4, 0.2),
+        (-0.4, -0.2, -0.4, -0.2),
+    ]
+)
 def test_balance_not_needed(
     initial_crop_diff: float,
     initial_pasture_diff: float,
@@ -24,30 +31,35 @@ def test_balance_not_needed(
     result_crop_diff, result_pasture_diff = balance_crop_and_pasture_differences(
         initial_crop_diff,
         initial_pasture_diff,
-        dict(),
+        {},
     )
     assert expected_crop_diff == result_crop_diff
     assert expected_pasture_diff == result_pasture_diff
 
 
-def test_one_sided_balance() -> None:
+def test_brokend_balance() -> None:
+    # Testing that we spot if we've said to remove land where there isn't any
     lcc_data_map = {
         CROP_CODE: np.zeros((10, 10)),
         PASTURE_CODE: np.zeros((10, 10)),
     }
-    result_crop_diff, result_pasture_diff = balance_crop_and_pasture_differences(
-        0.5,
-        -0.1,
-        lcc_data_map,
-    )
-    # assert expected_crop_diff == result_crop_diff
-    # assert expected_pasture_diff == result_pasture_diff
-    # assert (lcc_data_map[CROP_CODE] == crop_cell_value).all()
-    # assert (lcc_data_map[PASTURE_CODE] == pasture_cell_value).all()
+    with pytest.raises(ValueError):
+        _ = balance_crop_and_pasture_differences(
+            0.5,
+            -0.1,
+            lcc_data_map,
+        )
 
 
 @pytest.mark.parametrize(
-    "initial_crop_diff,initial_pasture_diff,expected_crop_diff,expected_pasture_diff,crop_cell_value,pasture_cell_value",
+    [
+        "initial_crop_diff",
+        "initial_pasture_diff",
+        "expected_crop_diff",
+        "expected_pasture_diff",
+        "crop_cell_value",
+        "pasture_cell_value"
+    ],
     [
         (0.25, -0.5, 0.0, -0.25, 0.25, 0.75),
     ]
@@ -77,7 +89,14 @@ def test_simple_balance_transfer(
 
 
 @pytest.mark.parametrize(
-    "initial_crop_diff,initial_pasture_diff,expected_crop_diff,expected_pasture_diff,crop_cell_value,pasture_cell_value",
+    [
+        "initial_crop_diff",
+        "initial_pasture_diff",
+        "expected_crop_diff",
+        "expected_pasture_diff",
+        "crop_cell_value",
+        "pasture_cell_value"
+    ],
     [
         (0.25, -0.5, 0.0, -0.25, 0.5, 0.5),
         (0.5, -0.25, 0.25, 0.0, 0.5, 0.5),
@@ -110,9 +129,16 @@ def test_simple_half_balance_transfer(
     assert (expected_pasture_map == lcc_data_map[PASTURE_CODE]).all()
 
 
-@pytest.mark.parametrize("crop_diff,expected_crop_cell,expected_other_cell", [
-    (-0.5, 0.5, 0.5),
-])
+@pytest.mark.parametrize(
+    [
+        "crop_diff",
+        "expected_crop_cell",
+        "expected_other_cell",
+    ],
+    [
+        (-0.5, 0.5, 0.5),
+    ]
+)
 def test_remove_land_simple(
     crop_diff: float,
     expected_crop_cell: float,
@@ -138,13 +164,22 @@ def test_remove_land_simple(
     assert (expected_other_map == lcc_data_map[1]).all()
 
 
-@pytest.mark.parametrize("crop_diff,pnv_value,expected_crop_cell,expected_other_1_cell,expected_other_2_cell", [
-    (-0.5, 1, 0.0, 1.0, 0.0),
-    (-0.75, 1, 0.0, 1.0, 0.0), # too much
-    (-0.25, 1, 0.5, 0.5, 0.0),
-    (-0.5, 2, 0.0, 0.0, 1.0),
-    (-0.25, 2, 0.5, 0.0, 0.5),
-])
+@pytest.mark.parametrize(
+    [
+        "crop_diff",
+        "pnv_value",
+        "expected_crop_cell",
+        "expected_other_1_cell",
+        "expected_other_2_cell",
+    ],
+    [
+        (-0.5, 1, 0.0, 1.0, 0.0),
+        (-0.75, 1, 0.0, 1.0, 0.0), # too much
+        (-0.25, 1, 0.5, 0.5, 0.0),
+        (-0.5, 2, 0.0, 0.0, 1.0),
+        (-0.25, 2, 0.5, 0.0, 0.5),
+    ]
+)
 def test_remove_land_less_simple(
     crop_diff: float,
     pnv_value: int,
@@ -189,7 +224,6 @@ def test_add_land_simple(
         1: np.ones((10, 10)),
         CROP_CODE: np.zeros((10, 10)),
     }
-    pnv_data = np.full((10, 10), 1)
 
     add_land_cover(
         CROP_CODE,
@@ -217,7 +251,6 @@ def test_add_land_avoid_excluded(
         PASTURE_CODE: np.array([[i % 2] * 10 for i in range(10)]).astype(float),
         CROP_CODE: np.zeros((10, 10)),
     }
-    pnv_data = np.full((10, 10), 1)
 
     add_land_cover(
         CROP_CODE,

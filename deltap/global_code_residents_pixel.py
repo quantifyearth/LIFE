@@ -50,7 +50,7 @@ def calc_persistence_value(
 
 def process_delta_p(
     current: yg.YirgacheffeLayer,
-    scenario: yg.YirgacheffeLayer,
+    scenario: yg.YirgacheffeLayer | float,
     current_aoh: float,
     historic_aoh: float,
     exponent: str | float
@@ -88,6 +88,7 @@ def global_code_residents_pixel_ae(
                 sys.exit(f"Failed to open current layer {current_aohs_path / filename}")
 
             try:
+                scenario: yg.YirgacheffeLayer | float
                 scenario, _ = open_layer(scenario_aohs_path / filename)
             except FileNotFoundError:
                 # If there is a current but now scenario file it's because the species went extinct under the scenario
@@ -143,8 +144,8 @@ def global_code_residents_pixel_ae(
                 non_breeding_scenario_path = scenario_aohs_path / nonbreeding_filename
                 breeding_scenario_path = scenario_aohs_path / breeding_filename
             else:
-                non_breeding_scenario_path = "nan"
-                breeding_scenario_path = "nan"
+                non_breeding_scenario_path = Path("nan") # nan path is the sentinel from csv inputs
+                breeding_scenario_path = Path("nan")
 
             try:
                 current_breeding, current_aoh_breeding = open_layer(current_aohs_path / breeding_filename)
@@ -155,11 +156,13 @@ def global_code_residents_pixel_ae(
             except FileNotFoundError:
                 sys.exit(f"Failed to open current non breeding {current_aohs_path / nonbreeding_filename}")
             try:
+                scenario_breeding: yg.YirgacheffeLayer | float
                 scenario_breeding, _ = open_layer(breeding_scenario_path)
             except FileNotFoundError:
                 # If there is a current but now scenario file it's because the species went extinct under the scenario
                 scenario_breeding = 0.0
             try:
+                scenario_non_breeding: yg.YirgacheffeLayer | float
                 scenario_non_breeding, _ = open_layer(non_breeding_scenario_path)
             except FileNotFoundError:
                 # If there is a current but now scenario file it's because the species went extinct under the scenario

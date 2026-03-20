@@ -1,10 +1,10 @@
 import argparse
-import os
 import resource
 from pathlib import Path
 
 import yirgacheffe as yg
 from alive_progress import alive_bar # type: ignore
+from snakemake_argparse_bridge import snakemake_compatible # type: ignore
 
 def raster_sum(
     images_dir: Path,
@@ -20,6 +20,10 @@ def raster_sum(
     with alive_bar(manual=True) as bar:
         total.to_geotiff(output_filename, callback=bar, parallelism=True)
 
+@snakemake_compatible(mapping={
+    "rasters_directory": "input.rasters",
+    "output_filename": "output[0]",
+})
 def main() -> None:
     parser = argparse.ArgumentParser(description="Sums many rasters into a single raster")
     parser.add_argument(

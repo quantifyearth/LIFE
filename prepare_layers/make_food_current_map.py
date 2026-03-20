@@ -346,7 +346,9 @@ def make_food_current_map(
     os.makedirs(output_path.parent, exist_ok=True)
 
     lcc_list = get_lcc_list(current_lvl1_path)
-    result_queues: dict[int,multiprocessing.queues.Queue] = { lcc: multiprocessing.Queue(maxsize=10) for lcc in lcc_list}
+    result_queues: dict[int,multiprocessing.queues.Queue] = {
+        lcc: multiprocessing.Queue(maxsize=10) for lcc in lcc_list
+    }
 
     assembly_processes = [
         Process(target=assemble_map, args=(
