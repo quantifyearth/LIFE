@@ -1,5 +1,15 @@
-# LIFE Pipeline - Prepare base layers
+# LIFE Pipeline - Prepare base layers
 # =====================================
+#
+# Handles:
+# - Crosswalk table generation
+# - Jung L2 habitat map download
+# - Jung habitat updates download
+# - Jung PNV map download
+# - Elevation download and warp (precious)
+
+import os
+from pathlib import Path
 
 
 # =============================================================================
@@ -22,7 +32,7 @@ rule convert_crosswalk:
 
 rule jung_habitat_map:
     """
-    Fetch the Jung habitat map used as the current map.
+    Fetch the Jung L2 habitat map from Zenodo.
     """
     output:
         habitat=DATADIR / "habitat" / "jung_l2_raw.tif"
@@ -33,6 +43,7 @@ rule jung_habitat_map:
         DATADIR / "logs" / "download_habitat.log",
     shell:
         """
+        mkdir -p $(dirname {output.habitat})
         reclaimer zenodo --zenodo_id {params.zenodo_id} \
                          --filename "{params.filename}" \
                          --extract \
@@ -40,46 +51,30 @@ rule jung_habitat_map:
                          2>&1 | tee {log}
         """
 
+
 rule jung_habitat_updates:
     """
-    Fetch the Jung habitat map updates.
+    Fetch the Jung habitat map update masks from Zenodo.
     """
     output:
         sentinel=DATADIR / "habitat" / ".downloaded_updates"
     params:
         habitat_dir=DATADIR / "habitat",
-        zenodo_id=config["zenodo"]["jung_habitat"]["zenodo_id"],
-        filename=config["zenodo"]["jung_habitat"]["filename"],
+        zenodo_id=config["zenodo"]["jung_habitat_updates"]["zenodo_id"],
+        filename=config["zenodo"]["jung_habitat_updates"]["filename"],
     log:
-        DATADIR / "logs" / "download_habitat_update.log",
+        DATADIR / "logs" / "download_habitat_updates.log",
     shell:
         """
+        mkdir -p {params.habitat_dir}
         reclaimer zenodo --zenodo_id {params.zenodo_id} \
                         --filename "{params.filename}" \
                         --extract \
                         --output {params.habitat_dir} \
                         2>&1 | tee {log}
-
         touch {output.sentinel}
         """
 
-rule current_raws:
-    """
-    Build the LIFE current map, which is Jung with updates applied
-    and restricted to L1 to match the PNV map restrictions.
-    """
-    input:
-        updates_sentinel=DATADIR / "habitat" / ".downloaded_updates",
-        habitat=DATADIR / "habitat" / "jung_l2_raw.tif",
-        crosswalk=DATADIR / "crosswalk.csv",
-    params:
-        updates_dir=DATADIR / "habitat" / "lvl2_changemasks_ver004",
-        output_dir=DATADIR / "habitat" / "current_raw",
-    output:
-        sentinel=DATADIR / "habitat" / "current_raw" / ".current_raw"
-    threads: workflow.cores
-    script:
-        str(SRCDIR / "prepare_layers" / "make_current_map.py")
 
 # =============================================================================
 # Jung PNV map
@@ -87,7 +82,7 @@ rule current_raws:
 
 rule jung_pnv_map:
     """
-    Fetch the Jung PNV map from zenodo.
+    Fetch the Jung PNV map from Zenodo.
     """
     output:
         habitat=DATADIR / "habitat" / "pnv_raw.tif"
@@ -98,9 +93,90 @@ rule jung_pnv_map:
         DATADIR / "logs" / "download_pnv.log",
     shell:
         """
+        mkdir -p $(dirname {output.habitat})
         reclaimer zenodo --zenodo_id {params.zenodo_id} \
                          --filename "{params.filename}" \
                          --extract \
                          --output {output.habitat} \
                          2>&1 | tee {log}
+        """
+
+
+# =============================================================================
+# Elevation layers (precious — only rebuild if explicitly deleted)
+# =============================================================================
+
+rule download_elevation:
+    """
+    Download raw elevation DEM from Zenodo.
+    """
+    output:
+        elevation=DATADIR / "elevation.tif",
+    params:
+        zenodo_id=config["zenodo"]["elevation"]["zenodo_id"],
+        filename=config["zenodo"]["elevation"]["filename"],
+    log:
+        DATADIR / "logs" / "download_elevation.log",
+    shell:
+        """
+        reclaimer zenodo --zenodo_id {params.zenodo_id} \
+                         --filename "{params.filename}" \
+                         --output {output.elevation} \
+                         2>&1 | tee {log}
+        """
+
+
+rule elevation_max:
+    """
+    Warp elevation to target projection and scale using max resampling.
+    Precious: only runs if output doesn't exist.
+    """
+    input:
+        elevation=ancient(DATADIR / "elevation.tif"),
+    output:
+        elevation_max=DATADIR / "elevation-max.tif",
+    params:
+        pixel_scale=config["pixel_scale"],
+    threads: workflow.cores
+    log:
+        DATADIR / "logs" / "elevation_max.log",
+    shell:
+        """
+        gdalwarp \
+            -t_srs EPSG:4326 \
+            -tr {params.pixel_scale} -{params.pixel_scale} \
+            -r max \
+            -co COMPRESS=LZW \
+            -wo NUM_THREADS={threads} \
+            {input.elevation} \
+            {output.elevation_max} \
+            2>&1 | tee {log}
+        """
+
+
+rule elevation_min:
+    """
+    Warp elevation to target projection and scale using min resampling.
+    Precious: only runs if output doesn't exist.
+    """
+    input:
+        elevation=ancient(DATADIR / "elevation.tif"),
+    output:
+        elevation_min=DATADIR / "elevation-min.tif",
+    params:
+        pixel_scale=config["pixel_scale"],
+    threads: workflow.cores
+    log:
+        DATADIR / "logs" / "elevation_min.log",
+    shell:
+        """
+        gdalwarp \
+            -t_srs EPSG:4326 \
+            -tr {params.pixel_scale} -{params.pixel_scale} \
+            -r min \
+            -co COMPRESS=LZW \
+            -wo NUM_THREADS={threads} \
+            {input.elevation} \
+            {output.elevation_min} \
+            2>&1 | tee {log}
         """

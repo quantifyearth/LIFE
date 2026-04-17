@@ -1,14 +1,28 @@
-# LIFE Pipeline - Updated habitat map rules
-# ==========================================
+# LIFE Pipeline - Habitat layer rules
+# =====================================
 #
-# These rules handle combining the Jung habitat map with
-# farming data from GAEZ and Hyde to generate a more suitable
-# base map.
+# Handles the two-phase habitat map generation:
+#
+# Phase 1 (generate_food_map.sh equivalent):
+#   - Download GAEZ and HYDE data
+#   - Combine GAEZ/HYDE into crop/pasture fractional layers
+#   - Build Jung current map at 100m
+#   - Rescale PNV to 100m
+#   - Build food-enhanced current map at 100m (PRECIOUS)
+#
+# Phase 2 (run.sh equivalent):
+#   - Warp current 100m → habitat_layers/current/ (PRECIOUS)
+#   - Process PNV → habitat_layers/pnv/ via aoh-habitat-process (PRECIOUS)
+
+
+import os
+from pathlib import Path
 
 
 # =============================================================================
 # GAEZ data
 # =============================================================================
+
 rule gaez_download:
     """
     Fetch the compressed GAEZ data.
@@ -21,6 +35,7 @@ rule gaez_download:
         DATADIR / "logs" / "download_gaez.log",
     shell:
         """
+        mkdir -p $(dirname {output.archive})
         curl -o {output.archive} \
             {params.url} \
             2>&1 | tee {log}
@@ -47,14 +62,12 @@ rule gaez_expand:
             2>&1 | tee {log}
         """
 
-
 # =============================================================================
 # Hyde data
 # =============================================================================
+
 rule hyde_download:
-    """
-    Fetch the compressed Hyde data.
-    """
+    """Fetch the compressed HYDE data."""
     output:
         archive=DATADIR / "food" / "baseline.zip"
     params:
@@ -63,6 +76,7 @@ rule hyde_download:
         DATADIR / "logs" / "download_hyde.log",
     shell:
         """
+        mkdir -p $(dirname {output.archive})
         curl -o {output.archive} \
             {params.url} \
             2>&1 | tee {log}
@@ -70,15 +84,13 @@ rule hyde_download:
 
 
 rule hyde_expand_land_usage_archive:
-    """
-    Extract the inner land usage archive.
-    """
+    """Extract the inner land usage archive from HYDE."""
+    input:
+        archive=DATADIR / "food" / "baseline.zip"
     output:
         inner_hyde=DATADIR / "food" / "2017AD_lu.zip"
     params:
         filepath="baseline/zip/2017AD_lu.zip"
-    input:
-        archive=DATADIR / "food" / "baseline.zip"
     log:
         DATADIR / "logs" / "expand_hyde_1.log",
     shell:
@@ -91,15 +103,13 @@ rule hyde_expand_land_usage_archive:
 
 
 rule hyde_expand_land_usage_raster:
-    """
-    Extract raster from the inner land usage archive.
-    """
+    """Extract raster from the inner HYDE land usage archive."""
+    input:
+        archive=DATADIR / "food" / "2017AD_lu.zip"
     output:
         raw_hyde_raster=DATADIR / "food" / "grazing2017AD.asc"
     params:
         filepath="grazing2017AD.asc"
-    input:
-        archive=DATADIR / "food" / "2017AD_lu.zip"
     log:
         DATADIR / "logs" / "expand_hyde_2.log",
     shell:
@@ -113,29 +123,32 @@ rule hyde_expand_land_usage_raster:
 
 rule modify_hyde_pixel_scale:
     """
-    Modify the pixel scale value in the Hyde data as it isn't precise enough to match the GAEZ data.
+    Fix the pixel scale value in the HYDE data — the rounding is not precise
+    enough to align with the GAEZ data.
     """
-    output:
-        modified_hyde_raster=DATADIR / "food" / "modified_grazing2017AD.asc"
     input:
         raw_hyde_raster=DATADIR / "food" / "grazing2017AD.asc"
+    output:
+        modified_hyde_raster=DATADIR / "food" / "modified_grazing2017AD.asc"
     shell:
         """
-        sed "s/0.0833333/0.08333333333333333/"  {input.raw_hyde_raster} > {output.modified_hyde_raster}
+        sed "s/0.0833333/0.08333333333333333/" \
+            {input.raw_hyde_raster} > {output.modified_hyde_raster}
         """
 
 
 rule add_hyde_projection_info:
     """
-    The Hyde data ships without a projection specified, so we need to add one so that
-    the rest of the workflow doesn't complain when we try to mix it in with other projected
-    raster data.
+    The HYDE data ships without a projection, so add one so that
+    the rest of the workflow can mix it with projected raster data.
     """
     output:
         hyde_projection_file=DATADIR / "food" / "modified_grazing2017AD.prj"
+    params:
+        projection=config["hyde_projection"]
     shell:
         """
-        echo {config["hyde_projection"]} > {output.hyde_projection_file}
+        echo '{params.projection}' > {output.hyde_projection_file}
         """
 
 
@@ -154,26 +167,158 @@ rule combine_gaez_hyde:
         crop=DATADIR / "food" / "crop.tif",
         pasture=DATADIR / "food" / "pasture.tif"
     params:
-        output_dir=DATADIR / "food"
+        updates_dir=DATADIR / "habitat" / "lvl2_changemasks_ver004",
+        output_dir=DATADIR / "100m" / "jung_current",
+    output:
+        sentinel=DATADIR / "100m" / "jung_current" / ".sentinel",
+    threads: workflow.cores
     script:
-        str(SRCDIR / "prepare_layers" / "build_gaez_hyde.py")
+        str(SRCDIR / "prepare_layers" / "make_current_map.py")
 
 
 # =============================================================================
-# Combine Jung, Hyde, and GAEZ
+# PNV rescaled to 100m
+# =============================================================================
+
+rule pnv_100m:
+    """
+    Rescale the PNV map to 100m resolution.
+    Yirgacheffe can rescale dynamically, but pre-scaling is faster at the cost
+    of some extra disk space.
+    """
+    input:
+        pnv=DATADIR / "habitat" / "pnv_raw.tif",
+    output:
+        pnv_100m=DATADIR / "habitat" / "pnv_100m.tif",
+    log:
+        DATADIR / "logs" / "pnv_100m.log",
+    shell:
+        """
+        gdalwarp \
+            -t_srs EPSG:4326 \
+            -tr 0.000898315284120 -0.000898315284120 \
+            -r near \
+            -tap \
+            -multi -wo NUM_THREADS=ALL_CPUS \
+            -co COMPRESS=LZW -co NUM_THREADS=ALL_CPUS \
+            {input.pnv} \
+            {output.pnv_100m} \
+            2>&1 | tee {log}
+        """
+
+
+# =============================================================================
+# Food-enhanced current map at 100m (PRECIOUS)
 # =============================================================================
 
 rule build_food_map:
     """
-    Pull together all the pieces into a new L1 habitat map at the original Jung scale.
+    Build the food-enhanced current habitat map at 100m resolution by combining
+    the Jung current map with GAEZ/HYDE crop and pasture fractions.
+
+    PRECIOUS: Only rebuilds if the sentinel is explicitly deleted.
+    This is the most expensive step in the pipeline.
     """
     input:
+        jung=ancient(DATADIR / "100m" / "jung_current" / ".sentinel"),
+        pnv=ancient(DATADIR / "habitat" / "pnv_100m.tif"),
+        crop=ancient(DATADIR / "food" / "crop.tif"),
+        pasture=ancient(DATADIR / "food" / "pasture.tif"),
+    output:
+        sentinel=DATADIR / "100m" / "current" / ".sentinel",
+    params:
+        jung_dir=DATADIR / "100m" / "jung_current",
+        output_dir=DATADIR / "100m" / "current",
+        pnv=DATADIR / "habitat" / "pnv_100m.tif",
         crop=DATADIR / "food" / "crop.tif",
         pasture=DATADIR / "food" / "pasture.tif",
-        pnv=DATADIR / "habitat" / "pnv_raw.tif",
-        jung=DATADIR / "habitat" / "current_raw.tif",
-    output:
-        rasters=DATADIR / "food" / "current_raw",
     threads: workflow.cores
-    script:
-        str(SRCDIR / "prepare_layers" / "make_food_current_map.py")
+    log:
+        DATADIR / "logs" / "build_food_map.log",
+    shell:
+        """
+        python3 {SRCDIR}/prepare_layers/make_food_current_map.py \
+            --current_lvl1 {params.jung_dir} \
+            --pnv {params.pnv} \
+            --crop {params.crop} \
+            --pasture {params.pasture} \
+            --output {params.output_dir} \
+            -j {threads} \
+            2>&1 | tee {log}
+        touch {output.sentinel}
+        """
+
+
+# =============================================================================
+# Warp current map to habitat_layers resolution (PRECIOUS)
+# =============================================================================
+
+rule warp_current:
+    """
+    Warp the food-enhanced current map from 100m to the target pixel scale
+    (5 arc-seconds, ~1.67km at the equator).
+
+    PRECIOUS: Only rebuilds if the sentinel is explicitly deleted.
+    """
+    input:
+        sentinel=ancient(DATADIR / "100m" / "current" / ".sentinel"),
+    output:
+        sentinel=DATADIR / "habitat_layers" / "current" / ".sentinel",
+    params:
+        input_dir=DATADIR / "100m" / "current",
+        output_dir=DATADIR / "habitat_layers" / "current",
+        pixel_scale=config["pixel_scale"],
+    threads: workflow.cores
+    log:
+        DATADIR / "logs" / "warp_current.log",
+    shell:
+        """
+        mkdir -p {params.output_dir}
+        for d in {params.input_dir}/*.tif; do
+            basename=$(basename "$d")
+            gdalwarp \
+                -t_srs EPSG:4326 \
+                -tr {params.pixel_scale} -{params.pixel_scale} \
+                -r average \
+                -multi \
+                -co COMPRESS=LZW \
+                -co NUM_THREADS={threads} \
+                -wo NUM_THREADS={threads} \
+                "$d" \
+                {params.output_dir}/"$basename" \
+                2>&1
+        done 2>&1 | tee {log}
+        touch {output.sentinel}
+        """
+
+
+# =============================================================================
+# Process PNV map to habitat_layers (PRECIOUS)
+# =============================================================================
+
+rule pnv_processed:
+    """
+    Process the PNV map into per-class fractional rasters at the target pixel scale
+    using aoh-habitat-process.
+
+    PRECIOUS: Only rebuilds if the sentinel is explicitly deleted.
+    """
+    input:
+        pnv=ancient(DATADIR / "habitat" / "pnv_raw.tif"),
+    output:
+        sentinel=DATADIR / "habitat_layers" / "pnv" / ".sentinel",
+    params:
+        output_dir=DATADIR / "habitat_layers" / "pnv",
+        pixel_scale=config["pixel_scale"],
+    log:
+        DATADIR / "logs" / "pnv_processed.log",
+    shell:
+        """
+        set -e
+        aoh-habitat-process \
+            --habitat {input.pnv} \
+            --scale {params.pixel_scale} \
+            --output {params.output_dir} \
+            2>&1 | tee {log}
+        touch {output.sentinel}
+        """
