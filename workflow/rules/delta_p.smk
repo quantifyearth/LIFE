@@ -14,7 +14,7 @@
 
 import os
 from pathlib import Path
-
+from types import SimpleNamespace
 
 # =============================================================================
 # Per-Species Delta P Calculation
@@ -26,11 +26,8 @@ rule calculate_delta_p:
     Calculate the change in probability of persistence for a single species
     under a given scenario.
 
-    Uses current, scenario, and PNV (historic) AOH rasters.
-    RESIDENT species produce one TIF; NONBREEDING species produce one TIF
-    (which covers the migratory pair); BREEDING species produce no output.
-
-    A sentinel is always created to track completion regardless of season.
+    species_id wildcard is of the form T{taxon_id}A{assessment_id}_{SEASON},
+    e.g. T22685505A261477056_RESIDENT.
     """
     input:
         current_sentinel=DATADIR / "aohs" / "current" / "{taxa}" / ".complete",
@@ -42,82 +39,48 @@ rule calculate_delta_p:
         current_path=lambda wildcards: DATADIR / "aohs" / "current" / wildcards.taxa,
         scenario_path=lambda wildcards: DATADIR / "aohs" / wildcards.scenario / wildcards.taxa,
         pnv_path=lambda wildcards: DATADIR / "aohs" / "pnv" / wildcards.taxa,
-        output_path=lambda wildcards: DATADIR / "deltap" / wildcards.scenario / CURVE / wildcards.taxa,
+        taxon_id=lambda wildcards: wildcards.species_id.rsplit("_", 1)[0],
+        season=lambda wildcards: wildcards.species_id.rsplit("_", 1)[1],
         curve=CURVE,
+        output_tif=lambda wildcards: DATADIR / "deltap" / wildcards.scenario / CURVE / wildcards.taxa / f"deltap_{wildcards.species_id}.tif",
     log:
         DATADIR / "logs" / "deltap" / "{scenario}" / "{taxa}" / "{species_id}.log",
-    shell:
-        """
-        mkdir -p $(dirname {log})
-        mkdir -p {params.output_path}
-        taxid=$(echo "{wildcards.species_id}" | cut -d_ -f1)
-        season=$(echo "{wildcards.species_id}" | cut -d_ -f2)
-        python3 {SRCDIR}/deltap/global_code_residents_pixel.py \
-            --taxid "$taxid" \
-            --season "$season" \
-            --current_path {params.current_path} \
-            --scenario_path {params.scenario_path} \
-            --historic_path {params.pnv_path} \
-            --output_path {params.output_path} \
-            --z {params.curve} \
-            2>&1 | tee {log}
-        touch {output.sentinel}
-        """
-
-
-# =============================================================================
-# Per-Taxa Delta P Aggregation
-# =============================================================================
-
-
-rule aggregate_delta_p_per_taxa:
-    """
-    Wait for all per-species delta P calculations for a taxa to complete.
-    Creates a sentinel that downstream rules depend on.
-    """
-    input:
-        sentinels=get_delta_p_sentinels_for_taxa_scenario,
-    output:
-        sentinel=DATADIR / "deltap" / "{scenario}" / CURVE / "{taxa}" / ".complete",
-    shell:
-        """
-        touch {output.sentinel}
-        """
+    script:
+        str(SRCDIR / "deltap" / "global_code_residents_pixel.py")
 
 
 # =============================================================================
 # Per-Taxa Raster Sum
 # =============================================================================
 
-
 rule raster_sum_per_taxa:
     """
     Sum all per-species delta P rasters for a taxa into a single raster.
+    Implicitly waits for all calculate_delta_p jobs via direct tif dependencies.
     """
     input:
-        sentinel=DATADIR / "deltap" / "{scenario}" / CURVE / "{taxa}" / ".complete",
+        rasters=get_delta_p_sentinels_for_taxa_scenario,
     output:
-        DATADIR / "deltap_sum" / "{scenario}" / CURVE / "{taxa}.tif",
+        tif=DATADIR / "deltap_sum" / "{scenario}" / CURVE / "{taxa}.tif",
     params:
         rasters_dir=lambda wildcards: DATADIR / "deltap" / wildcards.scenario / CURVE / wildcards.taxa,
+        curve=CURVE,
     threads: workflow.cores
     log:
         DATADIR / "logs" / "raster_sum" / "{scenario}" / "{taxa}.log",
-    shell:
-        """
-        mkdir -p $(dirname {output})
-        mkdir -p $(dirname {log})
-        python3 {SRCDIR}/utils/raster_sum.py \
-            --rasters_directory {params.rasters_dir} \
-            --output {output} \
-            2>&1 | tee {log}
-        """
-
+    script:
+        str(SRCDIR / "utils" / "raster_sum.py")
 
 # =============================================================================
 # Species Totals
 # =============================================================================
 
+def get_all_delta_p_tifs_for_scenario(wildcards):
+    tifs = []
+    for taxa in TAXA:
+        mock = SimpleNamespace(taxa=taxa, scenario=wildcards.scenario)
+        tifs.extend(get_delta_p_sentinels_for_taxa_scenario(mock))
+    return tifs
 
 rule species_totals:
     """
@@ -125,23 +88,15 @@ rule species_totals:
     Used by delta_p_scaled for normalisation.
     """
     input:
-        sentinels=expand(
-            str(DATADIR / "deltap" / "{{scenario}}" / CURVE / "{taxa}" / ".complete"),
-            taxa=TAXA,
-        ),
+        rasters=get_all_delta_p_tifs_for_scenario,
     output:
         totals=DATADIR / "deltap" / "{scenario}" / CURVE / "totals.csv",
     params:
         deltaps_dir=lambda wildcards: DATADIR / "deltap" / wildcards.scenario / CURVE,
     log:
         DATADIR / "logs" / "species_totals_{scenario}.log",
-    shell:
-        """
-        python3 {SRCDIR}/utils/species_totals.py \
-            --deltaps {params.deltaps_dir} \
-            --output {output.totals} \
-            2>&1 | tee {log}
-        """
+    script:
+        str(SRCDIR / "utils" / "species_totals.py")
 
 
 # =============================================================================
@@ -164,18 +119,10 @@ rule delta_p_scaled:
         diffmap=DATADIR / "habitat" / "{scenario}_diff_area.tif",
         totals=DATADIR / "deltap" / "{scenario}" / CURVE / "totals.csv",
     output:
-        DATADIR / "deltap_final" / f"scaled_{{scenario}}_{CURVE}.tif",
+        final=DATADIR / "deltap_final" / f"scaled_{{scenario}}_{CURVE}.tif",
     params:
         input_dir=lambda wildcards: DATADIR / "deltap_sum" / wildcards.scenario / CURVE,
     log:
         DATADIR / "logs" / "delta_p_scaled_{scenario}.log",
-    shell:
-        """
-        mkdir -p $(dirname {output})
-        python3 {SRCDIR}/deltap/delta_p_scaled.py \
-            --input {params.input_dir} \
-            --diffmap {input.diffmap} \
-            --totals {input.totals} \
-            --output {output} \
-            2>&1 | tee {log}
-        """
+    script:
+        str(SRCDIR / "deltap" / "delta_p_scaled.py")

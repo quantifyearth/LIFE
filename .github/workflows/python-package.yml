@@ -12,7 +12,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container: ghcr.io/osgeo/gdal:ubuntu-small-3.11.0
+    container: ghcr.io/osgeo/gdal:ubuntu-small-3.12.2
     strategy:
       fail-fast: false
       matrix:
@@ -23,28 +23,33 @@ jobs:
         run: |
           apt-get update -qqy
           apt-get install -y git python3-pip libpq5 libpq-dev shellcheck
+
       - uses: actions/checkout@v4
         with:
           submodules: 'true'
+
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v3
         with:
           python-version: ${{ matrix.python-version }}
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install gdal[numpy]==3.11.0
+          python -m pip install gdal[numpy]==3.12.2
           python -m pip install -r requirements.txt
+
       - name: Lint with pylint
         run: |
           python3 -m pylint deltap prepare_layers prepare_species usecases utils local
+
       - name: Type checking
         run: |
           python3 -m mypy deltap prepare_layers prepare_species usecases utils local
+
       - name: Tests
         run: |
           python3 -m pytest ./tests
-      - name: Script checks
-        run: |
-          shellcheck ./scripts/run.sh
-          shellcheck ./scripts/generate_food_map.sh
+
+      - name: Snakemake format check
+        run: snakefmt --check workflow/

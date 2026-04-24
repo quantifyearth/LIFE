@@ -35,7 +35,7 @@ rule jung_habitat_map:
     Fetch the Jung L2 habitat map from Zenodo.
     """
     output:
-        habitat=DATADIR / "habitat" / "jung_l2_raw.tif"
+        habitat=DATADIR / "100m" / "jung_l2_raw.tif"
     params:
         zenodo_id=config["zenodo"]["jung_habitat"]["zenodo_id"],
         filename=config["zenodo"]["jung_habitat"]["filename"],

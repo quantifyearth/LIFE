@@ -70,7 +70,7 @@ def get_species_ids_for_taxa_scenario(wildcards):
     else:
         report_path = Path(str(checkpoint_output.historic_report))
     geojson_dir = report_path.parent
-    return [p.stem for p in sorted(geojson_dir.glob("*.geojson"))]
+    return [p.stem[6:] for p in sorted(geojson_dir.glob("*.geojson"))]
 
 
 def get_all_aoh_metadata_for_taxa_scenario(wildcards):
@@ -92,8 +92,9 @@ def get_species_ids_for_delta_p(wildcards):
 
 
 def get_delta_p_sentinels_for_taxa_scenario(wildcards):
-    """Return all delta P sentinel files for a taxa and scenario."""
-    species_ids = get_species_ids_for_delta_p(wildcards)
+    # Whatever logic you had in get_delta_p_sentinels_for_taxa_scenario,
+    # but returning .tif paths instead of sentinel paths
+    species_ids = get_species_ids_for_taxa_scenario(wildcards)
     return [
         DATADIR / "deltap" / wildcards.scenario / CURVE / wildcards.taxa / f".{sid}.done"
         for sid in species_ids

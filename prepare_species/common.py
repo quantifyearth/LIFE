@@ -212,7 +212,7 @@ def tidy_reproject_save(
 
     graw = gdf.loc[0].copy()
     grow = aoh.tidy_data(graw) # type: ignore
-    output_path = output_directory_path / f"{grow.id_no}_{grow.season}.geojson"
+    output_path = output_directory_path / f"range_T{grow.id_no}A{grow.assessment_id}_{grow.season}.geojson"
     res = gpd.GeoDataFrame(grow.to_frame().transpose(), crs=src_crs, geometry="geometry")
     res_projected = res.to_crs(target_crs)
     report.filename = output_path

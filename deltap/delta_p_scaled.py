@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 import yirgacheffe as yg
+from snakemake_argparse_bridge import snakemake_compatible # type: ignore
 
 SCALE = 1e6
 
@@ -56,6 +57,12 @@ def delta_p_scaled_area(
 
     yg.to_geotiff(output_path, bands, labels, nodata=float('nan'))
 
+@snakemake_compatible(mapping={
+    "input_path": "params.input_dir",
+    "diff_area_map_path": "input.diffmap",
+    "totals_path": "input.totals",
+    "output_path": "output.final",
+})
 def main() -> None:
     parser = argparse.ArgumentParser(description="Scale final results for publication.")
     parser.add_argument(

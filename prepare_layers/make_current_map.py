@@ -1,11 +1,11 @@
 import argparse
 import itertools
+import logging
 import math
 import os
 from contextlib import nullcontext
 from pathlib import Path
 from multiprocessing import set_start_method
-from typing import Dict, List, Optional
 
 import pandas as pd
 import yirgacheffe as yg
@@ -15,6 +15,10 @@ from snakemake_argparse_bridge import snakemake_compatible # type: ignore
 from osgeo import gdal # type: ignore
 gdal.SetCacheMax(1 * 1024 * 1024 * 1024)
 
+logger = logging.getLogger(__name__)
+logging.basicConfig()
+logger.setLevel(logging.INFO)
+
 # From Eyres et al: The current layer maps IUCN level 1 and 2 habitats, but habitats in the PNV layer are mapped
 # only at IUCN level 1, so to estimate species’ proportion of original AOH now remaining we could only use natural
 # habitats mapped at level 1 and artificial habitats at level 2.
@@ -22,9 +26,9 @@ IUCN_CODE_ARTIFICAL = [
     "14", "14.1", "14.2", "14.3", "14.4", "14.5", "14.6"
 ]
 
-def load_crosswalk_table(table_file_name: Path) -> Dict[str,List[int]]:
+def load_crosswalk_table(table_file_name: Path) -> dict[str,list[int]]:
     rawdata = pd.read_csv(table_file_name)
-    result: Dict[str,List[int]] = {}
+    result: dict[str,list[int]] = {}
     for _, row in rawdata.iterrows():
         try:
             result[row.code].append(int(row.value))
@@ -34,15 +38,18 @@ def load_crosswalk_table(table_file_name: Path) -> Dict[str,List[int]]:
 
 def make_current_maps(
     jung_path: Path,
-    update_masks_path: Optional[Path],
+    update_masks_path: Path | None,
     crosswalk_path: Path,
     output_dir_path: Path,
-    parallelism: Optional[int],
+    parallelism: int | None,
     show_progress: bool,
     sentinel_path: Path | None,
 ) -> None:
     os.makedirs(output_dir_path, exist_ok=True)
-    print(f"Using {parallelism} workers")
+    if parallelism:
+        logger.info("Using %d workers", parallelism)
+    else:
+        logger.info("No parallelism specified")
 
     if update_masks_path is not None:
         update_masks = [
@@ -58,7 +65,7 @@ def make_current_maps(
 
         updated_jung = jung
         for update in update_masks:
-            updated_jung = yg.where(update != 0, update, updated_jung)
+            updated_jung = yg.where(update.isnan(), updated_jung, update)
 
         current_map = yg.where(
             updated_jung.isin(map_preserve_code),
@@ -66,14 +73,15 @@ def make_current_maps(
             (yg.floor(updated_jung / 100) * 100),
         )
 
-        print("Calculating unique land cover types...")
+        logger.info("Calculating unique land cover types...")
         vals = current_map.unique()
+        logger.info("Found %s land cover classes", set(vals))
 
         for lcc in vals:
             # Seems there are some NaN values in Jung
             if math.isnan(lcc):
                 continue
-            print(f"Processing {lcc}...")
+            logger.info("Processing %s...", lcc)
             per_class = current_map == lcc
             cast_per_class = per_class.astype(yg.DataType.Float32)
             ctx = alive_bar(manual=True, title=str(lcc)) if show_progress else nullcontext()
@@ -95,7 +103,7 @@ def make_current_maps(
     "jung_path": "input.habitat",
     "update_masks_path": "params.updates_dir",
     "crosswalk_path": "input.crosswalk",
-    "concurrency": "threads",
+    "parallelism": "threads",
     "output_dir_path": "params.output_dir",
     "sentinel_path": "output.sentinel",
 })
@@ -134,7 +142,7 @@ def main() -> None:
     parser.add_argument(
         '-j',
         type=int,
-        help='Number of concurrent threads to use for calculation.',
+        help='Number of parallel threads to use for calculation.',
         required=False,
         default=None,
         dest='parallelism',

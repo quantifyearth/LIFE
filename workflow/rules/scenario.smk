@@ -40,7 +40,7 @@ rule make_arable_map:
         python3 {SRCDIR}/prepare_layers/make_arable_map.py \
             --current {params.current_dir} \
             --output {params.output_dir} \
-            -j {threads} \
+            -j 2 \
             2>&1 | tee {log}
         touch {output.sentinel}
         """
@@ -139,7 +139,7 @@ rule make_restore_map:
             --current {params.current_dir} \
             --crosswalk {input.crosswalk} \
             --output {params.output_dir} \
-            -j {threads} \
+            -j 2 \
             2>&1 | tee {log}
         touch {output.sentinel}
         """

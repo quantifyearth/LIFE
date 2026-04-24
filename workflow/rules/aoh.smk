@@ -55,7 +55,7 @@ def aoh_species_inputs(wildcards):
             / "species-info"
             / wildcards.taxa
             / era
-            / f"{wildcards.species_id}.geojson",
+            / f"range_{wildcards.species_id}.geojson",
         "habitat_sentinel": ancient(
             DATADIR / "habitat_layers" / wildcards.scenario / ".sentinel"
         ),
@@ -84,7 +84,7 @@ rule generate_aoh:
         habitat_dir=lambda wildcards: DATADIR / "habitat_layers" / wildcards.scenario,
         output_dir=lambda wildcards: DATADIR / "aohs" / wildcards.scenario / wildcards.taxa,
     log:
-        DATADIR / "logs" / "aoh" / "{scenario}" / "{taxa}" / "{species_id}.log",
+        DATADIR / "logs" / "aoh" / "{scenario}" / "{taxa}" / "aoh_{species_id}.log",
     resources:
         aoh_slots=1,
     shell:

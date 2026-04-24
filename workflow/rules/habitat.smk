@@ -47,7 +47,7 @@ rule gaez_expand:
     Decompress the GAEZ download.
     """
     output:
-        gaez_raster=DATADIR / "food" / "GLCSv11_02_5m.tif"
+        raster=DATADIR / "food" / "GLCSv11_02_5m.tif"
     params:
         filepath="LR/lco/GLCSv11_02_5m.tif"
     input:
@@ -160,20 +160,16 @@ rule combine_gaez_hyde:
     Combine the GAEZ and Hyde data, adjusting for overflow in cells.
     """
     input:
-        hyde_projection_file=DATADIR / "food" / "modied_grazing2017AD.prj",
-        hyde_raster=DATADIR / "food" / "modified_ifgrazing2017AD.asc",
+        hyde_projection_file=DATADIR / "food" / "modified_grazing2017AD.prj",
+        hyde_raster=DATADIR / "food" / "modified_grazing2017AD.asc",
         gaez_raster=DATADIR / "food" / "GLCSv11_02_5m.tif",
     output:
         crop=DATADIR / "food" / "crop.tif",
         pasture=DATADIR / "food" / "pasture.tif"
     params:
-        updates_dir=DATADIR / "habitat" / "lvl2_changemasks_ver004",
-        output_dir=DATADIR / "100m" / "jung_current",
-    output:
-        sentinel=DATADIR / "100m" / "jung_current" / ".sentinel",
-    threads: workflow.cores
+        output_dir=DATADIR / "food"
     script:
-        str(SRCDIR / "prepare_layers" / "make_current_map.py")
+        str(SRCDIR / "prepare_layers" / "build_gaez_hyde.py")
 
 
 # =============================================================================
@@ -189,7 +185,7 @@ rule pnv_100m:
     input:
         pnv=DATADIR / "habitat" / "pnv_raw.tif",
     output:
-        pnv_100m=DATADIR / "habitat" / "pnv_100m.tif",
+        pnv_100m=DATADIR / "100m" / "pnv.tif",
     log:
         DATADIR / "logs" / "pnv_100m.log",
     shell:
@@ -211,6 +207,24 @@ rule pnv_100m:
 # Food-enhanced current map at 100m (PRECIOUS)
 # =============================================================================
 
+rule current_raws:
+    """
+    Build the LIFE current map, which is Jung with updates applied
+    and restricted to L1 to match the PNV map restrictions.
+    """
+    input:
+        updates_sentinel=DATADIR / "habitat" / ".downloaded_updates",
+        habitat=DATADIR / "100m" / "jung_l2_raw.tif",
+        crosswalk=DATADIR / "crosswalk.csv",
+    params:
+        updates_dir=DATADIR / "habitat" / "lvl2_changemasks_ver004",
+        output_dir=DATADIR / "100m" / "jung_current",
+    output:
+        sentinel=DATADIR / "100m" / "jung_current" / ".sentinel",
+    threads: workflow.cores
+    script:
+        str(SRCDIR / "prepare_layers" / "make_current_map.py")
+
 rule build_food_map:
     """
     Build the food-enhanced current habitat map at 100m resolution by combining
@@ -221,7 +235,7 @@ rule build_food_map:
     """
     input:
         jung=ancient(DATADIR / "100m" / "jung_current" / ".sentinel"),
-        pnv=ancient(DATADIR / "habitat" / "pnv_100m.tif"),
+        pnv=ancient(DATADIR / "100m" / "pnv.tif"),
         crop=ancient(DATADIR / "food" / "crop.tif"),
         pasture=ancient(DATADIR / "food" / "pasture.tif"),
     output:
@@ -229,24 +243,11 @@ rule build_food_map:
     params:
         jung_dir=DATADIR / "100m" / "jung_current",
         output_dir=DATADIR / "100m" / "current",
-        pnv=DATADIR / "habitat" / "pnv_100m.tif",
-        crop=DATADIR / "food" / "crop.tif",
-        pasture=DATADIR / "food" / "pasture.tif",
     threads: workflow.cores
     log:
         DATADIR / "logs" / "build_food_map.log",
-    shell:
-        """
-        python3 {SRCDIR}/prepare_layers/make_food_current_map.py \
-            --current_lvl1 {params.jung_dir} \
-            --pnv {params.pnv} \
-            --crop {params.crop} \
-            --pasture {params.pasture} \
-            --output {params.output_dir} \
-            -j {threads} \
-            2>&1 | tee {log}
-        touch {output.sentinel}
-        """
+    script:
+        str(SRCDIR / "prepare_layers" / "make_food_current_map.py")
 
 
 # =============================================================================
@@ -310,6 +311,7 @@ rule pnv_processed:
     params:
         output_dir=DATADIR / "habitat_layers" / "pnv",
         pixel_scale=config["pixel_scale"],
+        projection=config["projection"],
     log:
         DATADIR / "logs" / "pnv_processed.log",
     shell:
@@ -318,6 +320,7 @@ rule pnv_processed:
         aoh-habitat-process \
             --habitat {input.pnv} \
             --scale {params.pixel_scale} \
+            --projection {params.projection} \
             --output {params.output_dir} \
             2>&1 | tee {log}
         touch {output.sentinel}

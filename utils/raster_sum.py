@@ -21,7 +21,7 @@ def raster_sum(
         total.to_geotiff(output_filename, callback=bar, parallelism=True)
 
 @snakemake_compatible(mapping={
-    "rasters_directory": "input.rasters",
+    "rasters_directory": "params.rasters_dir",
     "output_filename": "output[0]",
 })
 def main() -> None:

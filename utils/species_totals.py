@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Dict
 
 import pandas as pd
+from snakemake_argparse_bridge import snakemake_compatible # type: ignore
 
 TAXA = ["AMPHIBIA", "AVES", "MAMMALIA", "REPTILIA"]
 
@@ -20,6 +21,10 @@ def species_totals(
     df.loc[-1] = ["all", df["count"].sum()]
     df.to_csv(output_path, index=False)
 
+@snakemake_compatible(mapping={
+    "deltaps_path": "params.deltaps_dir",
+    "output_filename": "output.totals",
+})
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(

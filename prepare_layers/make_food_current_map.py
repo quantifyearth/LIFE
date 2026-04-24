@@ -337,6 +337,7 @@ def make_food_current_map(
     pasture_adjustment_path: Path,
     output_path: Path,
     processes_count: int,
+    sentinel_path: Path | None,
 ) -> None:
     # We'll use a lot of processes which will talk back to the main process, so
     # we need to adjust the ulimit, which is quite low by default
@@ -395,13 +396,18 @@ def make_food_current_map(
             processes.remove(candidate)
         time.sleep(0.1)
 
+    if sentinel_path:
+        sentinel_path.touch()
+
 @snakemake_compatible(mapping={
-    "current_lvl1_path": "input.jung",
+    "current_lvl1_path": "params.jung_dir",
     "pnv_path": "input.pnv",
     "crop_adjustment_path": "input.crop",
     "pasture_adjustment_path": "input.pasture",
     "processes_count": "threads",
-    "output_path": "output.rasters",
+    "output_path": "params.output_dir",
+    "sentinel_path": "output.sentinel",
+    "parallelism": "threads",
 })
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build the food current map")
@@ -441,11 +447,17 @@ def main() -> None:
         dest='output_path',
     )
     parser.add_argument(
+        '--sentinel',
+        type=Path,
+        required=False,
+        dest='sentinel_path',
+    )
+    parser.add_argument(
         "-j",
         type=int,
         required=False,
         default=cpu_count() // 2,
-        dest="processes_count",
+        dest="parallelism",
         help="Number of concurrent threads to use."
     )
     args = parser.parse_args()
@@ -456,7 +468,8 @@ def main() -> None:
         args.crop_adjustment_path,
         args.pasture_adjustment_path,
         args.output_path,
-        args.processes_count,
+        args.parallelism,
+        args.sentinel_path,
     )
 
 if __name__ == "__main__":

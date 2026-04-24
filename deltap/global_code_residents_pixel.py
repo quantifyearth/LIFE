@@ -5,7 +5,10 @@ import os
 import sys
 from pathlib import Path
 
-import yirgacheffe as yg
+from snakemake_argparse_bridge import snakemake_compatible # type: ignore
+
+os.environ['YIRGACHEFFE_BACKEND'] = 'NUMPY'
+import yirgacheffe as yg # pylint: disable=C0413
 
 # This isn't a hard requirement, but in practice most experiments use 0.25, and the original
 # paper used the other three values for comparison. Other values are valid, but to save wasted
@@ -69,23 +72,29 @@ def process_delta_p(
     return new_p
 
 def global_code_residents_pixel_ae(
-    taxid: int,
+    taxid: str,
     season: str,
     current_aohs_path: Path,
     scenario_aohs_path: Path,
     historic_aohs_path: Path,
     exponent: str | float,
-    output_folder: Path,
+    output_path: Path,
 ) -> None:
-    os.makedirs(output_folder, exist_ok=True)
+    os.makedirs(output_path.parent, exist_ok=True)
+
+    # snakemake demands we write a file to show we've done something, even if there
+    # is no tiff generated
+    sentinel_path = output_path.parent / f".{taxid}_{season}.done"
 
     match season:
         case "RESIDENT":
-            filename = f"{taxid}_{season}.tif"
+            filename = f"aoh_{taxid}_{season}.tif"
             try:
                 current, current_aoh = open_layer(current_aohs_path / filename)
             except FileNotFoundError:
-                sys.exit(f"Failed to open current layer {current_aohs_path / filename}")
+                print(f"Failed to open current layer {current_aohs_path / filename}", file=sys.stderr)
+                sentinel_path.touch()
+                return
 
             try:
                 scenario: yg.YirgacheffeLayer | float
@@ -97,10 +106,14 @@ def global_code_residents_pixel_ae(
             try:
                 _, historic_aoh = open_layer(historic_aohs_path / filename)
             except FileNotFoundError:
-                sys.exit(f"Failed to open historic layer {historic_aohs_path / filename}")
+                print(f"Failed to open historic layer {historic_aohs_path / filename}", file=sys.stderr)
+                sentinel_path.touch()
+                return
 
             if historic_aoh == 0.0:
-                sys.exit(f"Historic AoH for {taxid} is zero, aborting")
+                print(f"Historic AoH for {taxid} is zero, skipping", file=sys.stderr)
+                sentinel_path.touch()
+                return
 
             old_persistence = calc_persistence_value(current_aoh, historic_aoh, exponent)
 
@@ -118,27 +131,38 @@ def global_code_residents_pixel_ae(
             delta_p = new_p_layer - old_persistence
 
             try:
-                delta_p.to_geotiff(output_folder / filename)
+                delta_p.to_geotiff(output_path)
             except ValueError:
-                sys.exit(f"Failed to align layers for {taxid}_{season}")
+                print(f"Failed to align layers for {taxid}_{season}", file=sys.stderr)
+                sentinel_path.touch()
+                return
 
+            sentinel_path.touch()
 
         case "NONBREEDING":
-            nonbreeding_filename = f"{taxid}_NONBREEDING.tif"
-            breeding_filename = f"{taxid}_BREEDING.tif"
+            nonbreeding_filename = f"aoh_{taxid}_NONBREEDING.tif"
+            breeding_filename = f"aoh_{taxid}_BREEDING.tif"
 
             try:
                 _, historic_aoh_breeding = open_layer(historic_aohs_path / breeding_filename)
                 if historic_aoh_breeding == 0.0:
-                    sys.exit(f"Historic AoH breeding for {taxid} is zero, aborting")
+                    print(f"Historic AoH breeding for {taxid} is zero, skipping", file=sys.stderr)
+                    sentinel_path.touch()
+                    return
             except FileNotFoundError:
-                sys.exit(f"Historic AoH for breeding {taxid} not found, aborting")
+                print(f"Historic AoH for breeding {taxid} not found, skipping", file=sys.stderr)
+                sentinel_path.touch()
+                return
             try:
                 _, historic_aoh_non_breeding = open_layer(historic_aohs_path / nonbreeding_filename)
                 if historic_aoh_non_breeding == 0.0:
-                    sys.exit(f"Historic AoH for non breeding {taxid} is zero, aborting")
+                    print(f"Historic AoH for non breeding {taxid} is zero, skipping", file=sys.stderr)
+                    sentinel_path.touch()
+                    return
             except FileNotFoundError:
-                sys.exit(f"Historic AoH for non breeding {taxid} not found, aborting")
+                print(f"Historic AoH for non breeding {taxid} not found, skipping", file=sys.stderr)
+                sentinel_path.touch()
+                return
 
             if scenario_aohs_path.name != "nan":
                 non_breeding_scenario_path = scenario_aohs_path / nonbreeding_filename
@@ -150,11 +174,16 @@ def global_code_residents_pixel_ae(
             try:
                 current_breeding, current_aoh_breeding = open_layer(current_aohs_path / breeding_filename)
             except FileNotFoundError:
-                sys.exit(f"Failed to open current breeding {current_aohs_path / breeding_filename}")
+                print(f"Failed to open current breeding {current_aohs_path / breeding_filename}", file=sys.stderr)
+                sentinel_path.touch()
+                return
             try:
                 current_non_breeding, current_aoh_non_breeding = open_layer(current_aohs_path / nonbreeding_filename)
             except FileNotFoundError:
-                sys.exit(f"Failed to open current non breeding {current_aohs_path / nonbreeding_filename}")
+                print(f"Failed to open current non breeding {current_aohs_path / nonbreeding_filename}",
+                    file=sys.stderr)
+                sentinel_path.touch()
+                return
             try:
                 scenario_breeding: yg.YirgacheffeLayer | float
                 scenario_breeding, _ = open_layer(breeding_scenario_path)
@@ -182,17 +211,14 @@ def global_code_residents_pixel_ae(
 
             old_persistence = (persistence_breeding ** 0.5) * (persistence_non_breeding ** 0.5)
 
-            #
             # In general Yirgacheffe can infer the behaviour needed for area intersections based on
-            # operator, but in this instance we want to force the caclulation to take place for the
+            # operator, but in this instance we want to force the calculation to take place for the
             # union of the areas involved.
             src_layers = [current_breeding, scenario_breeding, current_non_breeding, scenario_non_breeding]
             layers = [x for x in src_layers if isinstance(x, yg.YirgacheffeLayer)]
             union = yg.layers.RasterLayer.find_union(layers)
             for layer in layers:
                 layer.set_window_for_union(union)
-
-
 
             new_p_breeding = process_delta_p(
                 current_breeding,
@@ -213,14 +239,18 @@ def global_code_residents_pixel_ae(
             delta_p_layer = new_p_layer - old_persistence
 
             try:
-                delta_p_layer.to_geotiff(output_folder / nonbreeding_filename)
+                delta_p_layer.to_geotiff(output_path)
             except ValueError:
-                delta_p_layer.pretty_print()
-                sys.exit(f"Failed to align layers for {taxid}_{season}")
+                print(f"Failed to align layers for {taxid}_{season}", file=sys.stderr)
+                sentinel_path.touch()
+                return
 
+            sentinel_path.touch()
         case "BREEDING":
-            pass # covered by the nonbreeding case
+            # covered by the nonbreeding case
+            sentinel_path.touch()
         case _:
+            sentinel_path.touch()
             sys.exit(f"Unexpected season for species {taxid}: {season}")
 
 def exponent_type(value: str):
@@ -234,11 +264,20 @@ def exponent_type(value: str):
         raise argparse.ArgumentTypeError(f"numeric exponent must be one of {sorted(FLOAT_EXPONENTS)}, got {f}")
     return f
 
+@snakemake_compatible(mapping={
+    "taxid": "params.taxon_id",
+    "season": "params.season",
+    "current_path": "params.current_path",
+    "historic_path": "params.pnv_path",
+    "scenario_path": "params.scenario_path",
+    "output_path": "params.output_tif",
+    "exponent": "params.curve",
+})
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '--taxid',
-        type=int,
+        type=str,
         required=True,
         dest='taxid',
         help="Species taxon id",
@@ -275,7 +314,7 @@ def main() -> None:
         type=Path,
         required=True,
         dest="output_path",
-        help="path to save output csv"
+        help="path to save output tif"
     )
     parser.add_argument(
         '--z',
