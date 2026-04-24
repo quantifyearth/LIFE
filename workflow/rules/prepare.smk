@@ -11,15 +11,15 @@
 import os
 from pathlib import Path
 
-
 # =============================================================================
 # Crosswalk Table
 # =============================================================================
 
+
 rule convert_crosswalk:
     """
-    Generate a crosswalk between IUCN Habitat classes and Jung raster pixel values.
-    """
+Generate a crosswalk between IUCN Habitat classes and Jung raster pixel values.
+"""
     output:
         crosswalk=DATADIR / "crosswalk.csv",
     script:
@@ -30,17 +30,18 @@ rule convert_crosswalk:
 # Jung L2 habitat map
 # =============================================================================
 
+
 rule jung_habitat_map:
     """
-    Fetch the Jung L2 habitat map from Zenodo.
-    """
+Fetch the Jung L2 habitat map from Zenodo.
+"""
     output:
-        habitat=DATADIR / "100m" / "jung_l2_raw.tif"
+        habitat=DATADIR / "100m" / "jung_l2_raw.tif",
+    log:
+        DATADIR / "logs" / "download_habitat.log",
     params:
         zenodo_id=config["zenodo"]["jung_habitat"]["zenodo_id"],
         filename=config["zenodo"]["jung_habitat"]["filename"],
-    log:
-        DATADIR / "logs" / "download_habitat.log",
     shell:
         """
         mkdir -p $(dirname {output.habitat})
@@ -54,16 +55,16 @@ rule jung_habitat_map:
 
 rule jung_habitat_updates:
     """
-    Fetch the Jung habitat map update masks from Zenodo.
-    """
+Fetch the Jung habitat map update masks from Zenodo.
+"""
     output:
-        sentinel=DATADIR / "habitat" / ".downloaded_updates"
+        sentinel=DATADIR / "habitat" / ".downloaded_updates",
+    log:
+        DATADIR / "logs" / "download_habitat_updates.log",
     params:
         habitat_dir=DATADIR / "habitat",
         zenodo_id=config["zenodo"]["jung_habitat_updates"]["zenodo_id"],
         filename=config["zenodo"]["jung_habitat_updates"]["filename"],
-    log:
-        DATADIR / "logs" / "download_habitat_updates.log",
     shell:
         """
         mkdir -p {params.habitat_dir}
@@ -80,17 +81,18 @@ rule jung_habitat_updates:
 # Jung PNV map
 # =============================================================================
 
+
 rule jung_pnv_map:
     """
-    Fetch the Jung PNV map from Zenodo.
-    """
+Fetch the Jung PNV map from Zenodo.
+"""
     output:
-        habitat=DATADIR / "habitat" / "pnv_raw.tif"
+        habitat=DATADIR / "habitat" / "pnv_raw.tif",
+    log:
+        DATADIR / "logs" / "download_pnv.log",
     params:
         zenodo_id=config["zenodo"]["jung_pnv"]["zenodo_id"],
         filename=config["zenodo"]["jung_pnv"]["filename"],
-    log:
-        DATADIR / "logs" / "download_pnv.log",
     shell:
         """
         mkdir -p $(dirname {output.habitat})
@@ -106,17 +108,18 @@ rule jung_pnv_map:
 # Elevation layers (precious — only rebuild if explicitly deleted)
 # =============================================================================
 
+
 rule download_elevation:
     """
-    Download raw elevation DEM from Zenodo.
-    """
+Download raw elevation DEM from Zenodo.
+"""
     output:
         elevation=DATADIR / "elevation.tif",
+    log:
+        DATADIR / "logs" / "download_elevation.log",
     params:
         zenodo_id=config["zenodo"]["elevation"]["zenodo_id"],
         filename=config["zenodo"]["elevation"]["filename"],
-    log:
-        DATADIR / "logs" / "download_elevation.log",
     shell:
         """
         reclaimer zenodo --zenodo_id {params.zenodo_id} \
@@ -128,18 +131,18 @@ rule download_elevation:
 
 rule elevation_max:
     """
-    Warp elevation to target projection and scale using max resampling.
-    Precious: only runs if output doesn't exist.
-    """
+Warp elevation to target projection and scale using max resampling.
+Precious: only runs if output doesn't exist.
+"""
     input:
         elevation=ancient(DATADIR / "elevation.tif"),
     output:
         elevation_max=DATADIR / "elevation-max.tif",
-    params:
-        pixel_scale=config["pixel_scale"],
-    threads: workflow.cores
     log:
         DATADIR / "logs" / "elevation_max.log",
+    threads: workflow.cores
+    params:
+        pixel_scale=config["pixel_scale"],
     shell:
         """
         gdalwarp \
@@ -156,18 +159,18 @@ rule elevation_max:
 
 rule elevation_min:
     """
-    Warp elevation to target projection and scale using min resampling.
-    Precious: only runs if output doesn't exist.
-    """
+Warp elevation to target projection and scale using min resampling.
+Precious: only runs if output doesn't exist.
+"""
     input:
         elevation=ancient(DATADIR / "elevation.tif"),
     output:
         elevation_min=DATADIR / "elevation-min.tif",
-    params:
-        pixel_scale=config["pixel_scale"],
-    threads: workflow.cores
     log:
         DATADIR / "logs" / "elevation_min.log",
+    threads: workflow.cores
+    params:
+        pixel_scale=config["pixel_scale"],
     shell:
         """
         gdalwarp \

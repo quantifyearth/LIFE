@@ -27,8 +27,10 @@ os.environ["OGR_GEOJSON_MAX_OBJ_SIZE"] = "0"
 # Source directory (where this repo lives)
 SRCDIR = Path(workflow.basedir).parent
 
+
 # Load configuration
 configfile: SRCDIR / "config/config.yaml"
+
 
 # Data directory from environment variable
 DATADIR = Path(os.environ.get("DATADIR", "/data"))
@@ -96,7 +98,12 @@ def get_delta_p_sentinels_for_taxa_scenario(wildcards):
     # but returning .tif paths instead of sentinel paths
     species_ids = get_species_ids_for_taxa_scenario(wildcards)
     return [
-        DATADIR / "deltap" / wildcards.scenario / CURVE / wildcards.taxa / f".{sid}.done"
+        DATADIR
+        / "deltap"
+        / wildcards.scenario
+        / CURVE
+        / wildcards.taxa
+        / f".{sid}.done"
         for sid in species_ids
     ]
 
@@ -139,9 +146,9 @@ rule life:
 
 rule summaries:
     """
-    Target: generate species richness and endemism maps.
-    NOT included in 'all' — run explicitly with: snakemake summaries
-    """
+Target: generate species richness and endemism maps.
+NOT included in 'all' — run explicitly with: snakemake summaries
+"""
     input:
         DATADIR / "summaries" / "species_richness.tif",
         DATADIR / "summaries" / "endemism.tif",

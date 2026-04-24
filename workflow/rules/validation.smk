@@ -13,9 +13,9 @@
 
 rule model_validation:
     """
-    Perform statistical validation of AOH models (Dahal et al. methodology).
-    Runs on the "current" scenario AOHs only.
-    """
+Perform statistical validation of AOH models (Dahal et al. methodology).
+Runs on the "current" scenario AOHs only.
+"""
     input:
         collated=DATADIR / "aohs" / "current.csv",
         version_sentinel=DATADIR / ".sentinels" / "aoh_version.txt",
@@ -40,19 +40,19 @@ rule model_validation:
 
 rule species_richness:
     """
-    Calculate species richness from current AOH rasters.
-    NOT included in 'all' — use the 'summaries' target explicitly.
-    """
+Calculate species richness from current AOH rasters.
+NOT included in 'all' — use the 'summaries' target explicitly.
+"""
     input:
         aoh_sentinel=DATADIR / "aohs" / "current.csv",
         version_sentinel=DATADIR / ".sentinels" / "aoh_version.txt",
     output:
         richness=DATADIR / "summaries" / "species_richness.tif",
-    params:
-        aohs_folder=DATADIR / "aohs" / "current",
-    threads: workflow.cores
     log:
         DATADIR / "logs" / "species_richness.log",
+    threads: workflow.cores
+    params:
+        aohs_folder=DATADIR / "aohs" / "current",
     shell:
         """
         mkdir -p $(dirname {output.richness})
@@ -65,20 +65,20 @@ rule species_richness:
 
 rule endemism:
     """
-    Calculate endemism from current AOH rasters.
-    NOT included in 'all' — use the 'summaries' target explicitly.
-    """
+Calculate endemism from current AOH rasters.
+NOT included in 'all' — use the 'summaries' target explicitly.
+"""
     input:
         aoh_sentinel=DATADIR / "aohs" / "current.csv",
         species_richness=DATADIR / "summaries" / "species_richness.tif",
         version_sentinel=DATADIR / ".sentinels" / "aoh_version.txt",
     output:
         endemism=DATADIR / "summaries" / "endemism.tif",
-    params:
-        aohs_folder=DATADIR / "aohs" / "current",
-    threads: workflow.cores
     log:
         DATADIR / "logs" / "endemism.log",
+    threads: workflow.cores
+    params:
+        aohs_folder=DATADIR / "aohs" / "current",
     shell:
         """
         aoh-endemism \
@@ -96,20 +96,20 @@ rule endemism:
 
 rule fetch_gbif_data:
     """
-    Fetch GBIF occurrence data for a taxa.
-    Expensive (hours) — only runs if output doesn't exist.
+Fetch GBIF occurrence data for a taxa.
+Expensive (hours) — only runs if output doesn't exist.
 
-    Environment variables required:
-        GBIF_USERNAME, GBIF_EMAIL, GBIF_PASSWORD
-    """
+Environment variables required:
+    GBIF_USERNAME, GBIF_EMAIL, GBIF_PASSWORD
+"""
     input:
         collated=ancient(DATADIR / "aohs" / "current.csv"),
     output:
         sentinel=DATADIR / "validation" / "occurrences" / ".{taxa}_fetched",
-    params:
-        output_dir=DATADIR / "validation" / "occurrences",
     log:
         DATADIR / "logs" / "fetch_gbif_{taxa}.log",
+    params:
+        output_dir=DATADIR / "validation" / "occurrences",
     shell:
         """
         mkdir -p {params.output_dir}
@@ -124,19 +124,25 @@ rule fetch_gbif_data:
 
 rule validate_gbif_occurrences:
     """
-    Validate current AOH models against GBIF occurrence data.
-    """
+Validate current AOH models against GBIF occurrence data.
+"""
     input:
         gbif_sentinel=DATADIR / "validation" / "occurrences" / ".{taxa}_fetched",
         aoh_sentinel=ancient(DATADIR / "aohs" / "current" / "{taxa}" / ".complete"),
     output:
         validation=DATADIR / "validation" / "occurrences" / "{taxa}.csv",
-    params:
-        gbif_data=lambda wildcards: DATADIR / "validation" / "occurrences" / wildcards.taxa,
-        species_data=lambda wildcards: DATADIR / "species-info" / wildcards.taxa / "current",
-        aoh_results=lambda wildcards: DATADIR / "aohs" / "current" / wildcards.taxa,
     log:
         DATADIR / "logs" / "validate_gbif_{taxa}.log",
+    params:
+        gbif_data=lambda wildcards: DATADIR
+        / "validation"
+        / "occurrences"
+        / wildcards.taxa,
+        species_data=lambda wildcards: DATADIR
+        / "species-info"
+        / wildcards.taxa
+        / "current",
+        aoh_results=lambda wildcards: DATADIR / "aohs" / "current" / wildcards.taxa,
     shell:
         """
         aoh-validate-occurrences \
@@ -150,8 +156,8 @@ rule validate_gbif_occurrences:
 
 rule occurrence_validation:
     """
-    Target rule for GBIF validation for all taxa.
-    WARNING: Expensive. Only run explicitly: snakemake occurrence_validation
-    """
+Target rule for GBIF validation for all taxa.
+WARNING: Expensive. Only run explicitly: snakemake occurrence_validation
+"""
     input:
         expand(str(DATADIR / "validation" / "occurrences" / "{taxa}.csv"), taxa=TAXA),

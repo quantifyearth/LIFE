@@ -12,7 +12,6 @@
 import os
 from pathlib import Path
 
-
 # =============================================================================
 # Version Sentinel for AOH Code
 # =============================================================================
@@ -20,13 +19,14 @@ from pathlib import Path
 
 rule aoh_version_sentinel:
     """
-    Track the aoh package version. AOH rules depend on this to trigger
-    rebuilds when the package updates.
-    """
+Track the aoh package version. AOH rules depend on this to trigger
+rebuilds when the package updates.
+"""
     output:
         sentinel=DATADIR / ".sentinels" / "aoh_version.txt",
     run:
         import subprocess
+
         os.makedirs(os.path.dirname(output.sentinel), exist_ok=True)
         try:
             result = subprocess.run(
@@ -52,10 +52,10 @@ def aoh_species_inputs(wildcards):
     era = "historic" if wildcards.scenario == "pnv" else "current"
     return {
         "species_data": DATADIR
-            / "species-info"
-            / wildcards.taxa
-            / era
-            / f"range_{wildcards.species_id}.geojson",
+        / "species-info"
+        / wildcards.taxa
+        / era
+        / f"range_{wildcards.species_id}.geojson",
         "habitat_sentinel": ancient(
             DATADIR / "habitat_layers" / wildcards.scenario / ".sentinel"
         ),
@@ -68,25 +68,28 @@ def aoh_species_inputs(wildcards):
 
 rule generate_aoh:
     """
-    Generate Area of Habitat raster for a single species in a given scenario.
+Generate Area of Habitat raster for a single species in a given scenario.
 
-    Parallelizable: run with `snakemake --cores N` to process multiple species
-    concurrently. Uses --force-habitat and --pixel-area flags (no mask).
+Parallelizable: run with `snakemake --cores N` to process multiple species
+concurrently. Uses --force-habitat and --pixel-area flags (no mask).
 
-    For current/scenario AOHs: uses current/ era species data.
-    For pnv AOHs: uses historic/ era species data.
-    """
+For current/scenario AOHs: uses current/ era species data.
+For pnv AOHs: uses historic/ era species data.
+"""
     input:
         unpack(aoh_species_inputs),
     output:
         metadata=DATADIR / "aohs" / "{scenario}" / "{taxa}" / "aoh_{species_id}.json",
-    params:
-        habitat_dir=lambda wildcards: DATADIR / "habitat_layers" / wildcards.scenario,
-        output_dir=lambda wildcards: DATADIR / "aohs" / wildcards.scenario / wildcards.taxa,
     log:
         DATADIR / "logs" / "aoh" / "{scenario}" / "{taxa}" / "aoh_{species_id}.log",
     resources:
         aoh_slots=1,
+    params:
+        habitat_dir=lambda wildcards: DATADIR / "habitat_layers" / wildcards.scenario,
+        output_dir=lambda wildcards: DATADIR
+        / "aohs"
+        / wildcards.scenario
+        / wildcards.taxa,
     shell:
         """
         mkdir -p $(dirname {log})
@@ -111,12 +114,12 @@ rule generate_aoh:
 
 checkpoint aggregate_aohs_per_taxa:
     """
-    Checkpoint that ensures all AOHs for a taxa/scenario are generated.
-    Creates a sentinel file when complete.
+Checkpoint that ensures all AOHs for a taxa/scenario are generated.
+Creates a sentinel file when complete.
 
-    This is a checkpoint so downstream rules (delta P) can re-evaluate the DAG
-    after AOHs are created.
-    """
+This is a checkpoint so downstream rules (delta P) can re-evaluate the DAG
+after AOHs are created.
+"""
     input:
         metadata=get_all_aoh_metadata_for_taxa_scenario,
         version_sentinel=DATADIR / ".sentinels" / "aoh_version.txt",
@@ -136,10 +139,10 @@ checkpoint aggregate_aohs_per_taxa:
 
 rule collate_aoh_data:
     """
-    Collate metadata from all AOH JSON files for a scenario into a single CSV.
+Collate metadata from all AOH JSON files for a scenario into a single CSV.
 
-    Used by validation (current scenario) and for downstream analysis.
-    """
+Used by validation (current scenario) and for downstream analysis.
+"""
     input:
         sentinels=lambda wildcards: expand(
             str(DATADIR / "aohs" / "{scenario}" / "{taxa}" / ".complete"),
@@ -149,10 +152,10 @@ rule collate_aoh_data:
         version_sentinel=DATADIR / ".sentinels" / "aoh_version.txt",
     output:
         collated=DATADIR / "aohs" / "{scenario}.csv",
-    params:
-        aoh_results_dir=lambda wildcards: DATADIR / "aohs" / wildcards.scenario,
     log:
         DATADIR / "logs" / "collate_aoh_{scenario}.log",
+    params:
+        aoh_results_dir=lambda wildcards: DATADIR / "aohs" / wildcards.scenario,
     shell:
         """
         mkdir -p $(dirname {output.collated})

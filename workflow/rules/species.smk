@@ -16,28 +16,29 @@
 
 checkpoint extract_species_data:
     """
-    Extract species data from PostgreSQL database.
+Extract species data from PostgreSQL database.
 
-    This is a checkpoint because the number of output GeoJSON files is only
-    known after extraction. Each taxa produces N species files in both current/
-    and historic/ subdirectories.
+This is a checkpoint because the number of output GeoJSON files is only
+known after extraction. Each taxa produces N species files in both current/
+and historic/ subdirectories.
 
-    Environment variables required:
-        DB_HOST, DB_NAME, DB_USER, DB_PASSWORD
-    """
+Environment variables required:
+    DB_HOST, DB_NAME, DB_USER, DB_PASSWORD
+"""
     output:
         current_report=DATADIR / "species-info" / "{taxa}" / "current" / "report.csv",
         historic_report=DATADIR / "species-info" / "{taxa}" / "historic" / "report.csv",
+    log:
+        DATADIR / "logs" / "extract_species_{taxa}.log",
+    threads: workflow.cores
+    resources:
+        db_connections=1,
     params:
         classname="{taxa}",
         output_dir=lambda wildcards: DATADIR / "species-info" / wildcards.taxa,
         projection=config["projection"],
-        overrides=lambda wildcards: DATADIR / config["optional_inputs"]["species_overrides"],
-    resources:
-        db_connections=1,
-    threads: workflow.cores
-    log:
-        DATADIR / "logs" / "extract_species_{taxa}.log",
+        overrides=lambda wildcards: DATADIR
+        / config["optional_inputs"]["species_overrides"],
     shell:
         """
         OVERRIDES_ARG=""
