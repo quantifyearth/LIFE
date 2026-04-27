@@ -1,9 +1,12 @@
+import math
 
 import numpy as np
 import pytest
+from pytest import param as P
+import yirgacheffe as yg
 
 from prepare_layers.make_food_current_map import balance_crop_and_pasture_differences, \
-    CROP_CODE, PASTURE_CODE, remove_land_cover, add_land_cover
+    CROP_CODE, PASTURE_CODE, remove_land_cover, add_land_cover, TileInfo, process_tile
 
 @pytest.mark.parametrize(
     [
@@ -210,6 +213,7 @@ def test_remove_land_less_simple(
         (np.array([[i % 2] * 10 for i in range(10)]).astype(float) * expected_other_2_cell)
     assert (expected_other_2_map == lcc_data_map[2]).all()
 
+
 @pytest.mark.parametrize("crop_diff,expected_crop_cell,expected_other_cell", [
     (0.5, 0.5, 0.5),
     (1.0, 1.0, 0.0),
@@ -226,6 +230,7 @@ def test_add_land_simple(
     }
 
     add_land_cover(
+        np.ones((10, 10), dtype=bool),
         CROP_CODE,
         crop_diff,
         lcc_data_map,
@@ -235,6 +240,7 @@ def test_add_land_simple(
     expected_other_map = np.full((10, 10), expected_other_cell)
     assert (expected_crop_map == lcc_data_map[CROP_CODE]).all()
     assert (expected_other_map == lcc_data_map[1]).all()
+
 
 @pytest.mark.parametrize("crop_diff,expected_crop_cell,expected_other_cell", [
     (0.25, 0.5, 0.5),
@@ -253,6 +259,7 @@ def test_add_land_avoid_excluded(
     }
 
     add_land_cover(
+        np.array([[(i + 1) % 2] * 10 for i in range(10)]).astype(bool),
         CROP_CODE,
         crop_diff,
         lcc_data_map,
@@ -264,3 +271,58 @@ def test_add_land_avoid_excluded(
     assert (expected_crop_map == lcc_data_map[CROP_CODE]).all()
     assert (expected_pasture_map == lcc_data_map[PASTURE_CODE]).all()
     assert (expected_other_map == lcc_data_map[1]).all()
+
+
+@pytest.mark.parametrize(["crop_diff", "pasture_diff", "expected_totals"], [
+    P(0.25, 0.25, {1: 25, CROP_CODE: 25, PASTURE_CODE: 25, 4: 25}, id="no change"),
+    P(0.0, 0.0, {1: 75, CROP_CODE: 0, PASTURE_CODE: 0, 4: 25}, id="remove both"),
+    P(0.25, 0.0, {1: 50, CROP_CODE: 25, PASTURE_CODE: 0, 4: 25}, id="remove pasture, leave crop"),
+    P(0.0, 0.25, {1: 50, CROP_CODE: 0, PASTURE_CODE: 25, 4: 25}, id="remove crop, leave pasture"),
+    P(0.5, 0.25, {1: 12.5, CROP_CODE: 50, PASTURE_CODE: 25, 4: 12.5}, id="add crop, leave pasture"),
+    P(0.25, 0.5, {1: 12.5, CROP_CODE: 25, PASTURE_CODE: 50, 4: 12.5}, id="leave crop, add pasture"),
+    P(0.5, 0.2, {1: 15, CROP_CODE: 50, PASTURE_CODE: 20, 4: 15}, id="add crop, remove pasture, more add than remove"),
+    P(0.2, 0.5, {1: 15, CROP_CODE: 20, PASTURE_CODE: 50, 4: 15}, id="remove crop, add pasture, more add than remove"),
+    P(0.3, 0.1, {1: 35, CROP_CODE: 30, PASTURE_CODE: 10, 4: 25}, id="add crop, remove pasture, more remove than add"),
+    P(0.1, 0.3, {1: 35, CROP_CODE: 10, PASTURE_CODE: 30, 4: 25}, id="remove crop, add pasture, more remove than add"),
+    P(0.3, 0.3, {1: 20, CROP_CODE: 30, PASTURE_CODE: 30, 4: 20}, id="all both, but not total"),
+    P(0.5, 0.5, {1: 0, CROP_CODE: 50, PASTURE_CODE: 50, 4: 0}, id="all both"),
+    P(0.0, 0.5, {1: 25, CROP_CODE: 0, PASTURE_CODE: 50, 4: 25}, id="replace crop with pasture"),
+    P(0.5, 0.0, {1: 25, CROP_CODE: 50, PASTURE_CODE: 0, 4: 25}, id="replace pasture with crop"),
+    P(0.0, 1.0, {1: 0, CROP_CODE: 0, PASTURE_CODE: 100, 4: 0}, id="All pasture, all the time"),
+    P(1.0, 0.0, {1: 0, CROP_CODE: 100, PASTURE_CODE: 0, 4: 0}, id="All crop, all the time"),
+])
+def test_process_tile(crop_diff: float, pasture_diff: float, expected_totals: dict[int, float]) -> None:
+    # One quarter neither, one quarter crop, one quarter pasture, one quarter other neither
+    data = np.ones((5, 5))
+    raw_lcc_data_map = {
+        1:            np.pad(data, ((0, 5), (0, 5))),
+        CROP_CODE:    np.pad(data, ((0, 5), (5, 0))),
+        PASTURE_CODE: np.pad(data, ((5, 0), (0, 5))),
+        4:            np.pad(data, ((5, 0), (5, 0))),
+    }
+    projection = yg.MapProjection("epsg:4326", 1.0, -1.0)
+    lcc_maps = {lcc: yg.from_array(x, (0, 0), projection) for lcc, x in raw_lcc_data_map.items()}
+
+    # The pnv is just class 1, so that is always the category that will increase, class 4 will only
+    # only go below its initial value or be the same
+    pnv_data = np.ones((10, 10)) # All class 1
+    pnv_map = yg.from_array(pnv_data, (0, 0), projection)
+
+    tile = TileInfo(
+        x_position=0,
+        y_position=0,
+        width=10,
+        height=10,
+        crop_target=crop_diff,
+        pasture_target=pasture_diff,
+    )
+
+    updated_maps = process_tile(lcc_maps, pnv_map, tile)
+
+    for key, expected_value in expected_totals.items():
+        print(key, np.sum(updated_maps[key]))
+
+    for key, expected_value in expected_totals.items():
+        layer = updated_maps[key]
+        layer_total = np.sum(layer)
+        assert math.isclose(layer_total, expected_value, rel_tol=0.000001), f"Failed for {key}"

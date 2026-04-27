@@ -40,7 +40,7 @@ def balance_crop_and_pasture_differences(
     lcc_data_map: dict[int,np.ndarray],
 ) -> tuple[float,float]:
     """
-    If we remove one time of agricultural land but expand another, keep them in the same area where possible.
+    If we remove one type of agricultural land but expand another, keep them in the same area where possible.
 
     One thing we know is that reductions are always achievable, as the difference is generated as
     (GAEZ and HYDE - Jung), so if we have a negative value the initial state is enough to cover that.
@@ -115,6 +115,7 @@ def remove_land_cover(
         lcc_data[pnv_match] += removed_grid[pnv_match]
 
 def add_land_cover(
+    eligible_mask: np.ndarray,
     lcc_code: int,
     diff: float,
     lcc_data_map: dict[int,np.ndarray],
@@ -122,16 +123,6 @@ def add_land_cover(
     assert diff >= 0
 
     agri_raster = lcc_data_map[lcc_code]
-
-    # Find areas we can put the new data. This is anywhere we don't already
-    # have agricultural land, and other places unlikely to be converted (cities, lakes, etc.)
-    # We know that there should be no partial cells involving crop/pasture at this stage
-    # because of the balancing we did initially.
-    excluded_codes = [CROP_CODE, PASTURE_CODE] + PRESERVE_CODES
-    eligible_mask = np.ones_like(agri_raster, dtype=bool)
-    for excluded_code in excluded_codes:
-        if excluded_code in lcc_data_map:
-            eligible_mask &= (lcc_data_map[excluded_code] == 0)
 
     eligible_count = eligible_mask.sum()
     if eligible_count == 0:
@@ -149,7 +140,7 @@ def add_land_cover(
 
     agri_raster[eligible_mask] += per_cell_addition
     for lcc, lcc_data in lcc_data_map.items():
-        if lcc == lcc_code:
+        if lcc in [CROP_CODE, PASTURE_CODE]:
             continue
         lcc_data[eligible_mask & (lcc_data > 0)] -= per_cell_addition
 
@@ -158,7 +149,6 @@ def process_tile(
     pnv: yg.YirgacheffeLayer,
     tile: TileInfo,
 ) -> dict[int,np.ndarray]:
-
     lcc_data_map = {
         lcc: current_map.read_array(tile.x_position, tile.y_position, tile.width, tile.height)
         for lcc, current_map in current_maps.items()
@@ -174,11 +164,13 @@ def process_tile(
     if not np.isnan(tile.crop_target):
         crop_data = lcc_data_map[CROP_CODE]
         crop_diff = tile.crop_target - (crop_data.sum() / crop_data.size)
+        assert not np.isnan(crop_diff)
     else:
         crop_diff = 0
     if not np.isnan(tile.pasture_target):
         pasture_data = lcc_data_map[PASTURE_CODE]
         pasture_diff = tile.pasture_target - (pasture_data.sum() / pasture_data.size)
+        assert not np.isnan(pasture_diff)
     else:
         pasture_diff = 0
     if (crop_diff == 0) and (pasture_diff == 0):
@@ -190,14 +182,15 @@ def process_tile(
         lcc_data_map,
     )
 
-    # Order the changes by removals first then additions. In random sampling this was
-    # important, but not so with a fractional approach. However, we need some consistent
-    # ordering so we leave this in for consistency.
+    # Order the changes by removals first then additions. We should only generate the mask
+    # of eligible cells after we've done removals.
     diffs = [
         (crop_diff, CROP_CODE),
         (pasture_diff, PASTURE_CODE),
     ]
     diffs.sort(key=lambda a: a[0])
+
+    eligible_mask = None
 
     pnv_data = None
     for diff_value, habitat_code in diffs:
@@ -209,7 +202,21 @@ def process_tile(
                 pnv_data = pnv.read_array(tile.x_position, tile.y_position, tile.width, tile.height)
             remove_land_cover(habitat_code, diff_value, pnv_data, lcc_data_map)
         else:
-            add_land_cover(habitat_code, diff_value, lcc_data_map)
+            if eligible_mask is None:
+                # This mask has to be generated after we've done all removals, before
+                # we start doing additions, so relies on the sort we do above.
+                #
+                # Find areas we can put the new data. This is anywhere we don't already
+                # have agricultural land, and other places unlikely to be converted (cities, lakes, etc.)
+                # We know that there should be no partial cells involving crop/pasture at this stage
+                # because of the balancing we did initially.
+                excluded_codes = [CROP_CODE, PASTURE_CODE] + PRESERVE_CODES
+                eligible_mask = np.ones_like(lcc_data_map[CROP_CODE], dtype=bool)
+                for excluded_code in excluded_codes:
+                    if excluded_code in lcc_data_map:
+                        eligible_mask &= (lcc_data_map[excluded_code] == 0)
+
+            add_land_cover(eligible_mask, habitat_code, diff_value, lcc_data_map)
 
     return lcc_data_map
 
