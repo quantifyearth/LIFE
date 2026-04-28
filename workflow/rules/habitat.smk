@@ -43,11 +43,9 @@ Fetch the compressed GAEZ data.
 
 
 rule gaez_expand:
+    """Decompress the GAEZ download."""
     input:
         archive=DATADIR / "food" / "LR.zip",
-    """
-Decompress the GAEZ download.
-"""
     output:
         raster=DATADIR / "food" / "GLCSv11_02_5m.tif",
     log:
