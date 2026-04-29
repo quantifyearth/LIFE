@@ -231,8 +231,7 @@ def test_add_land_simple(
 
     add_land_cover(
         np.ones((10, 10), dtype=bool),
-        CROP_CODE,
-        crop_diff,
+        [(crop_diff, CROP_CODE)],
         lcc_data_map,
     )
 
@@ -260,8 +259,7 @@ def test_add_land_avoid_excluded(
 
     add_land_cover(
         np.array([[(i + 1) % 2] * 10 for i in range(10)]).astype(bool),
-        CROP_CODE,
-        crop_diff,
+        [(crop_diff, CROP_CODE)],
         lcc_data_map,
     )
 
@@ -403,8 +401,7 @@ def test_ensure_no_negative_values() -> None:
         1: other,
     }
 
-    add_land_cover(eligible_mask, CROP_CODE, 0.1, lcc_data_map)
+    add_land_cover(eligible_mask, [(0.1, CROP_CODE)], lcc_data_map)
 
-    for lcc, lcc_data in lcc_data_map.items():
-        print(lcc_data)
+    for lcc_data in lcc_data_map.values():
         assert (lcc_data >= 0).all()

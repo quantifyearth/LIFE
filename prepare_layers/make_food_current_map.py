@@ -113,29 +113,31 @@ def remove_land_cover(
 
 def add_land_cover(
     eligible_mask: np.ndarray,
-    lcc_code: int,
-    diff: float,
+    diffs: list[tuple[float, int]],
     lcc_data_map: dict[int,np.ndarray],
 ) -> None:
-    assert diff >= 0
 
-    agri_raster = lcc_data_map[lcc_code]
-
+    # Calculate capacity
     eligible_count = eligible_mask.sum()
     if eligible_count == 0:
         return
-
-    # Calculate capacity
     total_cells = eligible_mask.size
     eligible_fraction = eligible_count / total_cells
-
     if eligible_fraction == 0:
         return
 
-    per_cell_addition = diff / eligible_fraction
-    per_cell_addition = min(per_cell_addition, 1.0)
+    total_addition = 0
+    for diff, lcc_code in diffs:
+        assert 0 <= diff <= 1
 
-    agri_raster[eligible_mask] += per_cell_addition
+        agri_raster = lcc_data_map[lcc_code]
+
+        per_cell_addition = diff / eligible_fraction
+        per_cell_addition = min(per_cell_addition, 1.0)
+        total_addition += per_cell_addition
+
+        agri_raster[eligible_mask] += per_cell_addition
+
     # Remove from the other land cover classes. This assumes that coming into this
     # stage the LCC pixels are:
     # * only non-zero in a single layer
@@ -143,9 +145,8 @@ def add_land_cover(
     for lcc, lcc_data in lcc_data_map.items():
         if lcc in [CROP_CODE, PASTURE_CODE] + PRESERVE_CODES:
             continue
-        lcc_data[eligible_mask & (lcc_data > 0)] -= per_cell_addition
+        lcc_data[eligible_mask & (lcc_data > 0)] -= total_addition
         lcc_data[eligible_mask] = np.maximum(lcc_data[eligible_mask], 0.0)
-
 
 def process_tile(
     current_maps: dict[int,yg.YirgacheffeLayer],
@@ -226,8 +227,7 @@ def process_tile(
             for (change, klass) in additions
         ]
 
-    for diff_value, habitat_code in additions:
-        add_land_cover(eligible_mask, habitat_code, diff_value, lcc_data_map)
+    add_land_cover(eligible_mask, additions, lcc_data_map)
 
     return lcc_data_map
 
