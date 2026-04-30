@@ -112,7 +112,7 @@ For pnv AOHs: uses historic/ era species data.
 # =============================================================================
 
 
-checkpoint aggregate_aohs_per_taxa:
+rule aggregate_aohs_per_taxa:
     """
 Checkpoint that ensures all AOHs for a taxa/scenario are generated.
 Creates a sentinel file when complete.
