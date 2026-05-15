@@ -285,6 +285,7 @@ PRECIOUS: Only rebuilds if the sentinel is explicitly deleted.
                 -t_srs EPSG:4326 \
                 -tr {params.pixel_scale} -{params.pixel_scale} \
                 -r average \
+                -tap \
                 -multi \
                 -co COMPRESS=LZW \
                 -co NUM_THREADS={threads} \

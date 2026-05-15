@@ -149,6 +149,7 @@ Precious: only runs if output doesn't exist.
             -t_srs EPSG:4326 \
             -tr {params.pixel_scale} -{params.pixel_scale} \
             -r max \
+            -tap \
             -co COMPRESS=LZW \
             -wo NUM_THREADS={threads} \
             {input.elevation} \
@@ -177,6 +178,7 @@ Precious: only runs if output doesn't exist.
             -t_srs EPSG:4326 \
             -tr {params.pixel_scale} -{params.pixel_scale} \
             -r min \
+            -tap \
             -co COMPRESS=LZW \
             -wo NUM_THREADS={threads} \
             {input.elevation} \
