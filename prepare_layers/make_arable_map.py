@@ -1,9 +1,11 @@
 import argparse
+import math
 import os
 import shutil
+from contextlib import nullcontext
 from pathlib import Path
-from typing import Optional
 
+import psutil
 import yirgacheffe as yg
 from alive_progress import alive_bar
 
@@ -13,7 +15,7 @@ JUNG_URBAN_CODE = 1405
 def make_arable_map(
     current_dir_path: Path,
     output_path: Path,
-    concurrency: Optional[int],
+    parallelism: int | None,
     show_progress: bool,
 ) -> None:
     os.makedirs(output_path, exist_ok=True)
@@ -24,12 +26,22 @@ def make_arable_map(
 
     shutil.copy(urban_filename, output_path)
     with yg.read_raster(urban_filename) as urban:
+
         new_arable = 1.0 - urban
-        if show_progress:
-            with alive_bar(manual=True) as bar:
-                new_arable.to_geotiff(new_arable_filename, callback=bar, parallelism=concurrency)
-        else:
-            new_arable.to_geotiff(new_arable_filename, parallelism=concurrency)
+
+        if parallelism is not None:
+            # If we use all the cores on bigger machines we'll run out of memory
+            # as Yirgacheffe isn't that smart yet unfortunately
+            mem = psutil.virtual_memory()
+            estimated_memory_per_row = (urban.window.xsize * 8) * 2
+            estimated_rows_per_free_memory = mem.free / estimated_memory_per_row
+            estimated_chunk_size = estimated_rows_per_free_memory / parallelism
+
+            new_arable.ystep = min(math.floor(estimated_chunk_size), yg.constants.YSTEP)
+
+        ctx = alive_bar(manual=True) if show_progress else nullcontext()
+        with ctx as bar:
+            new_arable.to_geotiff(new_arable_filename, callback=bar, parallelism=parallelism)
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate the arable scenario map.")

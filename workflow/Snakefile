@@ -185,6 +185,16 @@ rule prepare:
         DATADIR / "habitat_layers" / "pnv" / ".sentinel",
         DATADIR / "elevation-max.tif",
         DATADIR / "elevation-min.tif",
+        DATADIR / "land_cover_area.csv",
+
+
+rule footprints:
+    """Target: compute footprint of humanity for all counterfactual scenarios."""
+    input:
+        expand(
+            str(DATADIR / "footprint" / "{scenario}.csv"),
+            scenario=SCENARIOS,
+        ),
 
 
 rule validation:

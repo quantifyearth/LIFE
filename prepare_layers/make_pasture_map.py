@@ -1,37 +1,33 @@
 import argparse
+import os
+import shutil
+from contextlib import nullcontext
 from pathlib import Path
-from typing import Optional
 
-import yirgacheffe.operators as yo
+import yirgacheffe as yg
 from alive_progress import alive_bar
-from yirgacheffe.layers import RasterLayer
-
-from osgeo import gdal
-gdal.SetCacheMax(1 * 1024 * 1024 * 1024)
 
 JUNG_PASTURE_CODE = 1402
 JUNG_URBAN_CODE = 1405
 
 def make_pasture_map(
-    current_path: Path,
+    current_dir_path: Path,
     output_path: Path,
-    concurrency: Optional[int],
+    parallelism: int | None,
     show_progress: bool,
 ) -> None:
-    with RasterLayer.layer_from_file(current_path) as current:
+    os.makedirs(output_path, exist_ok=True)
 
-        arable_map = yo.where(current != JUNG_URBAN_CODE, JUNG_PASTURE_CODE, JUNG_URBAN_CODE)
+    # In this scenario all land that isn't urban is covered to arable
+    urban_filename = current_dir_path / f"lcc_{JUNG_URBAN_CODE}.tif"
+    new_pasture_filename = output_path / f"lcc_{JUNG_PASTURE_CODE}.tif"
 
-        with RasterLayer.empty_raster_layer_like(
-            arable_map,
-            filename=output_path,
-            threads=16
-        ) as result:
-            if show_progress:
-                with alive_bar(manual=True) as bar:
-                    arable_map.parallel_save(result, callback=bar, parallelism=concurrency)
-            else:
-                arable_map.parallel_save(result, parallelism=concurrency)
+    shutil.copy(urban_filename, output_path)
+    with yg.read_raster(urban_filename) as urban:
+        new_pasture = 1.0 - urban
+        ctx = alive_bar(manual=True) if show_progress else nullcontext()
+        with ctx as bar:
+            new_pasture.to_geotiff(new_pasture_filename, callback=bar, parallelism=parallelism)
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate the pasture scenario map.")

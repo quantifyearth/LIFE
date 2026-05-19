@@ -303,6 +303,31 @@ PRECIOUS: Only rebuilds if the sentinel is explicitly deleted.
 # =============================================================================
 
 
+rule land_cover_area:
+    """
+Compare total land cover area between jung_current and current maps.
+Produces a CSV with land cover class as rows and source map as columns.
+"""
+    input:
+        jung_current_sentinel=DATADIR / "100m" / "jung_current" / ".sentinel",
+        current_sentinel=DATADIR / "100m" / "current" / ".sentinel",
+    output:
+        DATADIR / "land_cover_area.csv",
+    log:
+        DATADIR / "logs" / "land_cover_area.log",
+    params:
+        jung_current_dir=DATADIR / "100m" / "jung_current",
+        current_dir=DATADIR / "100m" / "current",
+    shell:
+        """
+        python3 {SRCDIR}/utils/land_cover_area.py \
+            --jung-current {params.jung_current_dir} \
+            --current {params.current_dir} \
+            --output {output} \
+            2>&1 | tee {log}
+        """
+
+
 rule pnv_processed:
     """
 Process the PNV map into per-class fractional rasters at the target pixel scale

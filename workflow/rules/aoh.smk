@@ -164,3 +164,36 @@ Used by validation (current scenario) and for downstream analysis.
             --output {output.collated} \
             2>&1 | tee {log}
         """
+
+
+# =============================================================================
+# Footprint of Humanity (per scenario)
+# =============================================================================
+
+
+rule footprint_of_humanity:
+    """
+Compute the footprint of humanity metric for a given scenario.
+
+Compares current AOH data against PNV and the scenario CSVs.
+"""
+    input:
+        pnv_csv=DATADIR / "aohs" / "pnv.csv",
+        scenario_csv=DATADIR / "aohs" / "{scenario}.csv",
+        current_csv=DATADIR / "aohs" / "current.csv",
+    output:
+        DATADIR / "footprint" / "{scenario}.csv",
+    log:
+        DATADIR / "logs" / "footprint_{scenario}.log",
+    wildcard_constraints:
+        scenario="|".join(COUNTERFACTUAL_SCENARIOS),
+    shell:
+        """
+        mkdir -p $(dirname {output})
+        python3 {SRCDIR}/utils/footprint_of_humanity.py \
+            --current {input.current_csv} \
+            --pnv {input.pnv_csv} \
+            --scenario {input.scenario_csv} \
+            --output {output} \
+            2>&1 | tee {log}
+        """

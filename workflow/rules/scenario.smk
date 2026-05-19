@@ -4,7 +4,7 @@
 # Handles generating scenario-specific habitat maps and difference maps:
 #
 # - Arable: all non-urban land converted to arable
-# - Restore: agricultural land restored to PNV
+# - Restore variants: agricultural/pastoral land restored to PNV
 #
 # Each scenario:
 # 1. Generate 100m scenario map from current map
@@ -14,6 +14,16 @@
 
 import os
 from pathlib import Path
+
+# IUCN codes to restore for each restore scenario variant
+RESTORE_SCENARIOS = {
+    "restore": "14.1,14.2,14.3,14.4,14.6",
+    "restore_all": "14,14.1,14.2,14.3,14.4,14.5,14.6",
+    "restore_agriculture": "14.1,14.2",
+}
+
+COUNTERFACTUAL_SCENARIOS = ["arable"] + list(RESTORE_SCENARIOS.keys())
+
 
 # =============================================================================
 # Arable scenario
@@ -40,128 +50,75 @@ All non-urban land is converted to arable.
         python3 {SRCDIR}/prepare_layers/make_arable_map.py \
             --current {params.current_dir} \
             --output {params.output_dir} \
-            -j 2 \
-            2>&1 | tee {log}
-        touch {output.sentinel}
-        """
-
-
-rule warp_arable:
-    """
-Warp the arable scenario map from 100m to the target pixel scale.
-PRECIOUS: Only rebuilds if the sentinel is explicitly deleted.
-"""
-    input:
-        sentinel=ancient(DATADIR / "100m" / "arable" / ".sentinel"),
-    output:
-        sentinel=DATADIR / "habitat_layers" / "arable" / ".sentinel",
-    log:
-        DATADIR / "logs" / "warp_arable.log",
-    threads: workflow.cores
-    params:
-        input_dir=DATADIR / "100m" / "arable",
-        output_dir=DATADIR / "habitat_layers" / "arable",
-        pixel_scale=config["pixel_scale"],
-    shell:
-        """
-        mkdir -p {params.output_dir}
-        for d in {params.input_dir}/*.tif; do
-            basename=$(basename "$d")
-            gdalwarp \
-                -t_srs EPSG:4326 \
-                -tr {params.pixel_scale} -{params.pixel_scale} \
-                -r average \
-                -tap \
-                -multi \
-                -co COMPRESS=LZW \
-                -co NUM_THREADS={threads} \
-                -wo NUM_THREADS={threads} \
-                "$d" \
-                {params.output_dir}/"$basename" \
-                2>&1
-        done 2>&1 | tee {log}
-        touch {output.sentinel}
-        """
-
-
-rule diff_map_arable:
-    """
-Generate the area difference map between current and arable habitat layers.
-Used by the delta P scaling step.
-"""
-    input:
-        current_sentinel=DATADIR / "habitat_layers" / "current" / ".sentinel",
-        arable_sentinel=DATADIR / "habitat_layers" / "arable" / ".sentinel",
-    output:
-        DATADIR / "habitat" / "arable_diff_area.tif",
-    log:
-        DATADIR / "logs" / "diff_map_arable.log",
-    threads: workflow.cores
-    params:
-        current_dir=DATADIR / "habitat_layers" / "current",
-        arable_dir=DATADIR / "habitat_layers" / "arable",
-    shell:
-        """
-        mkdir -p $(dirname {output})
-        python3 {SRCDIR}/prepare_layers/make_diff_map.py \
-            --current {params.current_dir} \
-            --scenario {params.arable_dir} \
-            --output {output} \
             -j {threads} \
+            -p \
             2>&1 | tee {log}
+        touch {output.sentinel}
         """
 
 
 # =============================================================================
-# Restore scenario
+# Restore scenario variants
 # =============================================================================
 
 
-rule make_restore_map:
+rule make_restore_scenario:
     """
-Generate the restore scenario map at 100m resolution.
-Agricultural land is restored to PNV habitat.
+Generate a restore scenario map at 100m resolution.
+The IUCN habitat codes to restore are passed via --codes.
 """
     input:
         current_sentinel=DATADIR / "100m" / "current" / ".sentinel",
         pnv=DATADIR / "habitat" / "pnv_raw.tif",
         crosswalk=DATADIR / "crosswalk.csv",
     output:
-        sentinel=DATADIR / "100m" / "restore" / ".sentinel",
+        sentinel=DATADIR / "100m" / "{scenario}" / ".sentinel",
     log:
-        DATADIR / "logs" / "make_restore_map.log",
+        DATADIR / "logs" / "make_{scenario}_map.log",
+    wildcard_constraints:
+        scenario="|".join(RESTORE_SCENARIOS.keys()),
     threads: workflow.cores
     params:
         current_dir=DATADIR / "100m" / "current",
-        output_dir=DATADIR / "100m" / "restore",
+        output_dir=lambda wc: DATADIR / "100m" / wc.scenario,
+        codes=lambda wc: RESTORE_SCENARIOS[wc.scenario],
     shell:
         """
         python3 {SRCDIR}/prepare_layers/make_restore_map.py \
             --pnv {input.pnv} \
             --current {params.current_dir} \
             --crosswalk {input.crosswalk} \
+            --codes {params.codes} \
             --output {params.output_dir} \
-            -j 2 \
+            -j {threads} \
+            -p \
             2>&1 | tee {log}
         touch {output.sentinel}
         """
 
 
-rule warp_restore:
+# =============================================================================
+# Warp and diff rules (shared across all counterfactual scenarios)
+# =============================================================================
+
+
+rule warp_scenario:
     """
-Warp the restore scenario map from 100m to the target pixel scale.
+Warp a scenario map from 100m to the target pixel scale.
 PRECIOUS: Only rebuilds if the sentinel is explicitly deleted.
 """
     input:
-        sentinel=ancient(DATADIR / "100m" / "restore" / ".sentinel"),
+        sentinel=ancient(DATADIR / "100m" / "{scenario}" / ".sentinel"),
     output:
-        sentinel=DATADIR / "habitat_layers" / "restore" / ".sentinel",
+        sentinel=DATADIR / "habitat_layers" / "{scenario}" / ".sentinel",
     log:
-        DATADIR / "logs" / "warp_restore.log",
+        DATADIR / "logs" / "warp_{scenario}.log",
+    wildcard_constraints:
+        scenario="|".join(COUNTERFACTUAL_SCENARIOS),
     threads: workflow.cores
     params:
-        input_dir=DATADIR / "100m" / "restore",
-        output_dir=DATADIR / "habitat_layers" / "restore",
+        input_dir=lambda wc: DATADIR / "100m" / wc.scenario,
+        output_dir=lambda wc: DATADIR / "habitat_layers" / wc.scenario,
         pixel_scale=config["pixel_scale"],
     shell:
         """
@@ -185,27 +142,30 @@ PRECIOUS: Only rebuilds if the sentinel is explicitly deleted.
         """
 
 
-rule diff_map_restore:
+rule diff_map_scenario:
     """
-Generate the area difference map between current and restore habitat layers.
+Generate the area difference map between current and a scenario's habitat layers.
+Used by the delta P scaling step.
 """
     input:
         current_sentinel=DATADIR / "habitat_layers" / "current" / ".sentinel",
-        restore_sentinel=DATADIR / "habitat_layers" / "restore" / ".sentinel",
+        scenario_sentinel=DATADIR / "habitat_layers" / "{scenario}" / ".sentinel",
     output:
-        DATADIR / "habitat" / "restore_diff_area.tif",
+        DATADIR / "habitat" / "{scenario}_diff_area.tif",
     log:
-        DATADIR / "logs" / "diff_map_restore.log",
+        DATADIR / "logs" / "diff_map_{scenario}.log",
+    wildcard_constraints:
+        scenario="|".join(COUNTERFACTUAL_SCENARIOS),
     threads: workflow.cores
     params:
         current_dir=DATADIR / "habitat_layers" / "current",
-        restore_dir=DATADIR / "habitat_layers" / "restore",
+        scenario_dir=lambda wc: DATADIR / "habitat_layers" / wc.scenario,
     shell:
         """
         mkdir -p $(dirname {output})
         python3 {SRCDIR}/prepare_layers/make_diff_map.py \
             --current {params.current_dir} \
-            --scenario {params.restore_dir} \
+            --scenario {params.scenario_dir} \
             --output {output} \
             -j {threads} \
             2>&1 | tee {log}
