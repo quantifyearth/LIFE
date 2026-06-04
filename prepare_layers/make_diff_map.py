@@ -28,10 +28,11 @@ def make_diff_map(
             else yg.constant(0.0)
         scenario_layer = yg.read_raster(scenario_habitat_filename) if scenario_habitat_filename.exists() \
             else yg.constant(0.0)
-        habitat_diff = current_layer != scenario_layer
-        layers.append(habitat_diff)
+        habitat_diff = current_layer - scenario_layer
+        from_current = yg.where(habitat_diff > 0, habitat_diff, 0)
+        layers.append(from_current)
 
-    diff = yg.any(layers)
+    diff = yg.sum(layers)
     area = yg.area_raster(diff.map_projection)
     scaled_diff = diff * area
 

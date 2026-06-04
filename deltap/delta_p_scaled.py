@@ -25,37 +25,37 @@ def delta_p_scaled_area(
 
     species_total_counts = pd.read_csv(species_totals_path)
 
-    diff_area = yg.read_raster(diff_area_map_path)
-    diff_area_rescaled = yg.where(diff_area < SCALE, float('nan'), diff_area / SCALE)
+    with yg.read_raster(diff_area_map_path) as diff_area:
+        diff_area_rescaled = yg.where(diff_area < SCALE, float('nan'), diff_area / SCALE)
 
-    # Process all species in total
-    total_species_count = int(species_total_counts[species_total_counts.taxa=="all"]["count"].values[0])
-    summed_layer = yg.sum(per_taxa)
-    all_scaled_filtered_layer = yg.where(
-        diff_area_rescaled != 0,
-        ((summed_layer / diff_area_rescaled) * -1.0) / total_species_count,
-        float('nan')
-    )
-
-    bands = [all_scaled_filtered_layer]
-    labels = ["all"]
-
-    # Now per taxa
-    for inlayer in per_taxa:
-        # get the taxa from the filename
-        _, name = os.path.split(inlayer.name)
-        taxa = name[:-4]
-        labels.append(taxa)
-
-        taxa_species_count = int(species_total_counts[species_total_counts.taxa==taxa]["count"].values[0])
-        scaled_filtered_layer = yg.where(
+        # Process all species in total
+        total_species_count = int(species_total_counts[species_total_counts.taxa=="all"]["count"].values[0])
+        summed_layer = yg.sum(per_taxa)
+        all_scaled_filtered_layer = yg.where(
             diff_area_rescaled != 0,
-            ((inlayer / diff_area_rescaled) * -1.0) / taxa_species_count,
+            ((summed_layer / diff_area_rescaled) * -1.0) / total_species_count,
             float('nan')
         )
-        bands.append(scaled_filtered_layer)
 
-    yg.to_geotiff(output_path, bands, labels, nodata=float('nan'))
+        bands = [all_scaled_filtered_layer]
+        labels = ["all"]
+
+        # Now per taxa
+        for inlayer in per_taxa:
+            # get the taxa from the filename
+            _, name = os.path.split(inlayer.name)
+            taxa = name[:-4]
+            labels.append(taxa)
+
+            taxa_species_count = int(species_total_counts[species_total_counts.taxa==taxa]["count"].values[0])
+            scaled_filtered_layer = yg.where(
+                diff_area_rescaled != 0,
+                ((inlayer / diff_area_rescaled) * -1.0) / taxa_species_count,
+                float('nan')
+            )
+            bands.append(scaled_filtered_layer)
+
+        yg.to_geotiff(output_path, bands, labels, nodata=float('nan'))
 
 @snakemake_compatible(mapping={
     "input_path": "params.input_dir",
