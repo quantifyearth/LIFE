@@ -133,7 +133,7 @@ enough to align with the GAEZ data.
     shell:
         """
         sed "s/0.0833333/0.08333333333333333/" \
-            {input.raw_hyde_raster} > {output.modified_hyde_raster}
+            {input.raw_hyde_raster} >{output.modified_hyde_raster}
         """
 
 
@@ -148,7 +148,7 @@ the rest of the workflow can mix it with projected raster data.
         projection=config["hyde_projection"],
     shell:
         """
-        echo '{params.projection}' > {output.hyde_projection_file}
+        echo '{params.projection}' >{output.hyde_projection_file}
         """
 
 

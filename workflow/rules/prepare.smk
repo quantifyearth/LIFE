@@ -46,10 +46,10 @@ Fetch the Jung L2 habitat map from Zenodo.
         """
         mkdir -p $(dirname {output.habitat})
         reclaimer zenodo --zenodo_id {params.zenodo_id} \
-                         --filename "{params.filename}" \
-                         --extract \
-                         --output {output.habitat} \
-                         2>&1 | tee {log}
+            --filename "{params.filename}" \
+            --extract \
+            --output {output.habitat} \
+            2>&1 | tee {log}
         """
 
 
@@ -69,10 +69,10 @@ Fetch the Jung habitat map update masks from Zenodo.
         """
         mkdir -p {params.habitat_dir}
         reclaimer zenodo --zenodo_id {params.zenodo_id} \
-                        --filename "{params.filename}" \
-                        --extract \
-                        --output {params.habitat_dir} \
-                        2>&1 | tee {log}
+            --filename "{params.filename}" \
+            --extract \
+            --output {params.habitat_dir} \
+            2>&1 | tee {log}
         touch {output.sentinel}
         """
 
@@ -97,10 +97,10 @@ Fetch the Jung PNV map from Zenodo.
         """
         mkdir -p $(dirname {output.habitat})
         reclaimer zenodo --zenodo_id {params.zenodo_id} \
-                         --filename "{params.filename}" \
-                         --extract \
-                         --output {output.habitat} \
-                         2>&1 | tee {log}
+            --filename "{params.filename}" \
+            --extract \
+            --output {output.habitat} \
+            2>&1 | tee {log}
         """
 
 
@@ -123,9 +123,9 @@ Download raw elevation DEM from Zenodo.
     shell:
         """
         reclaimer zenodo --zenodo_id {params.zenodo_id} \
-                         --filename "{params.filename}" \
-                         --output {output.elevation} \
-                         2>&1 | tee {log}
+            --filename "{params.filename}" \
+            --output {output.elevation} \
+            2>&1 | tee {log}
         """
 
 
