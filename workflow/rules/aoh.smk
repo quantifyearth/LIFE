@@ -19,9 +19,9 @@ from pathlib import Path
 
 rule aoh_version_sentinel:
     """
-Track the aoh package version. AOH rules depend on this to trigger
-rebuilds when the package updates.
-"""
+    Track the aoh package version. AOH rules depend on this to trigger
+    rebuilds when the package updates.
+    """
     output:
         sentinel=DATADIR / ".sentinels" / "aoh_version.txt",
     run:
@@ -68,14 +68,14 @@ def aoh_species_inputs(wildcards):
 
 rule generate_aoh:
     """
-Generate Area of Habitat raster for a single species in a given scenario.
+    Generate Area of Habitat raster for a single species in a given scenario.
 
-Parallelizable: run with `snakemake --cores N` to process multiple species
-concurrently. Uses --force-habitat and --pixel-area flags (no mask).
+    Parallelizable: run with `snakemake --cores N` to process multiple species
+    concurrently. Uses --force-habitat and --pixel-area flags (no mask).
 
-For current/scenario AOHs: uses current/ era species data.
-For pnv AOHs: uses historic/ era species data.
-"""
+    For current/scenario AOHs: uses current/ era species data.
+    For pnv AOHs: uses historic/ era species data.
+    """
     input:
         unpack(aoh_species_inputs),
     output:
@@ -114,12 +114,12 @@ For pnv AOHs: uses historic/ era species data.
 
 rule aggregate_aohs_per_taxa:
     """
-Checkpoint that ensures all AOHs for a taxa/scenario are generated.
-Creates a sentinel file when complete.
+    Checkpoint that ensures all AOHs for a taxa/scenario are generated.
+    Creates a sentinel file when complete.
 
-This is a checkpoint so downstream rules (delta P) can re-evaluate the DAG
-after AOHs are created.
-"""
+    This is a checkpoint so downstream rules (delta P) can re-evaluate the DAG
+    after AOHs are created.
+    """
     input:
         metadata=get_all_aoh_metadata_for_taxa_scenario,
         version_sentinel=DATADIR / ".sentinels" / "aoh_version.txt",
@@ -139,10 +139,10 @@ after AOHs are created.
 
 rule collate_aoh_data:
     """
-Collate metadata from all AOH JSON files for a scenario into a single CSV.
+    Collate metadata from all AOH JSON files for a scenario into a single CSV.
 
-Used by validation (current scenario) and for downstream analysis.
-"""
+    Used by validation (current scenario) and for downstream analysis.
+    """
     input:
         sentinels=lambda wildcards: expand(
             str(DATADIR / "aohs" / "{scenario}" / "{taxa}" / ".complete"),
@@ -173,10 +173,10 @@ Used by validation (current scenario) and for downstream analysis.
 
 rule footprint_of_humanity:
     """
-Compute the footprint of humanity metric for a given scenario.
+    Compute the footprint of humanity metric for a given scenario.
 
-Compares current AOH data against PNV and the scenario CSVs.
-"""
+    Compares current AOH data against PNV and the scenario CSVs.
+    """
     input:
         pnv_csv=DATADIR / "aohs" / "pnv.csv",
         scenario_csv=DATADIR / "aohs" / "{scenario}.csv",

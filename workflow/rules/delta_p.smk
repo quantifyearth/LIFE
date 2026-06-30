@@ -23,12 +23,12 @@ from types import SimpleNamespace
 
 rule calculate_delta_p:
     """
-Calculate the change in probability of persistence for a single species
-under a given scenario.
+    Calculate the change in probability of persistence for a single species
+    under a given scenario.
 
-species_id wildcard is of the form T{taxon_id}A{assessment_id}_{SEASON},
-e.g. T22685505A261477056_RESIDENT.
-"""
+    species_id wildcard is of the form T{taxon_id}A{assessment_id}_{SEASON},
+    e.g. T22685505A261477056_RESIDENT.
+    """
     input:
         current_sentinel=DATADIR / "aohs" / "current" / "{taxa}" / ".complete",
         scenario_sentinel=DATADIR / "aohs" / "{scenario}" / "{taxa}" / ".complete",
@@ -69,9 +69,9 @@ e.g. T22685505A261477056_RESIDENT.
 
 rule raster_sum_per_taxa:
     """
-Sum all per-species delta P rasters for a taxa into a single raster.
-Implicitly waits for all calculate_delta_p jobs via direct tif dependencies.
-"""
+    Sum all per-species delta P rasters for a taxa into a single raster.
+    Implicitly waits for all calculate_delta_p jobs via direct tif dependencies.
+    """
     input:
         rasters=get_delta_p_sentinels_for_taxa_scenario,
     output:
@@ -105,9 +105,9 @@ def get_all_delta_p_tifs_for_scenario(wildcards):
 
 rule species_totals:
     """
-Count the number of species per taxa used in the delta P calculation.
-Used by delta_p_scaled for normalisation.
-"""
+    Count the number of species per taxa used in the delta P calculation.
+    Used by delta_p_scaled for normalisation.
+    """
     input:
         rasters=get_all_delta_p_tifs_for_scenario,
     output:
@@ -127,11 +127,11 @@ Used by delta_p_scaled for normalisation.
 
 rule delta_p_scaled:
     """
-Generate the final scaled delta P map for a scenario.
+    Generate the final scaled delta P map for a scenario.
 
-Combines per-taxa delta P sums with the habitat difference map and
-species totals to produce the final normalised LIFE output.
-"""
+    Combines per-taxa delta P sums with the habitat difference map and
+    species totals to produce the final normalised LIFE output.
+    """
     input:
         taxa_rasters=expand(
             str(DATADIR / "deltap_sum" / "{{scenario}}" / CURVE / "{taxa}.tif"),

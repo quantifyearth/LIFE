@@ -18,8 +18,8 @@ from pathlib import Path
 
 rule convert_crosswalk:
     """
-Generate a crosswalk between IUCN Habitat classes and Jung raster pixel values.
-"""
+    Generate a crosswalk between IUCN Habitat classes and Jung raster pixel values.
+    """
     output:
         crosswalk=DATADIR / "crosswalk.csv",
     script:
@@ -33,8 +33,8 @@ Generate a crosswalk between IUCN Habitat classes and Jung raster pixel values.
 
 rule jung_habitat_map:
     """
-Fetch the Jung L2 habitat map from Zenodo.
-"""
+    Fetch the Jung L2 habitat map from Zenodo.
+    """
     output:
         habitat=DATADIR / "100m" / "jung_l2_raw.tif",
     log:
@@ -55,8 +55,8 @@ Fetch the Jung L2 habitat map from Zenodo.
 
 rule jung_habitat_updates:
     """
-Fetch the Jung habitat map update masks from Zenodo.
-"""
+    Fetch the Jung habitat map update masks from Zenodo.
+    """
     output:
         sentinel=DATADIR / "habitat" / ".downloaded_updates",
     log:
@@ -84,8 +84,8 @@ Fetch the Jung habitat map update masks from Zenodo.
 
 rule jung_pnv_map:
     """
-Fetch the Jung PNV map from Zenodo.
-"""
+    Fetch the Jung PNV map from Zenodo.
+    """
     output:
         habitat=DATADIR / "habitat" / "pnv_raw.tif",
     log:
@@ -111,8 +111,8 @@ Fetch the Jung PNV map from Zenodo.
 
 rule download_elevation:
     """
-Download raw elevation DEM from Zenodo.
-"""
+    Download raw elevation DEM from Zenodo.
+    """
     output:
         elevation=DATADIR / "elevation.tif",
     log:
@@ -131,9 +131,9 @@ Download raw elevation DEM from Zenodo.
 
 rule elevation_max:
     """
-Warp elevation to target projection and scale using max resampling.
-Precious: only runs if output doesn't exist.
-"""
+    Warp elevation to target projection and scale using max resampling.
+    Precious: only runs if output doesn't exist.
+    """
     input:
         elevation=ancient(DATADIR / "elevation.tif"),
     output:
@@ -160,9 +160,9 @@ Precious: only runs if output doesn't exist.
 
 rule elevation_min:
     """
-Warp elevation to target projection and scale using min resampling.
-Precious: only runs if output doesn't exist.
-"""
+    Warp elevation to target projection and scale using min resampling.
+    Precious: only runs if output doesn't exist.
+    """
     input:
         elevation=ancient(DATADIR / "elevation.tif"),
     output:
