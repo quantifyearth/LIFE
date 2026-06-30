@@ -14,11 +14,17 @@ rasterio
 requests
 alive-progress
 matplotlib
-yirgacheffe
-aoh
-gdal[numpy]
+yirgacheffe>=1.12.7,<2.0
+aoh>=2.1.2,<3.0
+gdal[numpy]==3.12.2
 git+https://github.com/quantifyearth/iucn_modlib.git
 git+https://github.com/quantifyearth/seasonality
+
+
+# Snakemake workflow management
+snakemake>=8.0
+# We require a bug fix on this package that isn't yet upstream
+snakemake-argparse-bridge
 
 # developer requirements
 pytest
@@ -28,3 +34,4 @@ pandas-stubs
 types-requests
 yirgacheffe[dev]
 aoh[dev]
+snakefmt

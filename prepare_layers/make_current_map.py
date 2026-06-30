@@ -1,16 +1,23 @@
 import argparse
 import itertools
+import logging
+import math
+import os
+from contextlib import nullcontext
 from pathlib import Path
 from multiprocessing import set_start_method
-from typing import Dict, List, Optional
 
 import pandas as pd
-import yirgacheffe.operators as yo # type: ignore
+import yirgacheffe as yg
 from alive_progress import alive_bar # type: ignore
-from yirgacheffe.layers import RasterLayer # type: ignore
+from snakemake_argparse_bridge import snakemake_compatible # type: ignore
 
 from osgeo import gdal # type: ignore
 gdal.SetCacheMax(1 * 1024 * 1024 * 1024)
+
+logger = logging.getLogger(__name__)
+logging.basicConfig()
+logger.setLevel(logging.INFO)
 
 # From Eyres et al: The current layer maps IUCN level 1 and 2 habitats, but habitats in the PNV layer are mapped
 # only at IUCN level 1, so to estimate species’ proportion of original AOH now remaining we could only use natural
@@ -19,9 +26,9 @@ IUCN_CODE_ARTIFICAL = [
     "14", "14.1", "14.2", "14.3", "14.4", "14.5", "14.6"
 ]
 
-def load_crosswalk_table(table_file_name: Path) -> Dict[str,List[int]]:
+def load_crosswalk_table(table_file_name: Path) -> dict[str,list[int]]:
     rawdata = pd.read_csv(table_file_name)
-    result: Dict[str,List[int]] = {}
+    result: dict[str,list[int]] = {}
     for _, row in rawdata.iterrows():
         try:
             result[row.code].append(int(row.value))
@@ -29,49 +36,77 @@ def load_crosswalk_table(table_file_name: Path) -> Dict[str,List[int]]:
             result[row.code] = [int(row.value)]
     return result
 
-
-def make_current_map(
+def make_current_maps(
     jung_path: Path,
-    update_masks_path: Optional[Path],
+    update_masks_path: Path | None,
     crosswalk_path: Path,
-    output_path: Path,
-    concurrency: Optional[int],
+    output_dir_path: Path,
+    parallelism: int | None,
     show_progress: bool,
+    sentinel_path: Path | None,
 ) -> None:
+    os.makedirs(output_dir_path, exist_ok=True)
+    if parallelism:
+        logger.info("Using %d workers", parallelism)
+    else:
+        logger.info("No parallelism specified")
 
     if update_masks_path is not None:
         update_masks = [
-            RasterLayer.layer_from_file(x) for x in sorted(list(update_masks_path.glob("*.tif")))
+            yg.read_raster(x) for x in sorted(list(update_masks_path.glob("*.tif")))
         ]
     else:
         update_masks = []
 
-    with RasterLayer.layer_from_file(jung_path) as jung:
+    with yg.read_raster(jung_path) as jung:
         crosswalk = load_crosswalk_table(crosswalk_path)
 
         map_preserve_code = list(itertools.chain.from_iterable([crosswalk[x] for x in IUCN_CODE_ARTIFICAL]))
 
         updated_jung = jung
         for update in update_masks:
-            updated_jung = yo.where(update != 0, update, updated_jung)
+            updated_jung = yg.where(update.isnan(), updated_jung, update)
 
-        current_map = yo.where(
+        current_map = yg.where(
             updated_jung.isin(map_preserve_code),
             updated_jung,
-            (yo.floor(updated_jung / 100) * 100).astype(yo.DataType.UInt16),
+            (yg.floor(updated_jung / 100) * 100),
         )
 
-        with RasterLayer.empty_raster_layer_like(
-            jung,
-            filename=output_path,
-            threads=16
-        ) as result:
-            if show_progress:
-                with alive_bar(manual=True) as bar:
-                    current_map.parallel_save(result, callback=bar, parallelism=concurrency)
-            else:
-                current_map.parallel_save(result, parallelism=concurrency)
+        logger.info("Calculating unique land cover types...")
+        vals = current_map.unique()
+        logger.info("Found %s land cover classes", set(vals))
 
+        for lcc in vals:
+            # Seems there are some NaN values in Jung
+            if math.isnan(lcc):
+                continue
+            logger.info("Processing %s...", lcc)
+            per_class = current_map == lcc
+            cast_per_class = per_class.astype(yg.DataType.Float32)
+            ctx = alive_bar(manual=True, title=str(lcc)) if show_progress else nullcontext()
+            with ctx as bar:
+                cast_per_class.to_geotiff(
+                    output_dir_path / f"lcc_{int(lcc)}.tif",
+                    callback=bar,
+                    parallelism=parallelism,
+                )
+
+    # This script generates a bunch of rasters, but snakemake needs one
+    # output to say when this is done, so if we're in snakemake mode we touch a sentinel file to
+    # let it know we've done. One day this should be another decorator.
+    if sentinel_path is not None:
+        os.makedirs(sentinel_path.parent, exist_ok=True)
+        sentinel_path.touch()
+
+@snakemake_compatible(mapping={
+    "jung_path": "input.habitat",
+    "update_masks_path": "params.updates_dir",
+    "crosswalk_path": "input.crosswalk",
+    "parallelism": "threads",
+    "output_dir_path": "params.output_dir",
+    "sentinel_path": "output.sentinel",
+})
 def main() -> None:
     set_start_method("spawn")
 
@@ -102,15 +137,15 @@ def main() -> None:
         type=Path,
         help='Path where final map should be stored',
         required=True,
-        dest='results_path',
+        dest='output_dir_path',
     )
     parser.add_argument(
         '-j',
         type=int,
-        help='Number of concurrent threads to use for calculation.',
+        help='Number of parallel threads to use for calculation.',
         required=False,
         default=None,
-        dest='concurrency',
+        dest='parallelism',
     )
     parser.add_argument(
         '-p',
@@ -120,15 +155,24 @@ def main() -> None:
         action='store_true',
         dest='show_progress',
     )
+    parser.add_argument(
+        '--sentinel',
+        type=Path,
+        help='Generate a sentinel file on completion for snakemake to track',
+        required=False,
+        default=None,
+        dest='sentinel_path',
+    )
     args = parser.parse_args()
 
-    make_current_map(
+    make_current_maps(
         args.jung_path,
         args.update_masks_path,
         args.crosswalk_path,
-        args.results_path,
-        args.concurrency,
+        args.output_dir_path,
+        args.parallelism,
         args.show_progress,
+        args.sentinel_path,
     )
 
 if __name__ == "__main__":

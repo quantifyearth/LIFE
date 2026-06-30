@@ -1,0 +1,52 @@
+# LIFE Pipeline Configuration
+# ===========================
+
+# Taxonomic classes to process
+taxa:
+  - AMPHIBIA
+  - AVES
+  - MAMMALIA
+  - REPTILIA
+
+# Pixel scale
+pixel_scale: 0.016666666666667
+
+# Hyde projection data
+hyde_projection: 'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Latitude",NORTH],AXIS["Longitude",EAST],AUTHORITY["EPSG","4326"]]'
+hyde_pixel_scale: 0.08333333333333333
+
+# Scenarios to run - accepted values are
+# - arable
+# - restore
+# - restore_all
+# - restore_agriculture
+scenarios:
+  - arable
+  - restore
+  - restore_all
+  - restore_agriculture
+
+# Z-curve value for delta P calculation
+curve: "0.25"
+
+# Projection for species data extraction
+projection: "EPSG:4326"
+
+# Zenodo configuration for downloading raw habitat
+zenodo:
+    jung_habitat:
+        zenodo_id: 4058819
+        filename: "iucn_habitatclassification_composite_lvl2_ver004.zip"
+    jung_habitat_updates:
+        zenodo_id: 4058819
+        filename: "lvl2_changemasks_ver004.zip"
+    jung_pnv:
+        zenodo_id: 4038749
+        filename: "pnv_lvl1_004.zip"
+    elevation:
+        zenodo_id: 5719984
+        filename: "dem-100m-esri54017.tif"
+
+# Optional inputs
+optional_inputs:
+    species_overrides: "overrides.csv"

@@ -24,11 +24,12 @@ def species_generator(
     res = []
     for taxa in taxas:
         taxa_path = species_info_dir / taxa / "current"
-        speciess = list(taxa_path.glob("*.geojson"))
+        speciess = [x.stem.split('_') for x in taxa_path.glob("*.geojson")]
         for scenario in scenarios:
-            for species in speciess:
+            for taxid, season in speciess:
                 res.append([
-                    species,
+                    taxid,
+                    season,
                     aohs_path / "current" / taxa,
                     aohs_path / scenario / taxa,
                     aohs_path / "pnv" / taxa,
@@ -37,7 +38,8 @@ def species_generator(
                 ])
 
     df = pd.DataFrame(res, columns=[
-        '--speciesdata',
+        '--taxid',
+        '--season',
         '--current_path',
         '--scenario_path',
         '--historic_path',

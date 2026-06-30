@@ -1,46 +1,56 @@
 import argparse
+import math
+import os
+import shutil
+from contextlib import nullcontext
 from pathlib import Path
-from typing import Optional
 
-import yirgacheffe.operators as yo
+import psutil
+import yirgacheffe as yg
 from alive_progress import alive_bar
-from yirgacheffe.layers import RasterLayer
-
-from osgeo import gdal
-gdal.SetCacheMax(1 * 1024 * 1024 * 1024)
 
 JUNG_ARABLE_CODE = 1401
 JUNG_URBAN_CODE = 1405
 
 def make_arable_map(
-    current_path: Path,
+    current_dir_path: Path,
     output_path: Path,
-    concurrency: Optional[int],
+    parallelism: int | None,
     show_progress: bool,
 ) -> None:
-    with RasterLayer.layer_from_file(current_path) as current:
+    os.makedirs(output_path, exist_ok=True)
 
-        arable_map = yo.where(current != JUNG_URBAN_CODE, JUNG_ARABLE_CODE, JUNG_URBAN_CODE)
+    # In this scenario all land that isn't urban is covered to arable
+    urban_filename = current_dir_path / f"lcc_{JUNG_URBAN_CODE}.tif"
+    new_arable_filename = output_path / f"lcc_{JUNG_ARABLE_CODE}.tif"
 
-        with RasterLayer.empty_raster_layer_like(
-            arable_map,
-            filename=output_path,
-            threads=16
-        ) as result:
-            if show_progress:
-                with alive_bar(manual=True) as bar:
-                    arable_map.parallel_save(result, callback=bar, parallelism=concurrency)
-            else:
-                arable_map.parallel_save(result, parallelism=concurrency)
+    shutil.copy(urban_filename, output_path)
+    with yg.read_raster(urban_filename) as urban:
+
+        new_arable = 1.0 - urban
+
+        if parallelism is not None:
+            # If we use all the cores on bigger machines we'll run out of memory
+            # as Yirgacheffe isn't that smart yet unfortunately
+            mem = psutil.virtual_memory()
+            estimated_memory_per_row = (urban.window.xsize * 8) * 2
+            estimated_rows_per_free_memory = mem.free / estimated_memory_per_row
+            estimated_chunk_size = estimated_rows_per_free_memory / parallelism
+
+            new_arable.ystep = min(math.floor(estimated_chunk_size), yg.constants.YSTEP)
+
+        ctx = alive_bar(manual=True) if show_progress else nullcontext()
+        with ctx as bar:
+            new_arable.to_geotiff(new_arable_filename, callback=bar, parallelism=parallelism)
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate the arable scenario map.")
     parser.add_argument(
         '--current',
         type=Path,
-        help='Path of current map',
+        help='Path of fractional current maps',
         required=True,
-        dest='current_path',
+        dest='current_dir_path',
     )
     parser.add_argument(
         '--output',
@@ -68,7 +78,7 @@ def main() -> None:
     args = parser.parse_args()
 
     make_arable_map(
-        args.current_path,
+        args.current_dir_path,
         args.results_path,
         args.concurrency,
         args.show_progress,

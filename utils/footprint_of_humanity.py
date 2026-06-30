@@ -24,7 +24,7 @@ def absolute(
     merge1 = pd.merge(current_cleaned, pnv_cleaned, on=["id_no", "season"], suffixes=["_current", "_pnv"])
     merge2 = pd.merge(merge1, scenario, on=["id_no", "season"], how="left", indicator=True)
     merged = merge2[["id_no", "season", "class_name", "aoh_total_current", "aoh_total_pnv", "aoh_total", "_merge"]].copy()
-    merged.aoh_total = merged.aoh_total.fillna(0)
+    merged["aoh_total"] = merged.aoh_total.fillna(0)
     merged.rename(columns={"aoh_total": "aoh_total_scenario"}, inplace=True)
 
     merged["current_persistence"] = (merged.aoh_total_current / merged.aoh_total_pnv) ** 0.25

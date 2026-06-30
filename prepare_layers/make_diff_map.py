@@ -1,131 +1,73 @@
 import argparse
-import shutil
-import tempfile
+from contextlib import nullcontext
 from pathlib import Path
-from typing import Optional
 
-from alive_progress import alive_bar
-from osgeo import gdal
-from yirgacheffe.layers import RasterLayer, UniformAreaLayer
-from yirgacheffe.operators import DataType
+import yirgacheffe as yg
+from alive_progress import alive_bar # type: ignore
+from snakemake_argparse_bridge import snakemake_compatible # type: ignore
 
-gdal.SetCacheMax(512 * 1024 * 1024)
+POSSIBLE_HABITAT_CLASSES = [100, 200, 300, 400, 500, 600, 700, 800, 900,
+    1000, 1100, 1200, 1300, 1400, 1401, 1402, 1403, 1404,
+    1405, 1406, 1500, 1600, 1800]
 
 def make_diff_map(
     current_path: Path,
     scenario_path: Path,
-    area_path: Path,
-    pixel_scale: float,
-    target_projection: Optional[str],
     output_path: Path,
-    concurrency: Optional[int],
+    parallelism: None | int,
     show_progress: bool,
 ) -> None:
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir_path = Path(tmpdir)
-        raw_map_filename = tmpdir_path / "raw.tif"
-        print("comparing:")
-        with RasterLayer.layer_from_file(current_path) as current:
-            with RasterLayer.layer_from_file(scenario_path) as scenario:
+    layers = []
+    for habitat in POSSIBLE_HABITAT_CLASSES:
+        current_habitat_filename = current_path / f"lcc_{habitat}.tif"
+        scenario_habitat_filename = scenario_path / f"lcc_{habitat}.tif"
 
-                diff_map = current != scenario
+        if not current_habitat_filename.exists() and not scenario_habitat_filename.exists():
+            continue
+        current_layer = yg.read_raster(current_habitat_filename) if current_habitat_filename.exists() \
+            else yg.constant(0.0)
+        scenario_layer = yg.read_raster(scenario_habitat_filename) if scenario_habitat_filename.exists() \
+            else yg.constant(0.0)
+        habitat_diff = current_layer - scenario_layer
+        from_current = yg.where(habitat_diff > 0, habitat_diff, 0)
+        layers.append(from_current)
 
-                gdal.SetCacheMax(512 * 1024 * 1024)
-                with RasterLayer.empty_raster_layer_like(
-                    diff_map,
-                    filename=raw_map_filename,
-                    datatype=DataType.Float32,
-                    threads=16
-                ) as result:
-                    if show_progress:
-                        with alive_bar(manual=True) as bar:
-                            diff_map.parallel_save(result, callback=bar, parallelism=concurrency)
-                    else:
-                        diff_map.parallel_save(result, parallelism=concurrency)
+    diff = yg.sum(layers)
+    area = yg.area_raster(diff.map_projection)
+    scaled_diff = diff * area
 
-        gdal.SetCacheMax(256 * 1024 * 1024 * 1024)
-        rescaled_map_filename = tmpdir_path /  "rescaled.tif"
-        print("reprojecting:")
-        with alive_bar(manual=True) as bar:
-            gdal.Warp(rescaled_map_filename, raw_map_filename, options=gdal.WarpOptions(
-                creationOptions=['COMPRESS=LZW', 'NUM_THREADS=16'],
-                multithread=True,
-                dstSRS=target_projection,
-                outputType=gdal.GDT_Float32,
-                xRes=pixel_scale,
-                yRes=0.0 - pixel_scale,
-                resampleAlg="average",
-                workingType=gdal.GDT_Float32,
-                callback=lambda a, _b, _c: bar(a), # pylint: disable=E1102
-            ))
+    ctx = alive_bar(manual=True) if show_progress else nullcontext()
+    with ctx as bar:
+        scaled_diff.to_geotiff(output_path, callback=bar, parallelism=parallelism)
 
-        print("scaling result:")
-        with UniformAreaLayer.layer_from_file(area_path) as area_map:
-            with RasterLayer.layer_from_file(rescaled_map_filename) as diff_map:
-
-                area_adjusted_map_filename = tmpdir_path /  "final.tif"
-                final = area_map * diff_map
-                gdal.SetCacheMax(512 * 1024 * 1024)
-
-                with RasterLayer.empty_raster_layer_like(
-                    final,
-                    filename=area_adjusted_map_filename,
-                    datatype=gdal.GDT_Float32,
-                    threads=16
-                ) as result:
-                    if show_progress:
-                        with alive_bar(manual=True) as bar:
-                            final.parallel_save(result, callback=bar, parallelism=concurrency)
-                    else:
-                        final.parallel_save(result, parallelism=concurrency)
-
-                shutil.move(area_adjusted_map_filename, output_path)
-
-
+@snakemake_compatible(mapping={
+    "current_path": "input.current",
+    "scenario_path": "params.scenario",
+    "parallelism": "threads",
+    "output_path": "output[0]",
+})
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate an area difference map.")
     parser.add_argument(
         '--current',
         type=Path,
-        help='Path of current map',
+        help='Path of current fractional maps',
         required=True,
         dest='current_path',
     )
     parser.add_argument(
         '--scenario',
         type=Path,
-        help='Path of the scenario map',
+        help='Path of the scenario fractional maps',
         required=True,
         dest='scenario_path',
-    )
-    parser.add_argument(
-        '--area',
-        type=Path,
-        help='Path of the area per pixel map',
-        required=True,
-        dest='area_path',
-    )
-    parser.add_argument(
-        "--scale",
-        type=float,
-        required=True,
-        dest="pixel_scale",
-        help="Output pixel scale value."
-    )
-    parser.add_argument(
-        '--projection',
-        type=str,
-        help="Target projection",
-        required=False,
-        dest="target_projection",
-        default=None
     )
     parser.add_argument(
         '--output',
         type=Path,
         help='Path where final map should be stored',
         required=True,
-        dest='results_path',
+        dest='output_path',
     )
     parser.add_argument(
         '-j',
@@ -133,7 +75,7 @@ def main() -> None:
         help='Number of concurrent threads to use for calculation.',
         required=False,
         default=None,
-        dest='concurrency',
+        dest='parallelism',
     )
     parser.add_argument(
         '-p',
@@ -148,11 +90,8 @@ def main() -> None:
     make_diff_map(
         args.current_path,
         args.scenario_path,
-        args.area_path,
-        args.pixel_scale,
-        args.target_projection,
-        args.results_path,
-        args.concurrency,
+        args.output_path,
+        args.parallelism,
         args.show_progress,
     )
 

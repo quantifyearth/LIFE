@@ -1,0 +1,203 @@
+# LIFE Pipeline - Snakemake Workflow
+# ===================================
+#
+# This workflow implements the LIFE biodiversity metric methodology.
+# It processes species data, generates Area of Habitat (AoH) rasters, and
+# produces the different scenario output rasters.
+#
+# Usage:
+#   snakemake --cores N all
+#   snakemake --cores N life
+#   snakemake --cores N summaries
+#   snakemake --cores N validation
+#
+# Environment variables required:
+#   DATADIR - Directory for input/output data
+#   DB_HOST, DB_NAME, DB_USER, DB_PASSWORD - PostgreSQL credentials
+#
+# For GBIF validation (optional):
+#   GBIF_USERNAME, GBIF_EMAIL, GBIF_PASSWORD
+
+import os
+from pathlib import Path
+
+# Allow GDAL/OGR to handle large GeoJSON objects
+os.environ["OGR_GEOJSON_MAX_OBJ_SIZE"] = "0"
+
+# Source directory (where this repo lives)
+SRCDIR = Path(workflow.basedir).parent
+
+
+# Load configuration
+configfile: SRCDIR / "config/config.yaml"
+
+
+# Data directory from environment variable
+DATADIR = Path(os.environ.get("DATADIR", "/data"))
+
+# Taxa list from config
+TAXA = config["taxa"]
+
+# Scenarios from config
+SCENARIOS = config["scenarios"]
+
+# Z-curve value (single value, not a wildcard)
+CURVE = config["curve"]
+
+# All scenarios used for AOH generation
+ALL_AOH_SCENARIOS = SCENARIOS + ["current", "pnv"]
+
+
+# =============================================================================
+# Utility Functions for Checkpoint-Based Expansion
+# =============================================================================
+# These must be defined before the includes so they are available when
+# the rule modules are parsed.
+
+
+def get_species_era(scenario):
+    """Return the species era (current/historic) for a given scenario."""
+    return "historic" if scenario == "pnv" else "current"
+
+
+def get_species_ids_for_taxa_scenario(wildcards):
+    """
+    Return species IDs for a given taxa and scenario.
+    Uses the extract_species_data checkpoint output.
+    """
+    era = get_species_era(wildcards.scenario)
+    checkpoint_output = checkpoints.extract_species_data.get(taxa=wildcards.taxa).output
+    if era == "current":
+        report_path = Path(str(checkpoint_output.current_report))
+    else:
+        report_path = Path(str(checkpoint_output.historic_report))
+    geojson_dir = report_path.parent
+    return [p.stem[6:] for p in sorted(geojson_dir.glob("*.geojson"))]
+
+
+def get_all_aoh_metadata_for_taxa_scenario(wildcards):
+    """
+    Return paths to all AOH metadata JSON files for a taxa and scenario.
+    """
+    species_ids = get_species_ids_for_taxa_scenario(wildcards)
+    return [
+        DATADIR / "aohs" / wildcards.scenario / wildcards.taxa / f"aoh_{sid}.json"
+        for sid in species_ids
+    ]
+
+
+def get_species_ids_for_delta_p(wildcards):
+    """Return species IDs for delta P (always from current/ era)."""
+    checkpoint_output = checkpoints.extract_species_data.get(taxa=wildcards.taxa).output
+    geojson_dir = Path(str(checkpoint_output.current_report)).parent
+    return [p.stem for p in sorted(geojson_dir.glob("*.geojson"))]
+
+
+def get_delta_p_sentinels_for_taxa_scenario(wildcards):
+    # Whatever logic you had in get_delta_p_sentinels_for_taxa_scenario,
+    # but returning .tif paths instead of sentinel paths
+    species_ids = get_species_ids_for_taxa_scenario(wildcards)
+    return [
+        DATADIR
+        / "deltap"
+        / wildcards.scenario
+        / CURVE
+        / wildcards.taxa
+        / f".{sid}.done"
+        for sid in species_ids
+    ]
+
+
+# Include rule modules
+include: "rules/prepare.smk"
+include: "rules/habitat.smk"
+include: "rules/scenario.smk"
+include: "rules/species.smk"
+include: "rules/aoh.smk"
+include: "rules/delta_p.smk"
+include: "rules/validation.smk"
+
+
+# =============================================================================
+# Target Rules
+# =============================================================================
+
+
+rule all:
+    """Default target: full LIFE pipeline + model validation."""
+    input:
+        expand(
+            str(DATADIR / "deltap_final" / "scaled_{scenario}_{curve}.tif"),
+            scenario=SCENARIOS,
+            curve=[CURVE],
+        ),
+        DATADIR / "validation" / "model_validation.csv",
+
+
+rule life:
+    """Target: run the LIFE pipeline without validation."""
+    input:
+        expand(
+            str(DATADIR / "deltap_final" / "scaled_{scenario}_{curve}.tif"),
+            scenario=SCENARIOS,
+            curve=[CURVE],
+        ),
+
+
+rule summaries:
+    """
+Target: generate species richness and endemism maps.
+NOT included in 'all' — run explicitly with: snakemake summaries
+"""
+    input:
+        DATADIR / "summaries" / "species_richness.tif",
+        DATADIR / "summaries" / "endemism.tif",
+
+
+rule aohs:
+    """Target: generate all AOH rasters and collated summary CSVs."""
+    input:
+        expand(
+            str(DATADIR / "aohs" / "{scenario}" / "{taxa}" / ".complete"),
+            scenario=ALL_AOH_SCENARIOS,
+            taxa=TAXA,
+        ),
+        expand(
+            str(DATADIR / "aohs" / "{scenario}.csv"),
+            scenario=ALL_AOH_SCENARIOS,
+        ),
+
+
+rule species_data:
+    """Target: extract species data from PostgreSQL."""
+    input:
+        expand(
+            str(DATADIR / "species-info" / "{taxa}" / "current" / "report.csv"),
+            taxa=TAXA,
+        ),
+
+
+rule prepare:
+    """Target: prepare all base layers."""
+    input:
+        DATADIR / "crosswalk.csv",
+        DATADIR / "habitat_layers" / "current" / ".sentinel",
+        DATADIR / "habitat_layers" / "pnv" / ".sentinel",
+        DATADIR / "elevation-max.tif",
+        DATADIR / "elevation-min.tif",
+        DATADIR / "land_cover_area.csv",
+
+
+rule footprints:
+    """Target: compute footprint of humanity for all counterfactual scenarios."""
+    input:
+        expand(
+            str(DATADIR / "footprint" / "{scenario}.csv"),
+            scenario=SCENARIOS,
+        ),
+
+
+rule validation:
+    """Target: run model validation."""
+    input:
+        DATADIR / "validation" / "model_validation.csv",
