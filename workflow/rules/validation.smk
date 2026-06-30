@@ -13,9 +13,9 @@
 
 rule model_validation:
     """
-Perform statistical validation of AOH models (Dahal et al. methodology).
-Runs on the "current" scenario AOHs only.
-"""
+    Perform statistical validation of AOH models (Dahal et al. methodology).
+    Runs on the "current" scenario AOHs only.
+    """
     input:
         collated=DATADIR / "aohs" / "current.csv",
         version_sentinel=DATADIR / ".sentinels" / "aoh_version.txt",
@@ -40,9 +40,9 @@ Runs on the "current" scenario AOHs only.
 
 rule species_richness:
     """
-Calculate species richness from current AOH rasters.
-NOT included in 'all' — use the 'summaries' target explicitly.
-"""
+    Calculate species richness from current AOH rasters.
+    NOT included in 'all' — use the 'summaries' target explicitly.
+    """
     input:
         aoh_sentinel=DATADIR / "aohs" / "current.csv",
         version_sentinel=DATADIR / ".sentinels" / "aoh_version.txt",
@@ -65,9 +65,9 @@ NOT included in 'all' — use the 'summaries' target explicitly.
 
 rule endemism:
     """
-Calculate endemism from current AOH rasters.
-NOT included in 'all' — use the 'summaries' target explicitly.
-"""
+    Calculate endemism from current AOH rasters.
+    NOT included in 'all' — use the 'summaries' target explicitly.
+    """
     input:
         aoh_sentinel=DATADIR / "aohs" / "current.csv",
         species_richness=DATADIR / "summaries" / "species_richness.tif",
@@ -96,12 +96,12 @@ NOT included in 'all' — use the 'summaries' target explicitly.
 
 rule fetch_gbif_data:
     """
-Fetch GBIF occurrence data for a taxa.
-Expensive (hours) — only runs if output doesn't exist.
+    Fetch GBIF occurrence data for a taxa.
+    Expensive (hours) — only runs if output doesn't exist.
 
-Environment variables required:
-    GBIF_USERNAME, GBIF_EMAIL, GBIF_PASSWORD
-"""
+    Environment variables required:
+        GBIF_USERNAME, GBIF_EMAIL, GBIF_PASSWORD
+    """
     input:
         collated=ancient(DATADIR / "aohs" / "current.csv"),
     output:
@@ -124,8 +124,8 @@ Environment variables required:
 
 rule validate_gbif_occurrences:
     """
-Validate current AOH models against GBIF occurrence data.
-"""
+    Validate current AOH models against GBIF occurrence data.
+    """
     input:
         gbif_sentinel=DATADIR / "validation" / "occurrences" / ".{taxa}_fetched",
         aoh_sentinel=ancient(DATADIR / "aohs" / "current" / "{taxa}" / ".complete"),
@@ -156,8 +156,8 @@ Validate current AOH models against GBIF occurrence data.
 
 rule occurrence_validation:
     """
-Target rule for GBIF validation for all taxa.
-WARNING: Expensive. Only run explicitly: snakemake occurrence_validation
-"""
+    Target rule for GBIF validation for all taxa.
+    WARNING: Expensive. Only run explicitly: snakemake occurrence_validation
+    """
     input:
         expand(str(DATADIR / "validation" / "occurrences" / "{taxa}.csv"), taxa=TAXA),

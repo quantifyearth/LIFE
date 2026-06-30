@@ -16,15 +16,15 @@
 
 checkpoint extract_species_data:
     """
-Extract species data from PostgreSQL database.
+    Extract species data from PostgreSQL database.
 
-This is a checkpoint because the number of output GeoJSON files is only
-known after extraction. Each taxa produces N species files in both current/
-and historic/ subdirectories.
+    This is a checkpoint because the number of output GeoJSON files is only
+    known after extraction. Each taxa produces N species files in both current/
+    and historic/ subdirectories.
 
-Environment variables required:
-    DB_HOST, DB_NAME, DB_USER, DB_PASSWORD
-"""
+    Environment variables required:
+        DB_HOST, DB_NAME, DB_USER, DB_PASSWORD
+    """
     output:
         current_report=DATADIR / "species-info" / "{taxa}" / "current" / "report.csv",
         historic_report=DATADIR / "species-info" / "{taxa}" / "historic" / "report.csv",

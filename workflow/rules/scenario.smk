@@ -32,9 +32,9 @@ COUNTERFACTUAL_SCENARIOS = ["arable"] + list(RESTORE_SCENARIOS.keys())
 
 rule make_arable_map:
     """
-Generate the arable scenario map at 100m resolution.
-All non-urban land is converted to arable.
-"""
+    Generate the arable scenario map at 100m resolution.
+    All non-urban land is converted to arable.
+    """
     input:
         current_sentinel=DATADIR / "100m" / "current" / ".sentinel",
     output:
@@ -64,9 +64,9 @@ All non-urban land is converted to arable.
 
 rule make_restore_scenario:
     """
-Generate a restore scenario map at 100m resolution.
-The IUCN habitat codes to restore are passed via --codes.
-"""
+    Generate a restore scenario map at 100m resolution.
+    The IUCN habitat codes to restore are passed via --codes.
+    """
     input:
         current_sentinel=DATADIR / "100m" / "current" / ".sentinel",
         pnv=DATADIR / "habitat" / "pnv_raw.tif",
@@ -104,9 +104,9 @@ The IUCN habitat codes to restore are passed via --codes.
 
 rule warp_scenario:
     """
-Warp a scenario map from 100m to the target pixel scale.
-PRECIOUS: Only rebuilds if the sentinel is explicitly deleted.
-"""
+    Warp a scenario map from 100m to the target pixel scale.
+    PRECIOUS: Only rebuilds if the sentinel is explicitly deleted.
+    """
     input:
         sentinel=ancient(DATADIR / "100m" / "{scenario}" / ".sentinel"),
     output:
@@ -144,9 +144,9 @@ PRECIOUS: Only rebuilds if the sentinel is explicitly deleted.
 
 rule diff_map_scenario:
     """
-Generate the area difference map between current and a scenario's habitat layers.
-Used by the delta P scaling step.
-"""
+    Generate the area difference map between current and a scenario's habitat layers.
+    Used by the delta P scaling step.
+    """
     input:
         current_sentinel=DATADIR / "habitat_layers" / "current" / ".sentinel",
         scenario_sentinel=DATADIR / "habitat_layers" / "{scenario}" / ".sentinel",

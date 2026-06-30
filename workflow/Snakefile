@@ -146,9 +146,9 @@ rule life:
 
 rule summaries:
     """
-Target: generate species richness and endemism maps.
-NOT included in 'all' — run explicitly with: snakemake summaries
-"""
+    Target: generate species richness and endemism maps.
+    NOT included in 'all' — run explicitly with: snakemake summaries
+    """
     input:
         DATADIR / "summaries" / "species_richness.tif",
         DATADIR / "summaries" / "endemism.tif",

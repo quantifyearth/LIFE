@@ -25,8 +25,8 @@ from pathlib import Path
 
 rule gaez_download:
     """
-Fetch the compressed GAEZ data.
-"""
+    Fetch the compressed GAEZ data.
+    """
     output:
         archive=DATADIR / "food" / "LR.zip",
     log:
@@ -123,9 +123,9 @@ rule hyde_expand_land_usage_raster:
 
 rule modify_hyde_pixel_scale:
     """
-Fix the pixel scale value in the HYDE data — the rounding is not precise
-enough to align with the GAEZ data.
-"""
+    Fix the pixel scale value in the HYDE data — the rounding is not precise
+    enough to align with the GAEZ data.
+    """
     input:
         raw_hyde_raster=DATADIR / "food" / "grazing2017AD.asc",
     output:
@@ -139,9 +139,9 @@ enough to align with the GAEZ data.
 
 rule add_hyde_projection_info:
     """
-The HYDE data ships without a projection, so add one so that
-the rest of the workflow can mix it with projected raster data.
-"""
+    The HYDE data ships without a projection, so add one so that
+    the rest of the workflow can mix it with projected raster data.
+    """
     output:
         hyde_projection_file=DATADIR / "food" / "modified_grazing2017AD.prj",
     params:
@@ -157,8 +157,8 @@ the rest of the workflow can mix it with projected raster data.
 # =============================================================================
 rule combine_gaez_hyde:
     """
-Combine the GAEZ and Hyde data, adjusting for overflow in cells.
-"""
+    Combine the GAEZ and Hyde data, adjusting for overflow in cells.
+    """
     input:
         hyde_projection_file=DATADIR / "food" / "modified_grazing2017AD.prj",
         hyde_raster=DATADIR / "food" / "modified_grazing2017AD.asc",
@@ -179,10 +179,10 @@ Combine the GAEZ and Hyde data, adjusting for overflow in cells.
 
 rule pnv_100m:
     """
-Rescale the PNV map to 100m resolution.
-Yirgacheffe can rescale dynamically, but pre-scaling is faster at the cost
-of some extra disk space.
-"""
+    Rescale the PNV map to 100m resolution.
+    Yirgacheffe can rescale dynamically, but pre-scaling is faster at the cost
+    of some extra disk space.
+    """
     input:
         pnv=DATADIR / "habitat" / "pnv_raw.tif",
     output:
@@ -211,9 +211,9 @@ of some extra disk space.
 
 rule current_raws:
     """
-Build the LIFE current map, which is Jung with updates applied
-and restricted to L1 to match the PNV map restrictions.
-"""
+    Build the LIFE current map, which is Jung with updates applied
+    and restricted to L1 to match the PNV map restrictions.
+    """
     input:
         updates_sentinel=DATADIR / "habitat" / ".downloaded_updates",
         habitat=DATADIR / "100m" / "jung_l2_raw.tif",
@@ -230,12 +230,12 @@ and restricted to L1 to match the PNV map restrictions.
 
 rule build_food_map:
     """
-Build the food-enhanced current habitat map at 100m resolution by combining
-the Jung current map with GAEZ/HYDE crop and pasture fractions.
+    Build the food-enhanced current habitat map at 100m resolution by combining
+    the Jung current map with GAEZ/HYDE crop and pasture fractions.
 
-PRECIOUS: Only rebuilds if the sentinel is explicitly deleted.
-This is the most expensive step in the pipeline.
-"""
+    PRECIOUS: Only rebuilds if the sentinel is explicitly deleted.
+    This is the most expensive step in the pipeline.
+    """
     input:
         jung=ancient(DATADIR / "100m" / "jung_current" / ".sentinel"),
         pnv=ancient(DATADIR / "100m" / "pnv.tif"),
@@ -260,11 +260,11 @@ This is the most expensive step in the pipeline.
 
 rule warp_current:
     """
-Warp the food-enhanced current map from 100m to the target pixel scale
-(5 arc-seconds, ~1.67km at the equator).
+    Warp the food-enhanced current map from 100m to the target pixel scale
+    (5 arc-seconds, ~1.67km at the equator).
 
-PRECIOUS: Only rebuilds if the sentinel is explicitly deleted.
-"""
+    PRECIOUS: Only rebuilds if the sentinel is explicitly deleted.
+    """
     input:
         sentinel=ancient(DATADIR / "100m" / "current" / ".sentinel"),
     output:
@@ -305,9 +305,9 @@ PRECIOUS: Only rebuilds if the sentinel is explicitly deleted.
 
 rule land_cover_area:
     """
-Compare total land cover area between jung_current and current maps.
-Produces a CSV with land cover class as rows and source map as columns.
-"""
+    Compare total land cover area between jung_current and current maps.
+    Produces a CSV with land cover class as rows and source map as columns.
+    """
     input:
         jung_current_sentinel=DATADIR / "100m" / "jung_current" / ".sentinel",
         current_sentinel=DATADIR / "100m" / "current" / ".sentinel",
@@ -330,11 +330,11 @@ Produces a CSV with land cover class as rows and source map as columns.
 
 rule pnv_processed:
     """
-Process the PNV map into per-class fractional rasters at the target pixel scale
-using aoh-habitat-process.
+    Process the PNV map into per-class fractional rasters at the target pixel scale
+    using aoh-habitat-process.
 
-PRECIOUS: Only rebuilds if the sentinel is explicitly deleted.
-"""
+    PRECIOUS: Only rebuilds if the sentinel is explicitly deleted.
+    """
     input:
         pnv=ancient(DATADIR / "habitat" / "pnv_raw.tif"),
     output:
