@@ -33,7 +33,7 @@ def make_diff_map(
         layers.append(from_current)
 
     diff = yg.sum(layers)
-    area = yg.area_raster(diff.map_projection)
+    area = yg.area_raster(diff.projection)
     scaled_diff = diff * area
 
     ctx = alive_bar(manual=True) if show_progress else nullcontext()
