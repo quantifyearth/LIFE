@@ -217,7 +217,7 @@ rule current_raws:
     input:
         updates_sentinel=DATADIR / "habitat" / ".downloaded_updates",
         habitat=DATADIR / "100m" / "jung_l2_raw.tif",
-        crosswalk=DATADIR / "crosswalk.csv",
+        crosswalk=ancient(DATADIR / "crosswalk.csv"),
     output:
         sentinel=DATADIR / "100m" / "jung_current" / ".sentinel",
     threads: workflow.cores

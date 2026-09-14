@@ -4,6 +4,8 @@
 # Handles generating scenario-specific habitat maps and difference maps:
 #
 # - Arable: all non-urban land converted to arable
+# - Pasture: all non-urban land converted to pasture
+# - Urban: all land converted to urban
 # - Restore variants: agricultural/pastoral land restored to PNV
 #
 # Each scenario:
@@ -22,7 +24,7 @@ RESTORE_SCENARIOS = {
     "restore_agriculture": "14.1,14.2",
 }
 
-COUNTERFACTUAL_SCENARIOS = ["arable"] + list(RESTORE_SCENARIOS.keys())
+COUNTERFACTUAL_SCENARIOS = ["arable", "pasture", "urban"] + list(RESTORE_SCENARIOS.keys())
 
 
 # =============================================================================
@@ -58,6 +60,72 @@ rule make_arable_map:
 
 
 # =============================================================================
+# Pasture scenario
+# =============================================================================
+
+
+rule make_pasture_map:
+    """
+    Generate the pasture scenario map at 100m resolution.
+    All non-urban land is converted to pasture.
+    """
+    input:
+        current_sentinel=DATADIR / "100m" / "current" / ".sentinel",
+    output:
+        sentinel=DATADIR / "100m" / "pasture" / ".sentinel",
+    log:
+        DATADIR / "logs" / "make_pasture_map.log",
+    threads: workflow.cores
+    params:
+        current_dir=DATADIR / "100m" / "current",
+        output_dir=DATADIR / "100m" / "pasture",
+    shell:
+        """
+        python3 {SRCDIR}/prepare_layers/make_pasture_map.py \
+            --current {params.current_dir} \
+            --output {params.output_dir} \
+            -j {threads} \
+            -p \
+            2>&1 | tee {log}
+        touch {output.sentinel}
+        """
+
+
+# =============================================================================
+# Urban scenario
+# =============================================================================
+
+
+rule make_urban_map:
+    """
+    Generate the urban scenario map at 100m resolution.
+    All land is converted to urban (IUCN habitat code 14.5).
+    """
+    input:
+        current_sentinel=DATADIR / "100m" / "current" / ".sentinel",
+        crosswalk=ancient(DATADIR / "crosswalk.csv"),
+    output:
+        sentinel=DATADIR / "100m" / "urban" / ".sentinel",
+    log:
+        DATADIR / "logs" / "make_urban_map.log",
+    params:
+        # Any already-generated 100m layer works as the examplar raster; the
+        # urban layer is guaranteed to exist as it's used by other scenarios too.
+        examplar=DATADIR / "100m" / "current" / "lcc_1405.tif",
+        output_dir=DATADIR / "100m" / "urban",
+    shell:
+        """
+        python3 {SRCDIR}/prepare_layers/make_constant_habitat.py \
+            --examplar {params.examplar} \
+            --habitat_code 14.5 \
+            --crosswalk {input.crosswalk} \
+            --output {params.output_dir} \
+            2>&1 | tee {log}
+        touch {output.sentinel}
+        """
+
+
+# =============================================================================
 # Restore scenario variants
 # =============================================================================
 
@@ -70,7 +138,7 @@ rule make_restore_scenario:
     input:
         current_sentinel=DATADIR / "100m" / "current" / ".sentinel",
         pnv=DATADIR / "habitat" / "pnv_raw.tif",
-        crosswalk=DATADIR / "crosswalk.csv",
+        crosswalk=ancient(DATADIR / "crosswalk.csv"),
     output:
         sentinel=DATADIR / "100m" / "{scenario}" / ".sentinel",
     log:
