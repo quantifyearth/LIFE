@@ -34,15 +34,15 @@ def regression_plot(
         yg.read_raster(a_path) as a_layer,
         yg.read_raster(b_path) as b_layer,
     ):
-        if a_layer.pixel_scale != b_layer.pixel_scale:
+        if a_layer.projection != b_layer.projection:
             sys.exit("GeoTIFFs have different pixel scale")
         if a_layer.area != b_layer.area:
             sys.exit("GeoTIFFs have different spatial coordinates")
-        if a_layer.window != b_layer.window:
+        if a_layer.dimensions != b_layer.dimensions:
             sys.exit("GeoTIFFs have different pixel dimensions")
 
-        a_pixels = a_layer.read_array(0, 0, a_layer.window.xsize, a_layer.window.ysize)
-        b_pixels = b_layer.read_array(0, 0, b_layer.window.xsize, b_layer.window.ysize)
+        a_pixels = a_layer.read_array(0, 0, a_layer.dimensions[0], a_layer.dimensions[1])
+        b_pixels = b_layer.read_array(0, 0, b_layer.dimensions[0], b_layer.dimensions[1])
 
     with Pool(processes=cpu_count() // 2) as pool:
         filtered_chunk_pairs = pool.map(filter_data, zip(a_pixels, b_pixels))

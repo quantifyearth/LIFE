@@ -16,8 +16,8 @@ def build_gaez_hyde(
 
     with yg.read_raster(gaez_path) as gaez:
         with yg.read_raster(hyde_path) as hyde:
-            assert gaez.map_projection == hyde.map_projection
-            projection = gaez.map_projection
+            assert gaez.projection == hyde.projection
+            projection = gaez.projection
 
             with yg.area_raster(projection) as area:
                 portional_hyde = (hyde.nan_to_num() * 1000000) / area
