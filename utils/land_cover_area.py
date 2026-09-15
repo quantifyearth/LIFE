@@ -6,26 +6,27 @@ import pandas as pd
 import yirgacheffe as yg
 from snakemake_argparse_bridge import snakemake_compatible  # type: ignore
 
-def sum_dir(directory: Path) -> dict[int,float]:
+def sum_dir(directory: Path, parallelism: int | None) -> dict[int,float]:
     result: dict[int,float] = {}
     for raster_path in directory.glob("lcc_*.tif"):
         class_num = int(raster_path.stem.split("_")[1])
         with (
             yg.read_raster(raster_path) as raster,
-            yg.area_raster(raster.map_projection) as area_raster,
+            yg.area_raster(raster.projection) as area_raster,
         ):
-            result[class_num] = (raster * area_raster).parallel_sum()
+            result[class_num] = (raster * area_raster).parallel_sum(parallelism=parallelism)
     return result
 
 def land_cover_area(
     jung_current_dir: Path,
     current_dir: Path,
     output_filename: Path,
+    parallelism: int | None,
 ) -> None:
     os.makedirs(output_filename.parent, exist_ok=True)
 
-    jung_current_areas = sum_dir(jung_current_dir)
-    current_areas = sum_dir(current_dir)
+    jung_current_areas = sum_dir(jung_current_dir, parallelism)
+    current_areas = sum_dir(current_dir, parallelism)
 
     all_classes = sorted(set(jung_current_areas) | set(current_areas))
     rows = [
@@ -67,12 +68,21 @@ def main() -> None:
         dest="output_filename",
         help="Destination CSV path",
     )
+    parser.add_argument(
+        '-j',
+        type=int,
+        help='Number of parallel threads to use for calculation.',
+        required=False,
+        default=None,
+        dest='parallelism',
+    )
     args = parser.parse_args()
 
     land_cover_area(
         args.jung_current_dir,
         args.current_dir,
         args.output_filename,
+        args.parallelism,
     )
 
 

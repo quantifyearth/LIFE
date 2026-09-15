@@ -21,7 +21,7 @@ def habitat_stats(
                 continue
             with (
                 yg.read_raster(habitat) as raster,
-                yg.area_raster(raster.map_projection) as area_raster,
+                yg.area_raster(raster.projection) as area_raster,
             ):
                 raw_area = raster.parallel_sum(parallelism=process_count)
                 scaled_area_calc = raster * area_raster
