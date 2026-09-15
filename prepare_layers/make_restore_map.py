@@ -64,7 +64,7 @@ def make_restore_map(
                             estimated_rows_per_free_memory = mem.free / estimated_memory_per_row
                             estimated_chunk_size = estimated_rows_per_free_memory / parallelism
 
-                        updated_layer = layer + (replacement_total * (pnv == lcc_code).astype(yg.DataType.Float32))
+                        updated_layer = layer + (replacement_total * (pnv == lcc_code).as_type(yg.DataType.Float32))
                         capped_updated_layer = yg.where(updated_layer > 1, 1.0, updated_layer)
 
                         if parallelism is not None:
