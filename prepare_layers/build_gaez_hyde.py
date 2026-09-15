@@ -14,34 +14,35 @@ def build_gaez_hyde(
 ) -> None:
     os.makedirs(output_dir_path, exist_ok=True)
 
-    with yg.read_raster(gaez_path) as gaez:
-        with yg.read_raster(hyde_path) as hyde:
-            assert gaez.projection == hyde.projection
-            projection = gaez.projection
+    with (
+        yg.read_raster(gaez_path) as gaez,
+        yg.read_raster(hyde_path) as hyde,
+        yg.area_raster(gaez.projection) as area,
+    ):
+        assert gaez.projection == hyde.projection
 
-            with yg.area_raster(projection) as area:
-                portional_hyde = (hyde.nan_to_num() * 1000000) / area
-                portional_gaez = gaez / 100.0
+        portional_hyde = (hyde.nan_to_num() * 1000000) / area
+        portional_gaez = gaez / 100.0
 
-                # where gaez and hyde disagree (sum greater than disagg cutoff), scale down
-                uncapped_total = portional_gaez + portional_hyde
-                # NaNs stop warnings about divide by zero
-                uncapped_total_with_nan = yg.where(uncapped_total == 0.0, float("nan"), uncapped_total)
+        # where gaez and hyde disagree (sum greater than disagg cutoff), scale down
+        uncapped_total = portional_gaez + portional_hyde
+        # NaNs stop warnings about divide by zero
+        uncapped_total_with_nan = yg.where(uncapped_total == 0.0, float("nan"), uncapped_total)
 
-                # calculate ag-perc scalars
-                total = yg.where(
-                    uncapped_total_with_nan >= DISAGG_CUTOFF,
-                    DISAGG_CUTOFF - (yg.constant(1) / yg.exp(uncapped_total_with_nan * 2)),
-                    uncapped_total_with_nan,
-                )
+        # calculate ag-perc scalars
+        total = yg.where(
+            uncapped_total_with_nan >= DISAGG_CUTOFF,
+            DISAGG_CUTOFF - (yg.constant(1) / yg.exp(uncapped_total_with_nan * 2)),
+            uncapped_total_with_nan,
+        )
 
-                gaez_ratio = portional_gaez / uncapped_total_with_nan
-                gaez_values = total * gaez_ratio
-                gaez_values.to_geotiff(output_dir_path / "crop.tif")
+        gaez_ratio = portional_gaez / uncapped_total_with_nan
+        gaez_values = total * gaez_ratio
+        gaez_values.to_geotiff(output_dir_path / "crop.tif")
 
-                hyde_ratio = portional_hyde / uncapped_total_with_nan
-                hyde_values = total * hyde_ratio
-                hyde_values.to_geotiff(output_dir_path / "pasture.tif")
+        hyde_ratio = portional_hyde / uncapped_total_with_nan
+        hyde_values = total * hyde_ratio
+        hyde_values.to_geotiff(output_dir_path / "pasture.tif")
 
 @snakemake_compatible(mapping={
     "gaez_path": "input.gaez_raster",
