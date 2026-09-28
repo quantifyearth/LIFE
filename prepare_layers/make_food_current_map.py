@@ -162,7 +162,7 @@ def process_tile(
         return lcc_data_map
 
     for current in current_maps.values():
-        assert current.map_projection == pnv.map_projection
+        assert current.projection == pnv.projection
         assert current.area == pnv.area
 
     if not np.isnan(tile.crop_target):
@@ -243,12 +243,12 @@ def process_tile_concurrently(
     }
     reference_layer = next(iter(current_maps.values()))
     with yg.read_raster(pnv_path) as pnv:
-        pnv.set_window_for_intersection(reference_layer.area)
+        aligned_pnv = pnv.as_area(reference_layer.area)
         while True:
             tile : TileInfo | None = input_queue.get()
             if tile is None:
                 break
-            res = process_tile(current_maps, pnv, tile)
+            res = process_tile(current_maps, aligned_pnv, tile)
             for lcc, data in res.items():
                 result_queues[lcc].put((tile, data.tobytes()))
     for queue in result_queues.values():
@@ -262,13 +262,13 @@ def build_tile_list(
     tiles = []
 
     with yg.read_raster(next(current_lvl1_path.glob("*.tif"))) as example:
-        current_dimensions = example.window.xsize, example.window.ysize
+        current_dimensions = example.dimensions
     with (
         yg.read_raster(crop_adjustment_path) as crop,
         yg.read_raster(pasture_adjustment_path) as pasture,
     ):
-        assert crop.window == pasture.window
-        argi_dimensions = crop.window.xsize, crop.window.ysize
+        assert crop.dimensions == pasture.dimensions
+        argi_dimensions = crop.dimensions
 
         x_scale = current_dimensions[0] / argi_dimensions[0]
         y_scale = current_dimensions[1] / argi_dimensions[1]
@@ -278,10 +278,10 @@ def build_tile_list(
         y_steps = [round(i * y_scale) for i in range(argi_dimensions[1])]
         y_steps.append(current_dimensions[1])
 
-        for y in range(crop.window.ysize):
-            crop_row = crop.read_array(0, y, crop.window.xsize, 1)
-            pasture_row = pasture.read_array(0, y, pasture.window.xsize, 1)
-            for x in range(crop.window.xsize):
+        for y in range(crop.dimensions[1]):
+            crop_row = crop.read_array(0, y, crop.dimensions[0], 1)
+            pasture_row = pasture.read_array(0, y, pasture.dimensions[0], 1)
+            for x in range(crop.dimensions[0]):
                 tiles.append(TileInfo(
                     x_steps[x],
                     y_steps[y],
@@ -301,7 +301,9 @@ def assemble_map(
 ) -> None:
     os.makedirs(output_path, exist_ok=True)
     with yg.read_raster(current_lvl1_path / f"lcc_{lcc}.tif") as current_map:
-        new_map = yg.layers.RasterLayer.empty_raster_layer_like(
+        # Using a private API as writing all this data to a numpy array in memory before
+        # flushing is too big. Yirgacheffe needs a streaming API for this use case.
+        new_map = yg._layers.RasterLayer.empty_raster_layer_like( # pylint: disable=W0212
             current_map,
             filename=output_path / f"lcc_{lcc}.tif",
             threads=16,

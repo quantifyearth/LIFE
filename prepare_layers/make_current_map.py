@@ -83,7 +83,7 @@ def make_current_maps(
                 continue
             logger.info("Processing %s...", lcc)
             per_class = current_map == lcc
-            cast_per_class = per_class.astype(yg.DataType.Float32)
+            cast_per_class = per_class.as_type(yg.DataType.Float32)
             ctx = alive_bar(manual=True, title=str(lcc)) if show_progress else nullcontext()
             with ctx as bar:
                 cast_per_class.to_geotiff(

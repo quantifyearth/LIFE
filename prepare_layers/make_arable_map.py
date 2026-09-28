@@ -33,7 +33,7 @@ def make_arable_map(
             # If we use all the cores on bigger machines we'll run out of memory
             # as Yirgacheffe isn't that smart yet unfortunately
             mem = psutil.virtual_memory()
-            estimated_memory_per_row = (urban.window.xsize * 8) * 2
+            estimated_memory_per_row = (urban.dimensions[0] * 8) * 2
             estimated_rows_per_free_memory = mem.free / estimated_memory_per_row
             estimated_chunk_size = estimated_rows_per_free_memory / parallelism
 
