@@ -17,8 +17,9 @@ def species_totals(
         count = len(list(taxa_path.glob("*.tif")))
         res[taxa] = count
 
+    res["all"] = sum(res.values())
+
     df = pd.DataFrame([[a, b] for a, b in res.items()], columns=["taxa", "count"])
-    df.loc[-1] = ["all", df["count"].sum()]
     df.to_csv(output_path, index=False)
 
 @snakemake_compatible(mapping={
