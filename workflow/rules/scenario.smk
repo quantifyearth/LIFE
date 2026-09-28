@@ -24,7 +24,9 @@ RESTORE_SCENARIOS = {
     "restore_agriculture": "14.1,14.2",
 }
 
-COUNTERFACTUAL_SCENARIOS = ["arable", "pasture", "urban"] + list(RESTORE_SCENARIOS.keys())
+COUNTERFACTUAL_SCENARIOS = ["arable", "pasture", "urban"] + list(
+    RESTORE_SCENARIOS.keys()
+)
 
 
 # =============================================================================
@@ -202,8 +204,8 @@ rule warp_scenario:
                 -co COMPRESS=LZW \
                 -co NUM_THREADS={threads} \
                 -wo NUM_THREADS={threads} \
-		--config GDAL_NUM_THREADS {threads} \
-		-wm "20%" \
+                --config GDAL_NUM_THREADS {threads} \
+                -wm "20%" \
                 "$d" \
                 {params.output_dir}/"$basename" \
                 2>&1
