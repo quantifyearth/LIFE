@@ -7,7 +7,8 @@ import pandas as pd
 import yirgacheffe as yg
 from snakemake_argparse_bridge import snakemake_compatible # type: ignore
 
-SCALE = 1e6
+FILTER_AREA = 1e4
+FINAL_SCALE = 1e6
 
 def delta_p_scaled_area(
     input_path: Path,
@@ -26,7 +27,7 @@ def delta_p_scaled_area(
     species_total_counts = pd.read_csv(species_totals_path)
 
     with yg.read_raster(diff_area_map_path) as diff_area:
-        diff_area_rescaled = yg.where(diff_area < SCALE, float('nan'), diff_area / SCALE)
+        diff_area_rescaled = yg.where(diff_area < FILTER_AREA, float('nan'), diff_area / FINAL_SCALE)
 
         # Process all species in total
         total_species_count = int(species_total_counts[species_total_counts.taxa=="all"]["count"].values[0])

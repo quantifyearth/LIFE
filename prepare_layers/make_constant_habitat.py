@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 
 import pandas as pd
-from yirgacheffe.layers import ConstantLayer, RasterLayer # type: ignore
+import yirgacheffe as yg
 
 def make_constant_habitat(
     example_path: Path,
@@ -16,9 +16,9 @@ def make_constant_habitat(
     translations = crosswalk[crosswalk.code==habitat_code]
     specific_jung_code = list(translations.value)[-1]
     filename = output_path / f"lcc_{specific_jung_code}.tif"
-    with RasterLayer.layer_from_file(example_path) as example:
-        with RasterLayer.empty_raster_layer_like(example, filename=filename) as result:
-            ConstantLayer(1.0).save(result)
+    with yg.read_raster(example_path) as example:
+        const = yg.full_like(example.as_type(yg.DataType.Float32), 1.0)
+        const.to_geotiff(filename)
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate a fixed habitat layer")

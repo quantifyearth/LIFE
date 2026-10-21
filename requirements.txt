@@ -14,9 +14,9 @@ rasterio
 requests
 alive-progress
 matplotlib
-yirgacheffe>=1.12.7,<2.0
-aoh>=2.1.2,<3.0
-gdal[numpy]==3.12.2
+yirgacheffe<3.0
+aoh<4.0
+gdal[numpy]
 git+https://github.com/quantifyearth/iucn_modlib.git
 git+https://github.com/quantifyearth/seasonality
 

@@ -1,6 +1,4 @@
 import argparse
-import os
-from glob import glob
 from pathlib import Path
 from typing import Any
 
@@ -8,7 +6,7 @@ import duckdb
 import pandas as pd
 import geopandas as gpd
 import shapely
-from yirgacheffe.layers import RasterLayer, VectorLayer
+import yirgacheffe as yg
 
 MAIN_STATEMENT = """
 SELECT
@@ -22,16 +20,12 @@ WHERE
     AND ST_Intersects(geometry, ST_GeomFromText(?));
 """
 
-def get_pixel_value(layer: RasterLayer, lat: float, lng: float) -> float:
-    x, y = layer.pixel_for_latlng(lat, lng)
-    return layer.read_array(x, y, 1, 1)[0][0]
-
 def query_deltap_per_project(
     project_code: str,
     geometry: Any,
-    project_mask: VectorLayer,
-    corpus: str,
-    outputs_path: str,
+    project_mask: yg.YirgacheffeLayer,
+    corpus: Path,
+    outputs_path: Path,
 ):
 
     con = duckdb.connect(":default:")
@@ -49,20 +43,16 @@ def query_deltap_per_project(
         for row in allinfo:
             taxid = row[0]
 
-            deltaps_dir = os.path.join(corpus, "deltap", scenario, "0.25", klass)
-            deltap_files = glob(f"{taxid}_*.tif", root_dir=deltaps_dir)
+            deltaps_dir = corpus / "deltap" / scenario / "0.25" / klass
+            deltap_files = list(deltaps_dir.glob(f"{taxid}_*.tif"))
             if not deltap_files:
                 continue
             assert len(deltap_files) == 1
 
-            layer = RasterLayer.layer_from_file(os.path.join(deltaps_dir, deltap_files[0]))
+            layer = yg.read_raster(deltap_files[0])
             try:
                 calc = layer * project_mask
-                e = RasterLayer.empty_raster_layer_like(
-                    calc,
-                    filename=os.path.join(outputs_path, f"{project_code}_{taxid}.tif")
-                )
-                calc.save(e)
+                calc.to_geotiff(outputs_path / f"{project_code}_{taxid}.tif")
                 species_dict[taxid] = layer
             except ValueError:
                 pass
@@ -71,15 +61,18 @@ def query_deltap_per_project(
         if len(species_keys) == 0:
             continue
 
-        for y in range(project_mask.window.ysize):
-            for x in range(project_mask.window.xsize):
+        project_mask_projection = project_mask.projection
+        assert project_mask_projection is not None
+
+        for y in range(project_mask.dimensions[1]):
+            for x in range(project_mask.dimensions[0]):
                 maskval = project_mask.read_array(x, y, 1, 1)[0][0]
                 lat = project_mask.area.top + \
-                    (project_mask.pixel_scale.ystep * y) + \
-                    (project_mask.pixel_scale.ystep / 2)
+                    (project_mask_projection.ystep * y) + \
+                    (project_mask_projection.ystep / 2)
                 lng = project_mask.area.left + \
-                    (project_mask.pixel_scale.xstep * x) + \
-                    (project_mask.pixel_scale.xstep / 2)
+                    (project_mask_projection.xstep * x) + \
+                    (project_mask_projection.xstep / 2)
                 result_row = [lat, lng]
                 if not maskval:
                     continue
@@ -88,38 +81,31 @@ def query_deltap_per_project(
                     result_row.append(val)
                 table.append(result_row)
         df = pd.DataFrame(table, columns=["lat", "lng"] + species_keys)
-        df.to_csv(os.path.join(outputs_path, f"{project_code}_{klass}_{scenario}.csv"), index=False)
+        df.to_csv(outputs_path / f"{project_code}_{klass}_{scenario}.csv", index=False)
 
 def query_deltap(
     key: str,
-    inputs_path: str,
-    ranges_shape_path: str,
-    corpus: str,
-    outputs_path: str,
+    inputs_path: Path,
+    ranges_shape_path: Path,
+    corpus: Path,
+    outputs_path: Path,
 ):
     duckdb.install_extension("spatial")
     duckdb.load_extension("spatial")
     duckdb.query(f"create table ranges as select * from '{ranges_shape_path}'")
 
-    os.makedirs(outputs_path, exist_ok=True)
+    outputs_path.mkdir(parents=True, exist_ok=True)
 
     # Lazy way to make sure we use the right pixel scale and projection
-    deltap_paths = os.path.join(corpus, "deltap")
-    example_file = list(Path(deltap_paths).glob("**/*.tif"))[0]
-    example = RasterLayer.layer_from_file(example_file)
+    deltap_paths = corpus / "deltap"
+    example_file = list(deltap_paths.glob("**/*.tif"))[0]
+    with yg.read_raster(example_file) as example:
+        inputs_df = gpd.read_file(inputs_path)
+        for _, row in inputs_df.iterrows():
+            with yg.read_shape_like(inputs_path, example, where_filter=f"{key} == '{row[key]}'") as mask:
+                mask.to_geotiff(outputs_path / f"{row[key]}_mask.tif")
 
-    inputs_df = gpd.read_file(inputs_path)
-    for _, row in inputs_df.iterrows():
-        mask = VectorLayer.layer_from_file(
-            inputs_path,
-            f"{key} == '{row[key]}'",
-            example.pixel_scale,
-            example.projection
-        )
-        e = RasterLayer.empty_raster_layer_like(mask, filename=os.path.join(outputs_path, f"{row[key]}_mask.tif"))
-        mask.save(e)
-
-        query_deltap_per_project(row[key], row.geometry, mask, corpus, outputs_path)
+            query_deltap_per_project(row[key], row.geometry, mask, corpus, outputs_path)
 
 
 def main() -> None:
@@ -133,28 +119,28 @@ def main() -> None:
     )
     parser.add_argument(
         '--inputs',
-        type=str,
+        type=Path,
         help="GPKG with polygons of projects",
         required=True,
         dest="inputs_path"
     )
     parser.add_argument(
         '--ranges',
-        type=str,
+        type=Path,
         help="related taxa ranges shapefle",
         required=True,
         dest="ranges",
     )
     parser.add_argument(
         '--corpus',
-        type=str,
+        type=Path,
         help="name the output folder for lifetest",
         required=True,
         dest="corpus"
     )
     parser.add_argument(
         '--outputs',
-        type=str,
+        type=Path,
         help="name of output directory for csvs",
         required=True,
         dest="outputs_path"

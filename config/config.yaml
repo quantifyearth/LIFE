@@ -17,11 +17,15 @@ hyde_pixel_scale: 0.08333333333333333
 
 # Scenarios to run - accepted values are
 # - arable
+# - pasture
+# - urban
 # - restore
 # - restore_all
 # - restore_agriculture
 scenarios:
   - arable
+  - pasture
+  - urban
   - restore
   - restore_all
   - restore_agriculture

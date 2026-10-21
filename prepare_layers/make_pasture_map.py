@@ -1,9 +1,11 @@
 import argparse
+import math
 import os
 import shutil
 from contextlib import nullcontext
 from pathlib import Path
 
+import psutil
 import yirgacheffe as yg
 from alive_progress import alive_bar
 
@@ -18,13 +20,23 @@ def make_pasture_map(
 ) -> None:
     os.makedirs(output_path, exist_ok=True)
 
-    # In this scenario all land that isn't urban is covered to arable
+    # In this scenario all land that isn't urban is covered to pasture
     urban_filename = current_dir_path / f"lcc_{JUNG_URBAN_CODE}.tif"
     new_pasture_filename = output_path / f"lcc_{JUNG_PASTURE_CODE}.tif"
 
     shutil.copy(urban_filename, output_path)
     with yg.read_raster(urban_filename) as urban:
         new_pasture = 1.0 - urban
+
+        if parallelism is not None:
+            # If we use all the cores on bigger machines we'll run out of memory
+            # as Yirgacheffe isn't that smart yet unfortunately
+            mem = psutil.virtual_memory()
+            estimated_memory_per_row = (urban.dimensions[0] * 8) * 2
+            estimated_rows_per_free_memory = mem.free / estimated_memory_per_row
+            estimated_chunk_size = estimated_rows_per_free_memory / parallelism
+            new_pasture.ystep = min(math.floor(estimated_chunk_size), yg.constants.YSTEP)
+
         ctx = alive_bar(manual=True) if show_progress else nullcontext()
         with ctx as bar:
             new_pasture.to_geotiff(new_pasture_filename, callback=bar, parallelism=parallelism)

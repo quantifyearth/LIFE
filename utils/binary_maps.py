@@ -18,7 +18,7 @@ def binary_maps(
     for index, layername in enumerate(LAYERS):
         with yg.read_raster(map_path, band=index+1) as inputmap:
             binary_map = yg.where(inputmap != 0, inputmap / yg.abs(inputmap), 0)
-            binary_map.astype(yg.DataType.Int16).to_geotiff(
+            binary_map.as_type(yg.DataType.Int16).to_geotiff(
                 output_path.parent / f"{output_path.stem}_{layername}_binary.tif",
                 parallelism=parallelism,
             )

@@ -217,7 +217,7 @@ rule current_raws:
     input:
         updates_sentinel=DATADIR / "habitat" / ".downloaded_updates",
         habitat=DATADIR / "100m" / "jung_l2_raw.tif",
-        crosswalk=DATADIR / "crosswalk.csv",
+        crosswalk=ancient(DATADIR / "crosswalk.csv"),
     output:
         sentinel=DATADIR / "100m" / "jung_current" / ".sentinel",
     threads: workflow.cores
@@ -315,6 +315,7 @@ rule land_cover_area:
         DATADIR / "land_cover_area.csv",
     log:
         DATADIR / "logs" / "land_cover_area.log",
+    threads: workflow.cores
     params:
         jung_current_dir=DATADIR / "100m" / "jung_current",
         current_dir=DATADIR / "100m" / "current",
@@ -324,6 +325,7 @@ rule land_cover_area:
             --jung-current {params.jung_current_dir} \
             --current {params.current_dir} \
             --output {output} \
+            -j {threads} \
             2>&1 | tee {log}
         """
 

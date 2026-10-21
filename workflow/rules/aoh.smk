@@ -61,7 +61,7 @@ def aoh_species_inputs(wildcards):
         ),
         "elevation_max": ancient(DATADIR / "elevation-max.tif"),
         "elevation_min": ancient(DATADIR / "elevation-min.tif"),
-        "crosswalk": DATADIR / "crosswalk.csv",
+        "crosswalk": ancient(DATADIR / "crosswalk.csv"),
         "version_sentinel": DATADIR / ".sentinels" / "aoh_version.txt",
     }
 

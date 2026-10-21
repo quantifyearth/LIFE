@@ -24,9 +24,8 @@ def merge_global_habitat(
         yg.read_raster(local_layer_path) as local_layer,
         yg.read_raster_like(global_layer_path, local_layer, yg.ResamplingMethod.Nearest) as global_layer,
     ):
-        local_layer.set_window_for_union(global_layer.area)
-        cleared = local_layer.nan_to_num()
-        combined = yg.where(cleared != 0, local_layer, global_layer)
+        cleared = local_layer.as_area(global_layer.area).nan_to_num()
+        combined = yg.where(cleared != 0, cleared, global_layer)
         ctx = alive_bar(manual=True) if show_progress else nullcontext()
         with ctx as bar:
             combined.to_geotiff(output_layer_path, callback=bar, parallelism=True)

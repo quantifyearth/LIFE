@@ -1,8 +1,10 @@
 import argparse
 import json
 import math
+import operator
 import os
 import sys
+from functools import reduce
 from pathlib import Path
 
 from snakemake_argparse_bridge import snakemake_compatible # type: ignore
@@ -119,14 +121,12 @@ def global_code_residents_pixel_ae(
 
 
             # In general Yirgacheffe can infer the behaviour needed for area intersections based on
-            # operator, but in this instance we want to force the caclulation to take place for the
+            # operator, but in this instance we want to force the calculation to take place for the
             # union of the areas involved.
             layers = [x for x in [current, scenario] if isinstance(x, yg.YirgacheffeLayer)]
-            union = yg.layers.RasterLayer.find_union(layers)
-            for layer in layers:
-                layer.set_window_for_union(union)
+            result_area = reduce(operator.or_, [x.area for x in layers])
 
-            new_p_layer = process_delta_p(current, scenario, current_aoh, historic_aoh, exponent)
+            new_p_layer = process_delta_p(current, scenario, current_aoh, historic_aoh, exponent).as_area(result_area)
 
             delta_p = new_p_layer - old_persistence
 
@@ -216,9 +216,7 @@ def global_code_residents_pixel_ae(
             # union of the areas involved.
             src_layers = [current_breeding, scenario_breeding, current_non_breeding, scenario_non_breeding]
             layers = [x for x in src_layers if isinstance(x, yg.YirgacheffeLayer)]
-            union = yg.layers.RasterLayer.find_union(layers)
-            for layer in layers:
-                layer.set_window_for_union(union)
+            result_area = reduce(operator.or_, [x.area for x in layers])
 
             new_p_breeding = process_delta_p(
                 current_breeding,
@@ -226,14 +224,14 @@ def global_code_residents_pixel_ae(
                 current_aoh_breeding,
                 historic_aoh_breeding,
                 exponent,
-            )
+            ).as_area(result_area)
             new_p_non_breeding = process_delta_p(
                 current_non_breeding,
                 scenario_non_breeding,
                 current_aoh_non_breeding,
                 historic_aoh_non_breeding,
                 exponent,
-            )
+            ).as_area(result_area)
             new_p_layer = (new_p_breeding ** 0.5) * (new_p_non_breeding ** 0.5)
 
             delta_p_layer = new_p_layer - old_persistence
