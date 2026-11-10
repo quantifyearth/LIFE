@@ -74,7 +74,7 @@ def make_current_maps(
         )
 
         logger.info("Calculating unique land cover types...")
-        vals = current_map.unique()
+        vals = current_map.unique(parallelism=parallelism)
         logger.info("Found %s land cover classes", set(vals))
 
         for lcc in vals:

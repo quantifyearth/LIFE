@@ -14,7 +14,7 @@ rasterio
 requests
 alive-progress
 matplotlib
-yirgacheffe<3.0
+yirgacheffe>=2.3.1,<3.0
 aoh<4.0
 gdal[numpy]
 git+https://github.com/quantifyearth/iucn_modlib.git

@@ -197,7 +197,11 @@ rule pnv_100m:
             -r near \
             -tap \
             -multi -wo NUM_THREADS=ALL_CPUS \
-            -co COMPRESS=LZW -co NUM_THREADS=ALL_CPUS \
+            -co COMPRESS=LZW \
+            -co NUM_THREADS=ALL_CPUS \
+            -wo NUM_THREADS={threads} \
+            --config GDAL_NUM_THREADS {threads} \
+            -wm "20%" \
             {input.pnv} \
             {output.pnv_100m} \
             2>&1 | tee {log}
@@ -290,6 +294,8 @@ rule warp_current:
                 -co COMPRESS=LZW \
                 -co NUM_THREADS={threads} \
                 -wo NUM_THREADS={threads} \
+                --config GDAL_NUM_THREADS {threads} \
+                -wm "20%" \
                 "$d" \
                 {params.output_dir}/"$basename" \
                 2>&1
