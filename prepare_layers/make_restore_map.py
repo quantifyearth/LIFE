@@ -1,5 +1,6 @@
 import argparse
 import itertools
+import logging
 import math
 import os
 from contextlib import ExitStack, nullcontext
@@ -10,6 +11,9 @@ import psutil
 import yirgacheffe as yg
 from alive_progress import alive_bar
 
+logger = logging.getLogger(__name__)
+logging.basicConfig()
+logger.setLevel(logging.INFO)
 
 def load_crosswalk_table(table_file_name: Path) -> dict[str,list[int]]:
     rawdata = pd.read_csv(table_file_name)
@@ -31,6 +35,10 @@ def make_restore_map(
     show_progress: bool,
 ) -> None:
     os.makedirs(output_path, exist_ok=True)
+    if parallelism:
+        logger.info("Using %d workers", parallelism)
+    else:
+        logger.info("No parallelism specified")
 
     crosswalk = load_crosswalk_table(crosswalk_path)
 
@@ -69,6 +77,7 @@ def make_restore_map(
 
                         if parallelism is not None:
                             capped_updated_layer.ystep = min(math.floor(estimated_chunk_size), yg.constants.YSTEP)
+                            logger.info("Chunk size adjsuted to %d", capped_updated_layer.ystep)
 
                         capped_updated_layer.to_geotiff(
                             output_path / f"lcc_{lcc_code}.tif",

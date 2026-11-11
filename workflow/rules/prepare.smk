@@ -151,7 +151,10 @@ rule elevation_max:
             -r max \
             -tap \
             -co COMPRESS=LZW \
+            -co NUM_THREADS={threads} \
             -wo NUM_THREADS={threads} \
+            --config GDAL_NUM_THREADS {threads} \
+            -wm "20%" \
             {input.elevation} \
             {output.elevation_max} \
             2>&1 | tee {log}
@@ -180,7 +183,10 @@ rule elevation_min:
             -r min \
             -tap \
             -co COMPRESS=LZW \
+            -co NUM_THREADS={threads} \
             -wo NUM_THREADS={threads} \
+            --config GDAL_NUM_THREADS {threads} \
+            -wm "20%" \
             {input.elevation} \
             {output.elevation_min} \
             2>&1 | tee {log}
